@@ -397,72 +397,93 @@ Vous pouvez le modifier depuis le menu du mod.
 
 ## Installation
 
-### Prérequis
+> [!TIP]
+> Pour aller au plus simple, le dépôt contient un dossier direct **`Mode-pour-jeu-ici`**.
+> C’est le dossier “mode pour jeu” : il contient les fichiers du mod prêts à placer dans GTA V Enhanced et le guide [`INSTALLATION_SIMPLE.txt`](Mode-pour-jeu-ici/INSTALLATION_SIMPLE.txt).
 
-Avant d’installer le mod, vous devez avoir :
+### Avant de commencer
 
-- GTA V Enhanced sur Windows x64 ;
-- [ScriptHookV](https://www.dev-c.com/gtav/scripthookv/) installé ;
-- `dinput8.dll` dans le dossier principal du jeu ;
-- `ScriptHookV.dll` dans le dossier principal du jeu ;
-- [`NIBScriptHookVDotNet.asi`](https://www.patreon.com/posts/nibmods-menu-and-22783974) installé ;
-- [`NIBScriptHookVDotNet2.dll`](https://www.patreon.com/posts/nibmods-menu-and-22783974) installé ;
-- un dossier `Scripts` dans le dossier principal du jeu.
+Ce mod ne se lance pas tout seul. GTA V Enhanced doit déjà avoir les fichiers qui permettent aux mods de fonctionner.
 
-Le mod cible l’API v2 de ScriptHookVDotNet via NIBScriptHookVDotNet.
+Vous devez avoir :
 
-Liens utiles :
+- **GTA V Enhanced** sur Windows ;
+- **ScriptHookV** ;
+- **NIBScriptHookVDotNet** pour GTA V Enhanced ;
+- un dossier **Scripts** dans le dossier du jeu.
 
-| Prérequis | Lien de téléchargement | Où copier les fichiers |
-|---|---|---|
-| `ScriptHookV.dll` et `dinput8.dll` | [Script Hook V officiel - Alexander Blade](https://www.dev-c.com/gtav/scripthookv/) | Dossier principal de GTA V Enhanced, au même niveau que `GTA5_Enhanced.exe` |
-| `NIBScriptHookVDotNet.asi` et `NIBScriptHookVDotNet2.dll` | [NIBMods Menu and .Net plugins - GTA Legacy and Enhanced - JulioNIB](https://www.patreon.com/posts/nibmods-menu-and-22783974) | Dossier principal de GTA V Enhanced, au même niveau que `GTA5_Enhanced.exe` |
-
-Pour GTA V Enhanced, téléchargez l’archive **GTA Enhanced** du post JulioNIB, puis suivez le fichier d’aide inclus dans l’archive.
-
-Configuration testée :
+Le dossier du jeu, c’est le dossier où se trouve :
 
 ```text
-GTA5_Enhanced.exe 1.0.1013.34
-ScriptHookV.dll 3788.0.1013.34
-NIBScriptHookVDotNet2.dll 2.11.6
-Windows x64
-.NET Framework 4.8
+GTA5_Enhanced.exe
 ```
 
-Les autres versions peuvent fonctionner, mais ne sont pas garanties.
+Exemple Steam :
+
+```text
+C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V Enhanced
+```
+
+Si le dossier `Scripts` n’existe pas, créez-le vous-même dans le dossier du jeu.
 
 ---
 
-### Installation rapide depuis ce dépôt
+### 1. Installer les fichiers obligatoires pour les mods
 
-Si vous voulez simplement récupérer le mod prêt à placer, ouvrez le dossier :
+Dans le dossier principal de GTA V Enhanced, au même endroit que `GTA5_Enhanced.exe`, vous devez avoir ces fichiers :
+
+```text
+ScriptHookV.dll
+dinput8.dll
+NIBScriptHookVDotNet.asi
+NIBScriptHookVDotNet2.dll
+```
+
+Liens utiles :
+
+| Ce qu’il faut | Où le télécharger | Où le mettre |
+|---|---|---|
+| `ScriptHookV.dll` et `dinput8.dll` | [Script Hook V officiel - Alexander Blade](https://www.dev-c.com/gtav/scripthookv/) | Dans le dossier principal du jeu |
+| `NIBScriptHookVDotNet.asi` et `NIBScriptHookVDotNet2.dll` | [NIBMods Menu and .Net plugins - GTA Legacy and Enhanced - JulioNIB](https://www.patreon.com/posts/nibmods-menu-and-22783974) | Dans le dossier principal du jeu |
+
+Pour NIBScriptHookVDotNet, prenez bien la version **GTA Enhanced** quand elle est proposée.
+
+Une fois cette partie faite, votre dossier principal du jeu doit ressembler à ça :
+
+```text
+Grand Theft Auto V Enhanced
+  GTA5_Enhanced.exe
+  ScriptHookV.dll
+  dinput8.dll
+  NIBScriptHookVDotNet.asi
+  NIBScriptHookVDotNet2.dll
+  Scripts
+```
+
+---
+
+### 2. Installer le mod DonJ
+
+La méthode la plus simple est d’utiliser le dossier prêt à copier fourni dans ce dépôt.
+
+1. Sur GitHub, cliquez sur le bouton vert **Code**.
+2. Cliquez sur **Download ZIP**.
+3. Ouvrez le fichier téléchargé.
+4. Ouvrez le dossier du projet.
+5. Ouvrez le dossier :
 
 ```text
 Mode-pour-jeu-ici
 ```
 
-Copiez ensuite les fichiers qui sont dedans directement dans :
-
-```text
-Grand Theft Auto V Enhanced\Scripts
-```
-
-Le fichier [`Mode-pour-jeu-ici/INSTALLATION_SIMPLE.txt`](Mode-pour-jeu-ici/INSTALLATION_SIMPLE.txt) explique l’installation étape par étape.
-
----
-
-### Installation depuis une release GitHub
-
-1. Téléchargez la dernière release du mod.
-2. Ouvrez le `.zip`.
-3. Copiez ce fichier :
+6. Copiez les fichiers qui sont dedans :
 
 ```text
 DonJCustomNpcPlacer.ENdll
+DonJCustomNpcPlacer.pdb
 ```
 
-dans le dossier :
+7. Collez-les dans le dossier :
 
 ```text
 Grand Theft Auto V Enhanced\Scripts
@@ -474,34 +495,89 @@ Exemple Steam :
 C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V Enhanced\Scripts
 ```
 
-4. Vérifiez que le fichier est bien présent ici :
+> [!IMPORTANT]
+> Ne copiez pas le dossier `Mode-pour-jeu-ici` entier dans `Scripts`.
+> Ouvrez `Mode-pour-jeu-ici`, puis copiez les fichiers qui sont dedans directement dans `Scripts`.
+
+Le fichier [`Mode-pour-jeu-ici/INSTALLATION_SIMPLE.txt`](Mode-pour-jeu-ici/INSTALLATION_SIMPLE.txt) contient aussi ces étapes en version texte simple.
+
+---
+
+### 3. Vérifier que les fichiers sont au bon endroit
+
+Dans le dossier principal du jeu, vous devez avoir :
+
+```text
+Grand Theft Auto V Enhanced\ScriptHookV.dll
+Grand Theft Auto V Enhanced\dinput8.dll
+Grand Theft Auto V Enhanced\NIBScriptHookVDotNet.asi
+Grand Theft Auto V Enhanced\NIBScriptHookVDotNet2.dll
+```
+
+Dans le dossier `Scripts`, vous devez avoir :
 
 ```text
 Grand Theft Auto V Enhanced\Scripts\DonJCustomNpcPlacer.ENdll
 ```
 
-5. Lancez GTA V Enhanced en mode histoire.
-6. Appuyez sur `F10` pour ouvrir le menu.
-
----
-
-### Fichier `.pdb`
-
-Certaines releases peuvent contenir aussi :
+Le fichier suivant est optionnel, mais vous pouvez le laisser :
 
 ```text
-DonJCustomNpcPlacer.pdb
+Grand Theft Auto V Enhanced\Scripts\DonJCustomNpcPlacer.pdb
 ```
 
-Ce fichier est optionnel. Il sert surtout au debug et aux logs plus lisibles.
-
-Vous pouvez le copier dans `Scripts` avec le `.ENdll`, mais ce n’est pas obligatoire pour jouer.
+Le `.pdb` n’est pas obligatoire pour jouer. Il aide surtout à avoir des logs plus lisibles en cas de problème.
 
 ---
 
-### Mise à jour
+### 4. Lancer le mod en jeu
 
-Pour mettre le mod à jour :
+1. Lancez GTA V Enhanced.
+2. Allez en **mode histoire**.
+3. Une fois en jeu, appuyez sur :
+
+```text
+F10
+```
+
+Le menu du mod doit s’ouvrir.
+
+Pour appeler le Cartel :
+
+1. Ouvrez le téléphone du joueur.
+2. Affichez le contact `Cartel`.
+3. Appuyez sur :
+
+```text
+C
+```
+
+---
+
+### Si le menu ne s’ouvre pas
+
+Vérifiez dans cet ordre :
+
+1. Vous êtes bien en **mode histoire**, pas dans GTA Online.
+2. `DonJCustomNpcPlacer.ENdll` est bien dans le dossier `Scripts`.
+3. Le dossier s’appelle exactement `Scripts`.
+4. `ScriptHookV.dll` est bien dans le dossier principal du jeu.
+5. `dinput8.dll` est bien dans le dossier principal du jeu.
+6. `NIBScriptHookVDotNet.asi` est bien dans le dossier principal du jeu.
+7. `NIBScriptHookVDotNet2.dll` est bien dans le dossier principal du jeu.
+8. Aucun ancien fichier du mod n’est encore présent dans `Scripts`.
+
+Anciens fichiers à supprimer s’ils existent :
+
+```text
+Scripts\DonJEnemySpawner.dll
+Scripts\DonJEnemySpawner.ENdll
+Scripts\DonJEnemySpawner.pdb
+```
+
+---
+
+### Mise à jour du mod
 
 1. Fermez le jeu.
 2. Supprimez l’ancien fichier :
@@ -510,27 +586,15 @@ Pour mettre le mod à jour :
 Scripts\DonJCustomNpcPlacer.ENdll
 ```
 
-3. Copiez le nouveau fichier `DonJCustomNpcPlacer.ENdll`.
-4. Relancez le jeu.
-
-Si vous aviez une ancienne version du mod, supprimez aussi les anciens fichiers éventuels :
-
-```text
-Scripts\DonJEnemySpawner.dll
-Scripts\DonJEnemySpawner.ENdll
-Scripts\DonJEnemySpawner.pdb
-```
-
-Cela évite que deux versions du script se chargent en même temps.
+3. Copiez le nouveau fichier `DonJCustomNpcPlacer.ENdll` dans `Scripts`.
+4. Relancez le jeu en mode histoire.
 
 ---
 
 ### Désinstallation
 
-Pour désinstaller le mod :
-
 1. Fermez le jeu.
-2. Supprimez :
+2. Supprimez ces fichiers dans `Scripts` :
 
 ```text
 Scripts\DonJCustomNpcPlacer.ENdll
