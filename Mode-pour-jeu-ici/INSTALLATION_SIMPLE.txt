@@ -1,0 +1,90 @@
+DonJ Custom NPC Placer Enhanced - installation simple
+======================================================
+
+Ce dossier contient les fichiers du mod prets a placer dans GTA V Enhanced.
+
+Fichiers inclus
+---------------
+
+- DonJCustomNpcPlacer.ENdll
+  Obligatoire. C'est le fichier du mod.
+
+- DonJCustomNpcPlacer.pdb
+  Optionnel. Il sert surtout au debug et rend les logs plus lisibles.
+  Vous pouvez le copier aussi, ca ne gene pas.
+
+Ou mettre les fichiers
+----------------------
+
+1. Fermez GTA V Enhanced.
+
+2. Ouvrez le dossier principal de GTA V Enhanced.
+   C'est le dossier ou se trouve GTA5_Enhanced.exe.
+
+   Exemple Steam :
+   C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V Enhanced
+
+3. Dans ce dossier, ouvrez le dossier Scripts.
+
+   Exemple :
+   C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V Enhanced\Scripts
+
+4. Copiez dans Scripts :
+
+   - DonJCustomNpcPlacer.ENdll
+   - DonJCustomNpcPlacer.pdb  (optionnel)
+
+Important
+---------
+
+Ne copiez pas le dossier "Mode-pour-jeu-ici" entier dans Scripts.
+Ouvrez ce dossier, puis copiez les fichiers qui sont dedans directement dans Scripts.
+
+Ce qu'il faut avoir avant de lancer le jeu
+-----------------------------------------
+
+Dans le dossier principal de GTA V Enhanced, au meme niveau que GTA5_Enhanced.exe,
+vous devez avoir :
+
+- ScriptHookV.dll
+- dinput8.dll
+- NIBScriptHookVDotNet.asi
+- NIBScriptHookVDotNet2.dll
+
+Dans le dossier Scripts, vous devez avoir :
+
+- DonJCustomNpcPlacer.ENdll
+
+Lancer le mod
+-------------
+
+1. Lancez GTA V Enhanced en mode histoire.
+2. Appuyez sur F10 pour ouvrir le menu du mod.
+3. Pour appeler le Cartel : ouvrez le telephone du joueur, affichez le contact Cartel,
+   puis appuyez sur C.
+
+Mise a jour du mod
+------------------
+
+1. Fermez le jeu.
+2. Supprimez l'ancien fichier :
+   Scripts\DonJCustomNpcPlacer.ENdll
+3. Copiez le nouveau DonJCustomNpcPlacer.ENdll depuis ce dossier.
+4. Relancez le jeu.
+
+Si vous aviez une ancienne version
+----------------------------------
+
+Supprimez les anciens fichiers s'ils existent :
+
+- Scripts\DonJEnemySpawner.dll
+- Scripts\DonJEnemySpawner.ENdll
+- Scripts\DonJEnemySpawner.pdb
+
+Cela evite que deux versions du script se chargent en meme temps.
+
+Attention
+---------
+
+Ce mod est fait pour le mode histoire / solo uniquement.
+Ne l'utilisez pas dans GTA Online.

@@ -434,6 +434,24 @@ Les autres versions peuvent fonctionner, mais ne sont pas garanties.
 
 ---
 
+### Installation rapide depuis ce dépôt
+
+Si vous voulez simplement récupérer le mod prêt à placer, ouvrez le dossier :
+
+```text
+Mode-pour-jeu-ici
+```
+
+Copiez ensuite les fichiers qui sont dedans directement dans :
+
+```text
+Grand Theft Auto V Enhanced\Scripts
+```
+
+Le fichier [`Mode-pour-jeu-ici/INSTALLATION_SIMPLE.txt`](Mode-pour-jeu-ici/INSTALLATION_SIMPLE.txt) explique l’installation étape par étape.
+
+---
+
 ### Installation depuis une release GitHub
 
 1. Téléchargez la dernière release du mod.
