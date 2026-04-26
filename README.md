@@ -284,6 +284,10 @@ Exemples d’objets inclus :
 
 Le mod inclut un système d’entrées et de sorties vers des intérieurs.
 
+> [!WARNING]
+> **Fonctionnalité expérimentale.** Les entrées/sorties d’intérieurs peuvent encore occasionner des bugs selon l’intérieur choisi, les IPL chargés ou le contexte de jeu.
+> Le placement de gardes ou de PNJ dans certains intérieurs peut aussi provoquer des comportements imprévus, notamment sur la navigation, le combat, le suivi, le spawn ou le nettoyage. La fonctionnalité marche, mais cette partie est encore en cours de perfectionnement.
+
 Vous pouvez placer :
 
 - une **entrée** dans le monde extérieur ;
