@@ -64,6 +64,12 @@
   </tr>
 </table>
 
+## Comment marche le mod
+
+<p align="center">
+  <img src="Images/figma.png" alt="Schéma expliquant le fonctionnement de DonJ Custom NPC Placer" width="100%">
+</p>
+
 > [!CAUTION]
 > **Mode solo / histoire uniquement.** N’utilisez pas ce mod dans GTA Online.
 
