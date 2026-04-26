@@ -83,6 +83,35 @@ Chaque PNJ peut recevoir un comportement différent :
 
 ---
 
+### Appel du Cartel
+
+Le mod ajoute un contact téléphone **Cartel** utilisable directement en jeu.
+
+Quand le téléphone du joueur est ouvert, une interface `Contact téléphone` apparaît avec le contact `Cartel`. Appuyez sur `C` pour appeler une équipe de protection.
+
+L’appel fait arriver rapidement :
+
+- jusqu’à 11 hommes de main alliés ;
+- jusqu’à 3 Baller6 blindées ;
+- des gardes équipés pour le combat, avec carabine de service et pistolet-mitrailleur ;
+- des gardes renforcés avec `500` points de santé et `200` points d’armure.
+
+Le convoi apparaît à distance raisonnable, généralement entre `68 m` et `118 m`, en priorité sur une route et hors du champ de vision du joueur pour garder une arrivée immersive.
+
+Comportement du Cartel :
+
+- si le joueur est à pied, les véhicules approchent puis les hommes descendent pour le suivre ;
+- si le joueur est en véhicule, les hommes remontent dans les Baller6 et escortent le joueur ;
+- en cas de menace réelle, les gardes défendent le joueur ou les autres gardes Cartel ;
+- les passagers peuvent tirer depuis le véhicule ou descendre selon la situation ;
+- les véhicules bloqués peuvent être réordonnés ou replacés hors champ de vision si le joueur s’éloigne trop.
+
+Rappeler le Cartel pendant qu’une équipe est active ordonne son repli. Les hommes restent alliés, retournent vers les véhicules, quittent le secteur puis sont nettoyés automatiquement quand ils sont assez loin ou hors champ.
+
+Vous pouvez appeler une nouvelle équipe même si une ancienne équipe est encore en train de quitter la zone.
+
+---
+
 ### Atelier d’armes
 
 Le mod inclut un atelier d’armes pour personnaliser l’équipement des PNJ.
@@ -402,6 +431,18 @@ Le menu principal s’ouvre avec plusieurs sections :
 | `Home` / `End` | Aller au début / à la fin |
 | `Échap` / `Retour` / `NumPad 0` | Fermer ou revenir |
 | `T` | Saisir un modèle custom quand le modèle NPC sélectionné est `Custom` |
+
+---
+
+### Contrôles du contact Cartel
+
+| Touche / état | Action |
+|---|---|
+| Téléphone du joueur ouvert | Affiche le contact `Cartel` |
+| `C` | Appeler les hommes de main du Cartel |
+| `C` avec une équipe Cartel active | Faire replier l’équipe active |
+
+Un court délai anti-spam empêche de relancer l’appel plusieurs fois instantanément.
 
 ---
 
