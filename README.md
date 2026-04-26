@@ -810,7 +810,7 @@ menyooLog.txt
 
 ## Crédits
 
-Mod développé par l’équipe DonJ.
+Mod développé DonJ
 
 Projet C# / .NET Framework 4.8 pour GTA V Enhanced, basé sur ScriptHookV et NIBScriptHookVDotNet API v2.
 
