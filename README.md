@@ -146,6 +146,33 @@ Chaque PNJ peut recevoir un comportement différent :
   <sub>Appel du Cartel depuis le téléphone du joueur : ouvrez le téléphone, puis appuyez sur <code>C</code> quand le contact <code>Cartel</code> est affiché.</sub>
 </p>
 
+<table>
+  <tr>
+    <td width="50%">
+      <img src="Images/cartel4.jpg" alt="Appel du Cartel confirme depuis le telephone du joueur">
+      <br>
+      <sub>Appel confirme : 11 hommes arrivent rapidement en 3 Baller6 blindees.</sub>
+    </td>
+    <td width="50%">
+      <img src="Images/cartel.jpg" alt="Hommes de main du Cartel regroupes autour du joueur">
+      <br>
+      <sub>Les hommes de main rejoignent le joueur et prennent position.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="Images/cartel2.jpg" alt="Baller6 blindees du Cartel en protection rapprochee">
+      <br>
+      <sub>Baller6 blindees, protection rapprochee et riposte armee.</sub>
+    </td>
+    <td width="50%">
+      <img src="Images/cartel3.jpg" alt="Convoi du Cartel pendant une phase d'action">
+      <br>
+      <sub>Convoi Cartel en mouvement pendant l'action.</sub>
+    </td>
+  </tr>
+</table>
+
 Le mod ajoute un contact téléphone **Cartel** utilisable directement en jeu.
 
 Quand le téléphone du joueur est ouvert, une interface `Contact téléphone` apparaît avec le contact `Cartel`. Appuyez sur `C` pour appeler une équipe de protection.
