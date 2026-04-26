@@ -1,6 +1,34 @@
 # DonJ Custom NPC Placer
 
-**DonJ Custom NPC Placer** est un mod solo pour **Grand Theft Auto V Enhanced** qui permet de créer rapidement des scènes personnalisées dans Los Santos : PNJ armés, gardes, patrouilles, alliés, véhicules, objets, décors, entrées/sorties d’intérieurs et sauvegardes XML réutilisables.
+<p align="center">
+  <img src="Images/20260426005313_1.jpg" alt="DonJ Custom NPC Placer - contact téléphone Cartel dans GTA V Enhanced" width="100%">
+</p>
+
+<p align="center">
+  <strong>Un outil solo pour construire des scènes GTA V Enhanced propres, armées et rejouables.</strong>
+</p>
+
+<p align="center">
+  <a href="#installation"><strong>Installation</strong></a>
+  ·
+  <a href="#utilisation"><strong>Utilisation</strong></a>
+  ·
+  <a href="#fonctionnalités-principales"><strong>Fonctionnalités</strong></a>
+  ·
+  <a href="#build-depuis-le-code-source"><strong>Build source</strong></a>
+  ·
+  <a href="#signaler-un-bug"><strong>Signaler un bug</strong></a>
+</p>
+
+<p align="center">
+  <img alt="GTA V Enhanced" src="https://img.shields.io/badge/GTA%20V-Enhanced-8b0000">
+  <img alt="Mode solo uniquement" src="https://img.shields.io/badge/mode-solo%20uniquement-darkgreen">
+  <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET%20Framework-4.8-512bd4">
+  <img alt="NIBScriptHookVDotNet API v2" src="https://img.shields.io/badge/NIBScriptHookVDotNet-API%20v2-blue">
+  <img alt="Licence propriétaire non commerciale" src="https://img.shields.io/badge/licence-propri%C3%A9taire%20non%20commerciale-lightgrey">
+</p>
+
+**DonJ Custom NPC Placer** permet de créer rapidement des scènes personnalisées dans Los Santos : PNJ armés, gardes, patrouilles, alliés, véhicules, objets, décors, entrées/sorties d’intérieurs, appel de renforts Cartel et sauvegardes XML réutilisables.
 
 Le mod est pensé comme un outil de placement propre, pratique et immersif pour les joueurs qui veulent construire leurs propres bases, checkpoints, scènes d’action, zones sécurisées, missions maison ou setups roleplay en mode histoire.
 
@@ -9,25 +37,52 @@ Le mod est pensé comme un outil de placement propre, pratique et immersif pour 
 
 ---
 
-## Captures d’écran
+## En bref
 
-![DonJ Custom NPC Placer - capture 1](Images/20260425013205_1.jpg)
+| Ce que vous voulez faire | Ce que le mod apporte |
+|---|---|
+| Construire une base ou un checkpoint | Placement précis de PNJ, véhicules, objets et couvertures |
+| Créer une zone gardée | PNJ alliés, neutres, hostiles, patrouilles et comportements de défense |
+| Obtenir des renforts rapides | Contact téléphone `Cartel` avec convoi allié, Baller6 blindées et repli contrôlé |
+| Travailler proprement | Caméra libre, aperçu transparent, rotation et placement direct |
+| Réutiliser une scène | Sauvegarde et chargement XML des setups complets |
+| Relier des lieux | Entrées/sorties d’intérieurs avec catalogue étendu et IPL automatiques |
 
-![DonJ Custom NPC Placer - capture 2](Images/20260426005305_1.jpg)
+---
 
-![DonJ Custom NPC Placer - capture 3](Images/20260426005313_1.jpg)
+## Aperçu visuel
 
-![DonJ Custom NPC Placer - capture 4](Images/20260426005345_1.jpg)
+<table>
+  <tr>
+    <td width="33%"><img src="Images/20260426005313_1.jpg" alt="Contact téléphone Cartel"><br><sub>Contact téléphone Cartel</sub></td>
+    <td width="33%"><img src="Images/20260426030249_1.jpg" alt="Placement caméra précis de PNJ"><br><sub>Placement caméra précis</sub></td>
+    <td width="33%"><img src="Images/20260426030321_1.jpg" alt="Scène gardée avec PNJ"><br><sub>Scènes gardées</sub></td>
+  </tr>
+  <tr>
+    <td width="33%"><img src="Images/20260426030418_1.jpg" alt="PNJ armés en intérieur"><br><sub>Contrôle des PNJ</sub></td>
+    <td width="33%"><img src="Images/20260426005305_1.jpg" alt="Décor et sécurité"><br><sub>Décors et sécurité</sub></td>
+    <td width="33%"><img src="Images/20260426005345_1.jpg" alt="Véhicules et zone placée"><br><sub>Véhicules et zones</sub></td>
+  </tr>
+  <tr>
+    <td width="33%"><img src="Images/20260426005350_1.jpg" alt="Installation de scène"><br><sub>Setups réutilisables</sub></td>
+    <td width="33%"><img src="Images/20260426005354_1.jpg" alt="Aperçu de scène GTA V Enhanced"><br><sub>Ambiance roleplay</sub></td>
+    <td width="33%"><img src="Images/20260425013205_1.jpg" alt="DonJ Custom NPC Placer en jeu"><br><sub>Mode histoire GTA V Enhanced</sub></td>
+  </tr>
+</table>
 
-![DonJ Custom NPC Placer - capture 5](Images/20260426005350_1.jpg)
+---
 
-![DonJ Custom NPC Placer - capture 6](Images/20260426005354_1.jpg)
+## Sommaire
 
-![DonJ Custom NPC Placer - capture 7](Images/20260426030249_1.jpg)
-
-![DonJ Custom NPC Placer - capture 8](Images/20260426030321_1.jpg)
-
-![DonJ Custom NPC Placer - capture 9](Images/20260426030418_1.jpg)
+- [Fonctionnalités principales](#fonctionnalités-principales)
+- [Installation](#installation)
+- [Utilisation](#utilisation)
+- [Exemple rapide](#exemple-rapide)
+- [Sauvegardes](#sauvegardes)
+- [Compatibilité](#compatibilité)
+- [Build depuis le code source](#build-depuis-le-code-source)
+- [Dépannage](#dépannage)
+- [Licence](#licence)
 
 ---
 
