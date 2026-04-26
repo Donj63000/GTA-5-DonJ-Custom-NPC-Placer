@@ -1,4 +1,9 @@
-# DonJ Custom NPC Placer
+<h1 align="center">DonJ Custom NPC Placer</h1>
+
+<p align="center">
+  <strong>Outil de création de scènes solo pour GTA V Enhanced</strong><br>
+  <sub>PNJ, gardes, patrouilles, Cartel, véhicules, objets, intérieurs et sauvegardes XML.</sub>
+</p>
 
 <p align="center">
   <img src="Images/principale.png" alt="DonJ Custom NPC Placer - image d'accueil du mod" width="100%">
@@ -9,7 +14,7 @@
 </p>
 
 <p align="center">
-  <strong>Un outil solo pour construire des scènes GTA V Enhanced propres, armées et rejouables.</strong>
+  <strong>Construisez une base, un checkpoint, une scène d’action ou un setup roleplay directement en mode histoire.</strong>
 </p>
 
 <p align="center">
@@ -37,25 +42,47 @@
 > **Statut du projet : le mod est fonctionnel et utilisable en jeu.**
 > Il reste en développement actif pour être perfectionné, améliorer l’expérience, corriger les limites connues et ajouter des finitions, mais la base actuelle marche déjà en mode histoire.
 
-**DonJ Custom NPC Placer** permet de créer rapidement des scènes personnalisées dans Los Santos : PNJ armés, gardes, patrouilles, alliés, véhicules, objets, décors, entrées/sorties d’intérieurs, appel de renforts Cartel et sauvegardes XML réutilisables.
+<table>
+  <tr>
+    <td width="58%">
+      <strong>Présentation</strong>
+      <br><br>
+      <strong>DonJ Custom NPC Placer</strong> permet de créer rapidement des scènes personnalisées dans Los Santos : <strong>PNJ armés</strong>, <strong>gardes</strong>, <strong>patrouilles</strong>, <strong>alliés</strong>, <strong>véhicules</strong>, <strong>objets</strong>, <strong>décors</strong>, <strong>entrées/sorties d’intérieurs</strong>, <strong>appel de renforts Cartel</strong> et <strong>sauvegardes XML réutilisables</strong>.
+      <br><br>
+      Le mod est pensé comme un outil de placement propre, pratique et immersif pour les joueurs qui veulent construire leurs propres bases, checkpoints, scènes d’action, zones sécurisées, missions maison ou setups roleplay en mode histoire.
+    </td>
+    <td width="42%">
+      <strong>Points forts</strong>
+      <br><br>
+      <ul>
+        <li><strong>Placement précis</strong> avec caméra libre et aperçu transparent.</li>
+        <li><strong>PNJ configurables</strong> avec armes, santé, armure et comportements.</li>
+        <li><strong>Renforts Cartel</strong> depuis le téléphone avec la touche <code>C</code>.</li>
+        <li><strong>Setups rejouables</strong> grâce aux sauvegardes XML.</li>
+      </ul>
+    </td>
+  </tr>
+</table>
 
-Le mod est pensé comme un outil de placement propre, pratique et immersif pour les joueurs qui veulent construire leurs propres bases, checkpoints, scènes d’action, zones sécurisées, missions maison ou setups roleplay en mode histoire.
-
-> ⚠️ Ce mod est destiné au **mode solo / histoire uniquement**.  
-> Ne l’utilisez pas dans GTA Online.
+> [!CAUTION]
+> **Mode solo / histoire uniquement.** N’utilisez pas ce mod dans GTA Online.
 
 ---
 
 ## En bref
 
-| Ce que vous voulez faire | Ce que le mod apporte |
-|---|---|
-| Construire une base ou un checkpoint | Placement précis de PNJ, véhicules, objets et couvertures |
-| Créer une zone gardée | PNJ alliés, neutres, hostiles, patrouilles et comportements de défense |
-| Obtenir des renforts rapides | Contact téléphone `Cartel` avec convoi allié, Baller6 blindées et repli contrôlé |
-| Travailler proprement | Caméra libre, aperçu transparent, rotation et placement direct |
-| Réutiliser une scène | Sauvegarde et chargement XML des setups complets |
-| Relier des lieux | Entrées/sorties d’intérieurs avec catalogue étendu et IPL automatiques |
+<table>
+  <tr>
+    <td width="33%"><strong>Base ou checkpoint</strong><br>Placement précis de PNJ, véhicules, objets et couvertures.</td>
+    <td width="33%"><strong>Zone gardée</strong><br>PNJ alliés, neutres, hostiles, patrouilles et comportements de défense.</td>
+    <td width="33%"><strong>Renforts rapides</strong><br>Contact téléphone <code>Cartel</code>, convoi allié, Baller6 blindées et repli contrôlé.</td>
+  </tr>
+  <tr>
+    <td width="33%"><strong>Placement propre</strong><br>Caméra libre, aperçu transparent, rotation et placement direct.</td>
+    <td width="33%"><strong>Scènes réutilisables</strong><br>Sauvegarde et chargement XML des setups complets.</td>
+    <td width="33%"><strong>Intérieurs</strong><br>Entrées/sorties, catalogue étendu et chargement IPL automatique.</td>
+  </tr>
+</table>
 
 ---
 
