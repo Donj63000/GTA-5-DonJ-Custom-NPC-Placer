@@ -229,6 +229,7 @@ Comportement du Cartel :
 - en cas de menace réelle, les gardes défendent le joueur ou les autres gardes Cartel ;
 - les passagers peuvent tirer depuis le véhicule ou descendre selon la situation ;
 - les véhicules bloqués peuvent être réordonnés ou replacés hors champ de vision si le joueur s’éloigne trop.
+- le système est codé pour que vos gardes du corps finissent par vous retrouver autant que possible, pour peu que vous soyez sur une route ou proche d’une route exploitable. S’ils sont trop loin, le mod peut les replacer plus près du joueur, mais hors champ et jamais trop près, afin de garder l’illusion qu’ils arrivent réellement au lieu de les voir apparaître.
 
 Rappeler le Cartel pendant qu’une équipe est active ordonne son repli. Les hommes restent alliés, retournent vers les véhicules, quittent le secteur puis sont nettoyés automatiquement quand ils sont assez loin ou hors champ.
 
