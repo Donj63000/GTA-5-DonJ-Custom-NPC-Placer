@@ -25,8 +25,13 @@
   <img alt="Mode solo uniquement" src="https://img.shields.io/badge/mode-solo%20uniquement-darkgreen">
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET%20Framework-4.8-512bd4">
   <img alt="NIBScriptHookVDotNet API v2" src="https://img.shields.io/badge/NIBScriptHookVDotNet-API%20v2-blue">
+  <img alt="Statut fonctionnel, développement actif" src="https://img.shields.io/badge/statut-fonctionnel%20%2F%20dev%20actif-brightgreen">
   <img alt="Licence propriétaire non commerciale" src="https://img.shields.io/badge/licence-propri%C3%A9taire%20non%20commerciale-lightgrey">
 </p>
+
+> [!IMPORTANT]
+> **Statut du projet : le mod est fonctionnel et utilisable en jeu.**
+> Il reste en développement actif pour être perfectionné, améliorer l’expérience, corriger les limites connues et ajouter des finitions, mais la base actuelle marche déjà en mode histoire.
 
 **DonJ Custom NPC Placer** permet de créer rapidement des scènes personnalisées dans Los Santos : PNJ armés, gardes, patrouilles, alliés, véhicules, objets, décors, entrées/sorties d’intérieurs, appel de renforts Cartel et sauvegardes XML réutilisables.
 
