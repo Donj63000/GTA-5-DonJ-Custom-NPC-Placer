@@ -70,6 +70,19 @@
   <img src="Images/figma.png" alt="Schéma expliquant le fonctionnement de DonJ Custom NPC Placer" width="100%">
 </p>
 
+Le mod fonctionne directement **dans GTA V Enhanced**, sans application séparée à ouvrir.
+
+| Étape | Ce qui se passe |
+|---|---|
+| **1. Le jeu charge le mod** | Au lancement du mode histoire, `ScriptHookV` et `NIBScriptHookVDotNet2` chargent `DonJCustomNpcPlacer.ENdll` depuis le dossier `Scripts`. |
+| **2. Vous ouvrez le menu** | En jeu, `F10` ouvre le menu DonJ. Vous choisissez ce que vous voulez placer : PNJ, véhicule, objet, entrée/sortie d’intérieur ou options de sauvegarde. |
+| **3. Vous configurez la scène** | Vous réglez le modèle, l’arme, la santé, l’armure, le comportement, la patrouille, le respawn, le véhicule ou l’objet à poser. |
+| **4. Vous placez dans le monde** | Le placement direct pose rapidement devant le joueur. Le placement caméra permet de viser précisément, tourner l’entité et valider quand c’est propre. |
+| **5. Le mod gère la vie de la scène** | Après le placement, le mod maintient les PNJ, leurs comportements, les blips, les relations, les menaces, les patrouilles, les gardes du corps, le Cartel et le respawn. |
+| **6. Vous sauvegardez / rechargez** | Les setups peuvent être sauvegardés en XML puis rechargés plus tard pour retrouver les PNJ, véhicules, objets, portails, armes, comportements et options de respawn. |
+
+En résumé : **vous construisez la scène avec le menu**, puis le mod s’occupe de faire vivre les éléments placés en jeu.
+
 > [!CAUTION]
 > **Mode solo / histoire uniquement.** N’utilisez pas ce mod dans GTA Online.
 
