@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+TestResults/
+AGENTS.md
+*.user
+*.suo
+*.cache

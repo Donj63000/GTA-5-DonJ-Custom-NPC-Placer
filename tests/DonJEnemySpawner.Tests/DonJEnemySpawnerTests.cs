@@ -1,0 +1,2138 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Reflection;
+using System.Runtime.Serialization;
+using System.Xml.Linq;
+using GTA;
+using GTA.Math;
+using GTA.Native;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+[TestClass]
+public class DonJEnemySpawnerTests
+{
+    private static readonly Type ScriptType = typeof(DonJEnemySpawner);
+    private const BindingFlags PrivateInstance = BindingFlags.NonPublic | BindingFlags.Instance;
+    private const BindingFlags PrivateStatic = BindingFlags.NonPublic | BindingFlags.Static;
+
+    private enum UnsignedHashExample : uint
+    {
+        Value = 0xF1234567U
+    }
+
+    [TestMethod]
+    public void StableConstants_KeepCurrentMenuAndSpawnBounds()
+    {
+        Assert.AreEqual("DonJ Custom NPC Placer", GetStaticFieldValue<string>("TrainerTitle"));
+        Assert.AreEqual("Placement propre pour NPC, vehicules et objets", GetStaticFieldValue<string>("TrainerSubtitle"));
+        Assert.AreEqual(121, Convert.ToInt32(GetStaticFieldValue<object>("MenuToggleKey"), CultureInfo.InvariantCulture));
+        Assert.AreEqual("F10", GetStaticFieldValue<string>("MenuToggleKeyLabel"));
+        Assert.AreEqual("DonJEnemySpawnerSaves", GetStaticFieldValue<string>("SaveFolderName"));
+        Assert.AreEqual("_last_save.txt", GetStaticFieldValue<string>("LastSaveFileMarkerName"));
+        Assert.AreEqual("DONJ_ENEMY_SPAWNER_SAVE_DIR", GetStaticFieldValue<string>("SaveDirectoryEnvironmentVariable"));
+        Assert.AreEqual(@"C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V Enhanced", GetStaticFieldValue<string>("DefaultEnhancedGtaRoot"));
+        Assert.AreEqual(96, GetStaticFieldValue<int>("MaxSaveFileNameLength"));
+        Assert.AreEqual(1, GetStaticFieldValue<int>("MinHealth"));
+        Assert.AreEqual(5000, GetStaticFieldValue<int>("MaxHealth"));
+        Assert.AreEqual(0, GetStaticFieldValue<int>("MinArmor"));
+        Assert.AreEqual(200, GetStaticFieldValue<int>("MaxArmor"));
+        Assert.AreEqual(25, GetStaticFieldValue<int>("MinDistance"));
+        Assert.AreEqual(2500, GetStaticFieldValue<int>("MaxDistance"));
+        Assert.AreEqual(25, GetStaticFieldValue<int>("DistanceStep"));
+        Assert.AreEqual(9, GetStaticFieldValue<int>("MenuItemCount"));
+        Assert.AreEqual(0, GetStaticFieldValue<int>("RelationshipCompanion"));
+        Assert.AreEqual(3, GetStaticFieldValue<int>("RelationshipNeutral"));
+        Assert.AreEqual(4, GetStaticFieldValue<int>("RelationshipDislike"));
+        Assert.AreEqual(5, GetStaticFieldValue<int>("RelationshipHate"));
+        Assert.AreEqual(700, GetStaticFieldValue<int>("ThinkIntervalMs"));
+        Assert.AreEqual(750, GetStaticFieldValue<int>("NpcThinkJitterMs"));
+        Assert.AreEqual(6, GetStaticFieldValue<int>("MaxNpcBrainsPerTick"));
+        Assert.AreEqual(2400, GetStaticFieldValue<int>("PassiveHoldRefreshMs"));
+        Assert.AreEqual(900, GetStaticFieldValue<int>("PassiveHoldJitterMs"));
+        Assert.AreEqual(1200, GetStaticFieldValue<int>("NpcBlipRefreshIntervalMs"));
+        Assert.AreEqual(700, GetStaticFieldValue<int>("NpcBlipRefreshJitterMs"));
+        Assert.AreEqual(4, GetStaticFieldValue<int>("MaxNpcBlipRefreshPerTick"));
+        Assert.AreEqual(260, GetStaticFieldValue<int>("AllyThreatScanIntervalMs"));
+        Assert.AreEqual(950, GetStaticFieldValue<int>("AllyThreatCacheLifetimeMs"));
+        Assert.AreEqual(4, GetStaticFieldValue<int>("AllyThreatGuardScansPerPass"));
+        Assert.AreEqual(2500.0f, GetStaticFieldValue<float>("StaticSightDistance"), 0.001f);
+        Assert.AreEqual(3000.0f, GetStaticFieldValue<float>("AttackRefreshDistance"), 0.001f);
+        Assert.AreEqual(95.0f, GetStaticFieldValue<float>("NeutralAssistRadius"), 0.001f);
+        Assert.AreEqual(140.0f, GetStaticFieldValue<float>("NeutralWitnessSightDistance"), 0.001f);
+        Assert.AreEqual(55.0f, GetStaticFieldValue<float>("NeutralShootingReactionDistance"), 0.001f);
+        Assert.AreEqual(150.0f, GetStaticFieldValue<float>("AllyDefenseRadius"), 0.001f);
+        Assert.AreEqual(180.0f, GetStaticFieldValue<float>("AllySightDistance"), 0.001f);
+        Assert.AreEqual(45.0f, GetStaticFieldValue<float>("AllyShootingThreatDistance"), 0.001f);
+        Assert.AreEqual(170, GetStaticFieldValue<int>("PlacementPreviewAlpha"));
+        Assert.AreEqual(350, GetStaticFieldValue<int>("PlacementSpawnCooldownMs"));
+        Assert.AreEqual(650, GetStaticFieldValue<int>("PreviewRetryIntervalMs"));
+        Assert.AreEqual(0x58A850EAEE20FAA3UL, GetStaticFieldValue<ulong>("PlaceEntityOnGroundProperlyNative"));
+    }
+
+    [TestMethod]
+    public void ExpandedConstants_KeepPlacementMenuAndPatrolBounds()
+    {
+        Assert.AreEqual(24, GetStaticFieldValue<int>("MainMenuItemCount"));
+        Assert.AreEqual(24, GetStaticFieldValue<int>("MainMenuVisibleRowLimit"));
+        Assert.AreEqual(1000, GetStaticFieldValue<int>("AutoRespawnCheckIntervalMs"));
+        Assert.AreEqual(6000, GetStaticFieldValue<int>("AutoRespawnMinDelayMs"));
+        Assert.AreEqual(15000, GetStaticFieldValue<int>("AutoRespawnRetryDelayMs"));
+        Assert.AreEqual(3, GetStaticFieldValue<int>("AutoRespawnMaxPerTick"));
+        Assert.AreEqual(220.0f, GetStaticFieldValue<float>("AutoRespawnLeaveDistance"), 0.001f);
+        Assert.AreEqual(70.0f, GetStaticFieldValue<float>("AutoRespawnNearSafetyDistance"), 0.001f);
+        Assert.AreEqual(12, GetStaticFieldValue<int>("WeaponEditorItemCount"));
+        Assert.AreEqual(5, GetStaticFieldValue<int>("MinPatrolRadius"));
+        Assert.AreEqual(500, GetStaticFieldValue<int>("MaxPatrolRadius"));
+        Assert.AreEqual(5, GetStaticFieldValue<int>("PatrolRadiusStep"));
+        Assert.AreEqual(3000.0f, GetStaticFieldValue<float>("CombatRefreshDistance"), 0.001f);
+        Assert.AreEqual(105.0f, GetStaticFieldValue<float>("RuntimeNeutralAssistRadius"), 0.001f);
+        Assert.AreEqual(165.0f, GetStaticFieldValue<float>("RuntimeAllyDefenseRadius"), 0.001f);
+    }
+
+    [TestMethod]
+    public void MainMenuVisibleRowCount_ClampsDynamicMenuRows()
+    {
+        Assert.AreEqual(1, (int)InvokeStatic("GetMainMenuVisibleRowCount", 0));
+        Assert.AreEqual(12, (int)InvokeStatic("GetMainMenuVisibleRowCount", 12));
+        Assert.AreEqual(24, (int)InvokeStatic("GetMainMenuVisibleRowCount", 24));
+        Assert.AreEqual(24, (int)InvokeStatic("GetMainMenuVisibleRowCount", 40));
+    }
+
+    [TestMethod]
+    public void CartelConstants_KeepPhoneContactContract()
+    {
+        Assert.AreEqual("Cartel", GetStaticFieldValue<string>("CartelContactName"));
+        Assert.AreEqual(11, GetStaticFieldValue<int>("CartelGuardCount"));
+        Assert.AreEqual(3, GetStaticFieldValue<int>("CartelVehicleCount"));
+        Assert.AreEqual(500, GetStaticFieldValue<int>("CartelGuardHealth"));
+        Assert.AreEqual(200, GetStaticFieldValue<int>("CartelGuardArmor"));
+        Assert.AreEqual(1800, GetStaticFieldValue<int>("CartelCallCooldownMs"));
+        Assert.AreEqual(700, GetStaticFieldValue<int>("CartelThinkIntervalMs"));
+        Assert.AreEqual(1800, GetStaticFieldValue<int>("CartelVehicleOrderIntervalMs"));
+        Assert.AreEqual(2200, GetStaticFieldValue<int>("CartelDismissOrderIntervalMs"));
+        Assert.AreEqual(6500, GetStaticFieldValue<int>("CartelStuckTimeoutMs"));
+        Assert.AreEqual(6500, GetStaticFieldValue<int>("CartelRescueCooldownMs"));
+        Assert.AreEqual(5500, GetStaticFieldValue<int>("CartelGuardRescueCooldownMs"));
+        Assert.AreEqual(2200, GetStaticFieldValue<int>("CartelDismissMinLifeMs"));
+        Assert.AreEqual(18000, GetStaticFieldValue<int>("CartelDismissForceCleanupMs"));
+        Assert.AreEqual(68.0f, GetStaticFieldValue<float>("CartelSpawnMinDistance"), 0.001f);
+        Assert.AreEqual(118.0f, GetStaticFieldValue<float>("CartelSpawnMaxDistance"), 0.001f);
+        Assert.AreEqual(68.0f, GetStaticFieldValue<float>("CartelRelocationMinDistance"), 0.001f);
+        Assert.AreEqual(118.0f, GetStaticFieldValue<float>("CartelRelocationMaxDistance"), 0.001f);
+        Assert.AreEqual(38.0f, GetStaticFieldValue<float>("CartelArrivalDriveSpeed"), 0.001f);
+        Assert.AreEqual(34.0f, GetStaticFieldValue<float>("CartelRetreatDriveSpeed"), 0.001f);
+        Assert.AreEqual(185.0f, GetStaticFieldValue<float>("CartelTooFarVehicleDistance"), 0.001f);
+        Assert.AreEqual(285.0f, GetStaticFieldValue<float>("CartelCriticalVehicleDistance"), 0.001f);
+        Assert.AreEqual(165.0f, GetStaticFieldValue<float>("CartelTooFarGuardDistance"), 0.001f);
+        Assert.AreEqual(28.0f, GetStaticFieldValue<float>("CartelDismissDeleteDistance"), 0.001f);
+        Assert.AreEqual(GetStaticFieldValue<int>("ProfessionalDrivingStyle"), GetStaticFieldValue<int>("CartelRapidDrivingStyle"));
+        Assert.AreEqual(0x2AFE52F782F25775UL, GetStaticFieldValue<ulong>("NativeIsPedRunningMobilePhoneTask"));
+    }
+
+    [TestMethod]
+    public void CartelCombatConstants_KeepDedicatedThreatAndFireContract()
+    {
+        Assert.AreEqual(750, GetStaticFieldValue<int>("CartelCombatOrderIntervalMs"));
+        Assert.AreEqual(210.0f, GetStaticFieldValue<float>("CartelThreatScanRadius"), 0.001f);
+        Assert.AreEqual(230.0f, GetStaticFieldValue<float>("CartelThreatEvidenceRadius"), 0.001f);
+        Assert.AreEqual(135.0f, GetStaticFieldValue<float>("CartelDriveByDistance"), 0.001f);
+        Assert.AreEqual(45.0f, GetStaticFieldValue<float>("CartelPassengerExitCombatDistance"), 0.001f);
+        Assert.AreEqual(145.0f, GetStaticFieldValue<float>("CartelOnFootShootDistance"), 0.001f);
+        Assert.AreEqual(unchecked((int)0xC6EE6B4C), GetStaticFieldValue<int>("CartelFullAutoFiringPattern"));
+        Assert.AreEqual(1250, GetStaticFieldValue<int>("CartelThreatScanIntervalMs"));
+        Assert.AreEqual(1800, GetStaticFieldValue<int>("CartelThreatCacheLifetimeMs"));
+        Assert.AreEqual(500, GetStaticFieldValue<int>("CartelLateMaintenanceIntervalMs"));
+        Assert.AreEqual(2, GetStaticFieldValue<int>("CartelMaxGuardThreatScansPerPass"));
+        Assert.AreEqual(2500, GetStaticFieldValue<int>("CartelThreatRelationshipRefreshMs"));
+    }
+
+    [TestMethod]
+    public void CartelMobilityConstants_KeepFootVehicleSynchronizationContract()
+    {
+        Assert.AreEqual(900, GetStaticFieldValue<int>("CartelGuardMobilityOrderIntervalMs"));
+        Assert.AreEqual(850, GetStaticFieldValue<int>("CartelGuardFootFollowIntervalMs"));
+        Assert.AreEqual(30.0f, GetStaticFieldValue<float>("CartelVehicleFootExitDistance"), 0.001f);
+        Assert.AreEqual(5.0f, GetStaticFieldValue<float>("CartelVehicleFootExitSpeed"), 0.001f);
+        Assert.AreEqual(125.0f, GetStaticFieldValue<float>("CartelVehicleForcedFootExitMaxDistance"), 0.001f);
+        Assert.AreEqual(3.4f, GetStaticFieldValue<float>("CartelGuardFootFollowDistance"), 0.001f);
+        Assert.AreEqual(2.4f, GetStaticFieldValue<float>("CartelGuardFootStandDistance"), 0.001f);
+        Assert.AreEqual(26.0f, GetStaticFieldValue<float>("CartelGuardImmediateThreatDistance"), 0.001f);
+    }
+
+    [TestMethod]
+    public void SourceFile_CartelMobilityLayerSyncsFootAndVehicleWithoutHeavyScans()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string maintainBlock = ExtractSourceSection(
+            source,
+            "private void MaintainCartelTeamWeaponsAndDrivers(Ped player, bool latePass)",
+            "private void MaintainCartelGuardPassiveState(SpawnedNpc npc, bool includeWeaponSelection)");
+        string mobilityBlock = ExtractSourceSection(
+            source,
+            "private void SynchronizeCartelGuardWithPlayerState(SpawnedNpc guard, Ped player, bool latePass)",
+            "private Ped ResolveCartelThreat(Ped player, bool latePass)");
+
+        Assert.IsTrue(
+            source.IndexOf("private readonly Dictionary<int, int> _cartelNextGuardMobilityOrderAt = new Dictionary<int, int>();", StringComparison.Ordinal) >= 0,
+            "Le Cartel doit conserver un anti-spam dedie aux ordres pied/vehicule.");
+        Assert.IsTrue(
+            maintainBlock.IndexOf("SynchronizeCartelGuardWithPlayerState(npc, player, latePass);", StringComparison.Ordinal) >= 0,
+            "La maintenance Cartel doit synchroniser les gardes avec l'etat pied/vehicule du joueur.");
+        Assert.IsTrue(
+            mobilityBlock.IndexOf("ReturnCartelGuardToVehicleIfNeeded(guard, player, false);", StringComparison.Ordinal) >= 0,
+            "Un joueur en vehicule doit faire remonter les gardes dans les Baller Cartel.");
+        Assert.IsTrue(
+            mobilityBlock.IndexOf("CommandCartelGuardLeaveVehicle(guard, currentVehicle, combatMode);", StringComparison.Ordinal) >= 0,
+            "Un joueur a pied doit pouvoir faire descendre les gardes Cartel.");
+        Assert.IsTrue(
+            mobilityBlock.IndexOf("FollowCartelGuardOnFoot(guard, player, false);", StringComparison.Ordinal) >= 0,
+            "Les gardes Cartel sortis doivent recevoir un ordre de suivi a pied.");
+        Assert.IsTrue(
+            mobilityBlock.IndexOf("HasCartelVehicleFailedToApproachFootPlayer(vehicle, player)", StringComparison.Ordinal) >= 0,
+            "Un vehicule Cartel bloque doit declencher la sortie a pied.");
+        Assert.IsFalse(
+            mobilityBlock.IndexOf("World.GetNearbyPeds", StringComparison.Ordinal) >= 0,
+            "La couche de mobilite Cartel ne doit pas scanner tous les PNJ du monde.");
+        Assert.IsFalse(
+            mobilityBlock.IndexOf("FindThreatForAlly(", StringComparison.Ordinal) >= 0,
+            "La couche de mobilite Cartel ne doit pas revenir vers la detection lourde Bodyguard.");
+    }
+
+    [TestMethod]
+    public void SourceFile_CartelCombatPrioritizesFootDeploymentWhenPlayerIsOnFoot()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string guardCombatBlock = ExtractSourceSection(
+            source,
+            "private void EngageCartelGuardThreat(SpawnedNpc guard, Ped threat, Ped player, bool latePass)",
+            "private void PrepareCartelGuardForCombat(SpawnedNpc guard, Ped threat)");
+        string passengerExitBlock = ExtractSourceSection(
+            source,
+            "private bool ShouldCartelPassengerExitToFight(Ped passenger, Vehicle vehicle, Ped threat, Ped player)",
+            "private void StartCartelPassengerDriveBy(Ped passenger, Ped threat)");
+        string vehicleCombatBlock = ExtractSourceSection(
+            source,
+            "private void CommandCartelVehicleForCombat(Vehicle vehicle, Ped threat, Ped player)",
+            "private void IssueCartelFastFollowOrder(Vehicle vehicle, Ped player, bool force)");
+
+        int forcedExitIndex = guardCombatBlock.IndexOf(
+            "ShouldCartelGuardLeaveVehicleForPlayerOnFoot(guard.Ped, currentVehicle, player, true)",
+            StringComparison.Ordinal);
+        int combatCooldownIndex = guardCombatBlock.IndexOf(
+            "if (!CanIssueCartelCombatOrder(guard.Ped))",
+            StringComparison.Ordinal);
+
+        Assert.IsTrue(
+            forcedExitIndex >= 0 && combatCooldownIndex > forcedExitIndex,
+            "La sortie vehicule a pied doit etre evaluee avant le cooldown de combat.");
+        Assert.IsTrue(
+            guardCombatBlock.IndexOf("ShouldCartelGuardReturnToVehicleDuringCombat(guard, threat, player)", StringComparison.Ordinal) >= 0,
+            "Un garde a pied doit pouvoir remonter si le joueur repart en vehicule.");
+        Assert.IsTrue(
+            passengerExitBlock.IndexOf("return ShouldCartelGuardLeaveVehicleForPlayerOnFoot(passenger, vehicle, player, true);", StringComparison.Ordinal) >= 0,
+            "Les passagers Cartel doivent reutiliser la sortie pied/vehicule dediee.");
+        Assert.IsFalse(
+            passengerExitBlock.IndexOf("distanceToThreat", StringComparison.Ordinal) >= 0,
+            "La sortie passager ne doit plus dependre seulement de la menace proche.");
+        Assert.IsTrue(
+            vehicleCombatBlock.IndexOf("bool playerOnFoot = Entity.Exists(player) && !player.IsInVehicle();", StringComparison.Ordinal) >= 0,
+            "Le conducteur Cartel doit distinguer joueur a pied et joueur en vehicule.");
+        Assert.IsTrue(
+            vehicleCombatBlock.IndexOf("Vector3 driveTarget = playerOnFoot && Entity.Exists(player)", StringComparison.Ordinal) >= 0,
+            "En combat, le vehicule Cartel doit viser le joueur si celui-ci est a pied.");
+        Assert.IsTrue(
+            vehicleCombatBlock.IndexOf("? 16.0f", StringComparison.Ordinal) >= 0,
+            "La distance d'arret doit permettre la descente proche du joueur a pied.");
+    }
+
+    [TestMethod]
+    public void SourceFile_RelationshipRulesProtectAmbientGroupsFromGlobalHate()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string relationshipBlock = ExtractSourceSection(
+            source,
+            "private void ApplyRelationshipRules()",
+            "private void UpdateNpcs()");
+
+        Assert.IsTrue(
+            source.IndexOf("private static readonly HashSet<int> ProtectedAmbientRelationshipGroups = BuildProtectedAmbientRelationshipGroups();", StringComparison.Ordinal) >= 0,
+            "Le garde-fou des groupes ambiants proteges doit rester present.");
+        Assert.IsTrue(
+            relationshipBlock.IndexOf("ResetAllyRelationsWithProtectedAmbientGroups();", StringComparison.Ordinal) >= 0,
+            "Les relations alliees doivent renettoyer les groupes ambiants proteges.");
+        Assert.IsTrue(
+            relationshipBlock.IndexOf("SetRelationshipBothWays((Relationship)RelationshipNeutral, _allyGroupHash, protectedGroup);", StringComparison.Ordinal) >= 0,
+            "Les groupes ambiants proteges doivent revenir a neutre cote allies.");
+        Assert.IsTrue(
+            relationshipBlock.IndexOf("\"CIVMALE\"", StringComparison.Ordinal) >= 0 &&
+            relationshipBlock.IndexOf("\"FIREMAN\"", StringComparison.Ordinal) >= 0 &&
+            relationshipBlock.IndexOf("\"MEDIC\"", StringComparison.Ordinal) >= 0 &&
+            relationshipBlock.IndexOf("\"COP\"", StringComparison.Ordinal) >= 0,
+            "La liste des groupes ambiants proteges doit couvrir les civils et les services.");
+    }
+
+    [TestMethod]
+    public void SourceFile_BodyguardsStayScriptControlledWithoutRealThreat()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string bodyguardBlock = ExtractSourceSection(
+            source,
+            "private void UpdateBodyguard(SpawnedNpc bodyguard, Ped player)",
+            "private bool HasPlayerProvokedNeutralGuard(Ped guard, Ped player)");
+        string cartelMaintainBlock = ExtractSourceSection(
+            source,
+            "private void MaintainCartelTeamWeaponsAndDrivers(Ped player, bool latePass)",
+            "private Ped ResolveCartelThreat(Ped player, bool latePass)");
+        string cartelGuardBlock = ExtractSourceSection(
+            source,
+            "private void ConfigureCartelGuard(SpawnedNpc spawned, Vehicle assignedVehicle, int assignedSeat)",
+            "private void UpgradeCartelVehicle(Vehicle vehicle)");
+
+        Assert.IsTrue(
+            bodyguardBlock.IndexOf("bodyguard.Ped.BlockPermanentEvents = true;", StringComparison.Ordinal) >= 0,
+            "Un bodyguard sans menace doit rester bloque contre les evenements ambiants.");
+        Assert.IsTrue(
+            bodyguardBlock.IndexOf("Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, bodyguard.Ped.Handle, _allyGroupHash);", StringComparison.Ordinal) >= 0,
+            "Un bodyguard sans menace doit revenir explicitement dans le groupe allie.");
+        Assert.IsTrue(
+            cartelMaintainBlock.IndexOf("npc.Ped.BlockPermanentEvents = true;", StringComparison.Ordinal) >= 0,
+            "Les gardes Cartel au repos doivent rester controles par le script.");
+        Assert.IsTrue(
+            cartelMaintainBlock.IndexOf("Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, npc.Ped.Handle, _allyGroupHash);", StringComparison.Ordinal) >= 0,
+            "Les gardes Cartel au repos doivent rester rattaches au groupe allie.");
+        Assert.IsTrue(
+            cartelGuardBlock.IndexOf("spawned.Ped.BlockPermanentEvents = true;", StringComparison.Ordinal) >= 0,
+            "La configuration initiale des gardes Cartel doit bloquer les reactions ambiantes.");
+    }
+
+    [TestMethod]
+    public void SourceFile_AllyThreatDetectionRequiresPersonalHostilityForAmbientShooters()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string threatBlock = ExtractSourceSection(
+            source,
+            "private Ped FindThreatForAlly(Ped allyPed, Ped player)",
+            "private Ped FindManagedHostileThreatForAlly(Ped allyPed, Ped player)");
+
+        Assert.IsTrue(
+            threatBlock.IndexOf("HasDefensiveDamageAgainstProtectedPed(candidate, protectedPed)", StringComparison.Ordinal) >= 0,
+            "La detection alliee doit confirmer les degats defensifs avant de reagir.");
+        Assert.IsTrue(
+            threatBlock.IndexOf("HasHostileRelationshipToProtectedPed(candidate, protectedPed) ||", StringComparison.Ordinal) >= 0,
+            "Un tir proche ne doit plus suffire sans hostilite personnelle contre la cible protegee.");
+        Assert.IsTrue(
+            threatBlock.IndexOf("(Entity.Exists(player) && HasHostileRelationshipToProtectedPed(candidate, player))", StringComparison.Ordinal) >= 0,
+            "Un tir proche doit aussi pouvoir proteger le joueur si la relation hostile le vise.");
+        Assert.IsFalse(
+            threatBlock.IndexOf("player.HasBeenDamagedBy(candidate)", StringComparison.Ordinal) >= 0,
+            "La detection alliee ne doit plus s'appuyer directement sur le test large de degat du joueur.");
+    }
+
+    [TestMethod]
+    public void SourceFile_NpcAiUpdateSpreadsBrainsBlipsAndPassiveOrders()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string updateBlock = ExtractSourceSection(
+            source,
+            "private void UpdateNpcs()",
+            "private void MarkNpcForAutoRespawn(SpawnedNpc npc)");
+        string spawnBlock = ExtractSourceSection(
+            source,
+            "private SpawnedNpc RegisterSpawnedNpc(",
+            "private PlacedVehicle RegisterPlacedVehicle");
+        string respawnBlock = ExtractSourceSection(
+            source,
+            "private void ResetNpcRuntimeAfterAutoRespawn(SpawnedNpc npc)",
+            "private bool CanAutoRespawnAt(Ped player, Vector3 spawnPosition, Entity oldEntity, int eligibleAt)");
+
+        StringAssert.Contains(updateBlock, "int brainsBudget = MaxNpcBrainsPerTick;");
+        StringAssert.Contains(updateBlock, "int blipBudget = MaxNpcBlipRefreshPerTick;");
+        StringAssert.Contains(updateBlock, "RefreshNpcBlipIfNeeded(npc, now, ref blipBudget);");
+        StringAssert.Contains(updateBlock, "if (brainsBudget <= 0)");
+        StringAssert.Contains(updateBlock, "npc.NextThinkAt = GetNextNpcThinkTime();");
+        StringAssert.Contains(updateBlock, "CreateOrUpdateNpcBlip(npc);");
+        Assert.IsFalse(
+            updateBlock.IndexOf("CreateOrUpdateNpcBlip(npc);\r\n\r\n            if (Game.GameTime < npc.NextThinkAt)", StringComparison.Ordinal) >= 0,
+            "La boucle PNJ ne doit plus rafraichir les blips et cerveaux en salve synchronisee.");
+
+        StringAssert.Contains(spawnBlock, "NextThinkAt = GetInitialNpcThinkTime(),");
+        StringAssert.Contains(spawnBlock, "NextPassiveTaskAt = GetInitialPassiveTaskTime(),");
+        StringAssert.Contains(spawnBlock, "NextBlipRefreshAt = GetInitialNpcBlipRefreshTime(),");
+        StringAssert.Contains(respawnBlock, "npc.NextThinkAt = GetInitialNpcThinkTime();");
+        StringAssert.Contains(respawnBlock, "npc.NextPassiveTaskAt = GetInitialPassiveTaskTime();");
+        StringAssert.Contains(respawnBlock, "npc.NextBlipRefreshAt = GetInitialNpcBlipRefreshTime();");
+
+        StringAssert.Contains(source, "private bool ShouldRefreshPassiveTask(SpawnedNpc npc)");
+        StringAssert.Contains(source, "HoldStaticPositionThrottled(npc, player);");
+        StringAssert.Contains(source, "HoldGuardPositionThrottled(npc);");
+        StringAssert.Contains(source, "HoldAllyPositionThrottled(ally);");
+    }
+
+    [TestMethod]
+    public void SourceFile_AllyThreatScansAreSharedAndCached()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string threatBlock = ExtractSourceSection(
+            source,
+            "private Ped FindThreatForAlly(Ped allyPed, Ped player)",
+            "private Ped FindManagedHostileThreatForAlly(Ped allyPed, Ped player)");
+
+        StringAssert.Contains(source, "private Ped _allyCachedThreatPed;");
+        StringAssert.Contains(source, "private int _allyCachedThreatUntil;");
+        StringAssert.Contains(source, "private int _nextAllyThreatScanAt;");
+        StringAssert.Contains(source, "private int _allyThreatScanCursor;");
+        StringAssert.Contains(threatBlock, "CacheAllyThreat(managedThreat);");
+        StringAssert.Contains(threatBlock, "Ped cachedThreat = GetUsableCachedAllyThreat(allyPed, player);");
+        StringAssert.Contains(threatBlock, "if (now < _nextAllyThreatScanAt)");
+        StringAssert.Contains(threatBlock, "_nextAllyThreatScanAt = now + AllyThreatScanIntervalMs;");
+        StringAssert.Contains(threatBlock, "Ped ambientThreat = FindBestAmbientThreatForAllies(player);");
+        StringAssert.Contains(threatBlock, "Ped[] nearPlayer = GetNearbyPedsSafe(player, RuntimeAllyDefenseRadius);");
+        StringAssert.Contains(threatBlock, "int scansThisPass = Math.Min(AllyThreatGuardScansPerPass, allies.Count);");
+        StringAssert.Contains(threatBlock, "_allyThreatScanCursor = Wrap(_allyThreatScanCursor + scansThisPass, allies.Count);");
+        Assert.IsFalse(
+            threatBlock.IndexOf("GetUniqueNearbyPeds(allyPed, player, RuntimeAllyDefenseRadius)", StringComparison.Ordinal) >= 0,
+            "La detection alliee ne doit plus lancer deux scans monde par allie.");
+    }
+
+    [TestMethod]
+    public void SourceFile_CartelThreatEvidenceAndGroupHostilityStayScoped()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string evidenceBlock = ExtractSourceSection(
+            source,
+            "private bool HasCartelThreatEvidence(Ped candidate, Ped player)",
+            "private float ScoreCartelThreat(Ped candidate, Ped player)");
+        string allyCombatBlock = ExtractSourceSection(
+            source,
+            "private void ActivateAllyCombat(SpawnedNpc ally, Ped target)",
+            "private void ActivateCombatAgainstBestTarget(SpawnedNpc npc, bool stationary)");
+        string cartelHostilityBlock = ExtractSourceSection(
+            source,
+            "private void MakeCartelAlliesHostileToThreat(Ped threat)",
+            "private void EngageCartelGuardThreat(SpawnedNpc guard, Ped threat, Ped player, bool latePass)");
+
+        Assert.IsTrue(
+            evidenceBlock.IndexOf("HasDefensiveDamageAgainstProtectedPed(candidate, player)", StringComparison.Ordinal) >= 0,
+            "Le Cartel doit confirmer une agression defensive contre le joueur.");
+        Assert.IsTrue(
+            evidenceBlock.IndexOf("HasDefensiveDamageAgainstProtectedPed(candidate, guard)", StringComparison.Ordinal) >= 0,
+            "Le Cartel doit confirmer une agression defensive contre un garde precis.");
+        Assert.IsTrue(
+            evidenceBlock.IndexOf("HasHostileRelationshipToProtectedPed(candidate, player)", StringComparison.Ordinal) >= 0,
+            "Le Cartel doit exiger un indice d'hostilite personnelle avant de retenir un simple tir proche.");
+        Assert.IsFalse(
+            evidenceBlock.IndexOf("candidate.HasBeenDamagedBy(player)", StringComparison.Ordinal) >= 0,
+            "Le Cartel ne doit plus transformer automatiquement une cible touchee par le joueur en menace valide.");
+        Assert.IsTrue(
+            allyCombatBlock.IndexOf("ShouldUseGroupHostilityForThreat(target, targetGroup)", StringComparison.Ordinal) >= 0,
+            "Les allies doivent filtrer la haine de groupe avant de l'appliquer.");
+        Assert.IsTrue(
+            cartelHostilityBlock.IndexOf("ShouldUseGroupHostilityForThreat(threat, targetGroup)", StringComparison.Ordinal) >= 0,
+            "Le Cartel doit filtrer la haine de groupe avant de l'appliquer.");
+    }
+
+    [TestMethod]
+    public void SourceFile_CartelNoLongerUsesForcedVehicleForwardSpeed()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+
+        Assert.IsFalse(
+            source.IndexOf("SET_VEHICLE_FORWARD_SPEED", StringComparison.Ordinal) >= 0,
+            "La logique Cartel ne doit plus réintroduire de propulsion scriptée de véhicule.");
+    }
+
+    [TestMethod]
+    public void SourceFile_CartelVehicleUpgradeUsesOneShotHeavyPass()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string upgradeBlock = ExtractSourceSection(
+            source,
+            "private void UpgradeCartelVehicle(Vehicle vehicle)",
+            "private Vector3 FindCartelVehicleSpawnPosition");
+
+        Assert.IsTrue(
+            source.IndexOf("private readonly HashSet<int> _cartelFullyUpgradedVehicleHandles = new HashSet<int>();", StringComparison.Ordinal) >= 0,
+            "Le tracker des upgrades lourdes Cartel doit rester présent.");
+        Assert.IsTrue(
+            source.IndexOf("private readonly Dictionary<int, int> _cartelLastVehicleSoftMaintenanceAt = new Dictionary<int, int>();", StringComparison.Ordinal) >= 0,
+            "Le tracker de maintenance légère Cartel doit rester présent.");
+        Assert.IsTrue(
+            source.IndexOf("private readonly Dictionary<int, Vector3> _cartelLastVehicleOrderTarget = new Dictionary<int, Vector3>();", StringComparison.Ordinal) >= 0,
+            "Le tracker de dernière cible d'ordre Cartel doit rester présent.");
+        Assert.IsTrue(
+            upgradeBlock.IndexOf("if (!_cartelFullyUpgradedVehicleHandles.Contains(handle))", StringComparison.Ordinal) >= 0,
+            "L'upgrade lourd Cartel doit rester protégé par un passage unique.");
+        Assert.IsTrue(
+            upgradeBlock.IndexOf("MaintainCartelVehicleSoftState(vehicle);", StringComparison.Ordinal) >= 0,
+            "Les appels suivants doivent basculer sur la maintenance légère.");
+        Assert.AreEqual(
+            1,
+            CountOccurrences(upgradeBlock, "Function.Call(Hash.SET_VEHICLE_ON_GROUND_PROPERLY"),
+            "Le bloc d'upgrade Cartel ne doit remettre le véhicule au sol qu'une seule fois.");
+    }
+
+    [TestMethod]
+    public void SourceFile_CartelSoftMaintenanceAvoidsHeavyVehicleResets()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string maintenanceBlock = ExtractSourceSection(
+            source,
+            "private void MaintainCartelVehicleSoftState(Vehicle vehicle)",
+            "private Vector3 FindCartelVehicleSpawnPosition");
+
+        Assert.IsTrue(
+            maintenanceBlock.IndexOf("Function.Call(Hash.SET_ENTITY_AS_MISSION_ENTITY, vehicle.Handle, true, true);", StringComparison.Ordinal) >= 0,
+            "La maintenance légère doit conserver l'état mission du véhicule.");
+        Assert.IsTrue(
+            maintenanceBlock.IndexOf("Function.Call(Hash.SET_VEHICLE_TYRES_CAN_BURST, vehicle.Handle, false);", StringComparison.Ordinal) >= 0,
+            "La maintenance légère doit conserver les pneus protégés.");
+        Assert.IsTrue(
+            maintenanceBlock.IndexOf("Function.Call(Hash.SET_VEHICLE_ENGINE_ON, vehicle.Handle, true, true, false);", StringComparison.Ordinal) >= 0,
+            "La maintenance légère doit garder le moteur actif.");
+        Assert.IsTrue(
+            maintenanceBlock.IndexOf("Function.Call(Hash.SET_VEHICLE_DOORS_LOCKED, vehicle.Handle, 1);", StringComparison.Ordinal) >= 0,
+            "La maintenance légère doit garder le verrouillage voulu.");
+        Assert.IsFalse(
+            maintenanceBlock.IndexOf("Function.Call(Hash.SET_VEHICLE_ON_GROUND_PROPERLY", StringComparison.Ordinal) >= 0,
+            "La maintenance légère ne doit jamais remettre le véhicule au sol.");
+        Assert.IsFalse(
+            maintenanceBlock.IndexOf("Function.Call(Hash.SET_VEHICLE_MOD_KIT", StringComparison.Ordinal) >= 0,
+            "La maintenance légère ne doit pas réappliquer le kit de mods.");
+        Assert.IsFalse(
+            maintenanceBlock.IndexOf("Function.Call(Hash.SET_VEHICLE_MOD,", StringComparison.Ordinal) >= 0,
+            "La maintenance légère ne doit pas réappliquer les mods GTA.");
+        Assert.IsFalse(
+            maintenanceBlock.IndexOf("Function.Call(Hash.SET_ENTITY_VELOCITY", StringComparison.Ordinal) >= 0,
+            "La maintenance légère ne doit pas toucher à la vélocité du véhicule.");
+    }
+
+    [TestMethod]
+    public void SourceFile_CartelFollowOrdersAvoidRedundantTaskSpam()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string followBlock = ExtractSourceSection(
+            source,
+            "private void IssueCartelFastFollowOrder(Vehicle vehicle, Ped player, bool force)",
+            "private float CalculateCartelCruiseSpeed(Ped player)");
+
+        Assert.IsTrue(
+            followBlock.IndexOf("IsCartelVehicleSettledNearPlayer(vehicle, player)", StringComparison.Ordinal) >= 0,
+            "Les ordres Cartel doivent ignorer les véhicules déjà posés près du joueur.");
+        Assert.IsTrue(
+            followBlock.IndexOf("_cartelLastVehicleOrderTarget.TryGetValue(handle, out lastTarget)", StringComparison.Ordinal) >= 0,
+            "Les ordres Cartel doivent mémoriser la dernière cible envoyée.");
+        Assert.IsTrue(
+            followBlock.IndexOf("lastTarget.DistanceTo(targetPosition) < 8.0f", StringComparison.Ordinal) >= 0,
+            "Les ordres Cartel doivent filtrer les cibles quasi identiques.");
+        Assert.IsFalse(
+            followBlock.IndexOf("Function.Call(Hash.SET_VEHICLE_FORWARD_SPEED", StringComparison.Ordinal) >= 0,
+            "Le suivi Cartel ne doit plus forcer de vitesse scriptée.");
+        Assert.IsFalse(
+            followBlock.IndexOf("Function.Call(Hash.SET_VEHICLE_ON_GROUND_PROPERLY", StringComparison.Ordinal) >= 0,
+            "Le suivi Cartel ne doit pas remettre le véhicule au sol pendant les ordres.");
+    }
+
+    [TestMethod]
+    public void SourceFile_UpdateCartelConvoyLateLimitsHeavyMaintenance()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string lateBlock = ExtractSourceSection(
+            source,
+            "private void UpdateCartelConvoyLate()",
+            "private void UpdateCartelPhoneContact(Ped player)");
+
+        Assert.IsTrue(
+            lateBlock.IndexOf("Game.GameTime >= _nextCartelLateMaintenanceAt", StringComparison.Ordinal) >= 0,
+            "La passe tardive Cartel doit etre cadencee par un cooldown dedie.");
+        Assert.IsTrue(
+            lateBlock.IndexOf("_nextCartelLateMaintenanceAt = Game.GameTime + CartelLateMaintenanceIntervalMs;", StringComparison.Ordinal) >= 0,
+            "La passe tardive Cartel doit memoriser sa prochaine execution.");
+        Assert.IsTrue(
+            lateBlock.IndexOf("MaintainCartelTeamWeaponsAndDrivers(player, true);", StringComparison.Ordinal) >= 0,
+            "La passe tardive Cartel doit conserver l'entretien leger des gardes et conducteurs.");
+    }
+
+    [TestMethod]
+    public void SourceFile_CartelCombatModePrioritizesThreatOrders()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string maintainBlock = ExtractSourceSection(
+            source,
+            "private void MaintainCartelTeamWeaponsAndDrivers(Ped player, bool latePass)",
+            "private Ped ResolveCartelThreat(Ped player, bool latePass)");
+
+        Assert.IsTrue(
+            maintainBlock.IndexOf("Ped cartelThreat = ResolveCartelThreat(player, latePass);", StringComparison.Ordinal) >= 0,
+            "Le maintien Cartel doit passer par la resolution de menace optimisee.");
+        Assert.IsFalse(
+            maintainBlock.IndexOf("FindBestCartelThreat(player)", StringComparison.Ordinal) >= 0,
+            "Le maintien Cartel ne doit plus lancer directement le scan lourd de menace.");
+        Assert.IsTrue(
+            maintainBlock.IndexOf("if (Entity.Exists(cartelThreat))", StringComparison.Ordinal) >= 0,
+            "Le maintien Cartel doit basculer en mode combat si une menace existe.");
+        Assert.IsTrue(
+            maintainBlock.IndexOf("EngageCartelTeamThreat(cartelThreat, player, latePass);", StringComparison.Ordinal) >= 0,
+            "Le maintien Cartel doit prioriser la couche combat dediee.");
+    }
+
+    [TestMethod]
+    public void SourceFile_CartelThreatResolutionCachesAndLimitsHeavyScans()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string resolutionBlock = ExtractSourceSection(
+            source,
+            "private Ped ResolveCartelThreat(Ped player, bool latePass)",
+            "private bool IsValidCartelThreatCandidate(Ped candidate, Ped player)");
+
+        Assert.IsTrue(
+            resolutionBlock.IndexOf("Ped cachedThreat = GetCachedCartelThreat(player);", StringComparison.Ordinal) >= 0,
+            "La resolution Cartel doit d'abord reutiliser la menace mise en cache.");
+        Assert.IsTrue(
+            resolutionBlock.IndexOf("if (latePass)", StringComparison.Ordinal) >= 0,
+            "La resolution Cartel doit interdire le scan lourd pendant la passe tardive.");
+        Assert.IsTrue(
+            resolutionBlock.IndexOf("Game.GameTime < _nextCartelThreatScanAt", StringComparison.Ordinal) >= 0,
+            "La resolution Cartel doit respecter un intervalle minimum entre scans lourds.");
+        Assert.IsTrue(
+            resolutionBlock.IndexOf("_nextCartelThreatScanAt = Game.GameTime + CartelThreatScanIntervalMs;", StringComparison.Ordinal) >= 0,
+            "La resolution Cartel doit reprogrammer le prochain scan lourd.");
+        Assert.IsTrue(
+            resolutionBlock.IndexOf("CacheCartelThreat(scannedThreat);", StringComparison.Ordinal) >= 0,
+            "La resolution Cartel doit memoriser la menace trouvee.");
+        Assert.AreEqual(
+            1,
+            CountOccurrences(source, "FindBestCartelThreat(player)"),
+            "Le scan lourd principal ne doit plus etre appele qu'au travers de ResolveCartelThreat.");
+        Assert.IsTrue(
+            resolutionBlock.IndexOf("int scansThisPass = Math.Min(CartelMaxGuardThreatScansPerPass, cartelNpcHandles.Count);", StringComparison.Ordinal) >= 0,
+            "Le scan des gardes Cartel doit etre limite par passe.");
+        Assert.IsTrue(
+            resolutionBlock.IndexOf("HasCartelThreatEvidenceAgainstSpecificGuard(candidate, guard.Ped, player)", StringComparison.Ordinal) >= 0,
+            "Le scan Cartel doit reutiliser une verification ciblee pour chaque garde inspecte.");
+        Assert.IsTrue(
+            resolutionBlock.IndexOf("_cartelGuardThreatScanCursor = Wrap(_cartelGuardThreatScanCursor + scansThisPass, cartelNpcHandles.Count);", StringComparison.Ordinal) >= 0,
+            "Le scan Cartel doit repartir progressivement les gardes inspectes.");
+    }
+
+    [TestMethod]
+    public void SourceFile_CartelCombatModeForcesVehicleAndOnFootFireOrders()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string combatBlock = ExtractSourceSection(
+            source,
+            "private Ped FindBestCartelThreat(Ped player)",
+            "private void IssueCartelFastFollowOrder(Vehicle vehicle, Ped player, bool force)");
+
+        Assert.IsTrue(
+            source.IndexOf("private readonly Dictionary<int, int> _cartelNextCombatOrderAt = new Dictionary<int, int>();", StringComparison.Ordinal) >= 0,
+            "Le Cartel doit conserver un anti-spam dedie pour les ordres de combat.");
+        Assert.IsTrue(
+            combatBlock.IndexOf("Hash.TASK_DRIVE_BY", StringComparison.Ordinal) >= 0,
+            "Les passagers Cartel doivent utiliser TASK_DRIVE_BY pour forcer le tir vehicule.");
+        Assert.IsTrue(
+            combatBlock.IndexOf("Hash.TASK_SHOOT_AT_ENTITY", StringComparison.Ordinal) >= 0,
+            "Les gardes Cartel a pied doivent pouvoir forcer le tir direct.");
+        Assert.IsTrue(
+            combatBlock.IndexOf("Hash.SET_PED_FIRING_PATTERN", StringComparison.Ordinal) >= 0,
+            "Le mode combat Cartel doit forcer un firing pattern full-auto.");
+        Assert.IsTrue(
+            combatBlock.IndexOf("World.SetRelationshipBetweenGroups((Relationship)RelationshipHate, _allyGroupHash, targetGroup);", StringComparison.Ordinal) >= 0,
+            "Le mode combat Cartel doit verrouiller l'hostilite envers la cible.");
+        Assert.IsTrue(
+            combatBlock.IndexOf("Game.GameTime - _cartelLastThreatRelationshipAt < CartelThreatRelationshipRefreshMs", StringComparison.Ordinal) >= 0,
+            "Le mode combat Cartel doit amortir les refreshs de relation contre la meme cible.");
+    }
+
+    [TestMethod]
+    public void SourceFile_ActivateAllyCombatRoutesActiveCartelGuardsToDedicatedLayer()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string activateAllyBlock = ExtractSourceSection(
+            source,
+            "private void ActivateAllyCombat(SpawnedNpc ally, Ped target)",
+            "private void ActivateCombatAgainstBestTarget(SpawnedNpc npc, bool stationary)");
+
+        Assert.IsTrue(
+            activateAllyBlock.IndexOf("_cartelNpcHandles.Contains(ally.Ped.Handle)", StringComparison.Ordinal) >= 0,
+            "ActivateAllyCombat doit reconnaitre les gardes Cartel actifs.");
+        Assert.IsTrue(
+            activateAllyBlock.IndexOf("EngageCartelGuardThreat(ally, target, player, false);", StringComparison.Ordinal) >= 0,
+            "ActivateAllyCombat doit rediriger les gardes Cartel vers la couche combat dediee.");
+    }
+
+    [TestMethod]
+    public void SourceFile_CartelHandleCleanupRemovesCombatTrackersForNpcHandles()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string cleanupBlock = ExtractSourceSection(
+            source,
+            "private void CleanupCartelHandleSets()",
+            "private void SpawnCartelConvoy()");
+
+        Assert.IsTrue(
+            cleanupBlock.IndexOf("_cartelNextCombatOrderAt.Remove(deadActiveNpcHandles[i]);", StringComparison.Ordinal) >= 0,
+            "Le nettoyage Cartel doit liberer les cooldowns de combat des gardes actifs supprimes.");
+        Assert.IsTrue(
+            cleanupBlock.IndexOf("_cartelLastGuardRescueAt.Remove(deadActiveNpcHandles[i]);", StringComparison.Ordinal) >= 0,
+            "Le nettoyage Cartel doit liberer le suivi de rescue des gardes actifs supprimes.");
+        Assert.IsTrue(
+            cleanupBlock.IndexOf("_cartelNextGuardMobilityOrderAt.Remove(deadActiveNpcHandles[i]);", StringComparison.Ordinal) >= 0,
+            "Le nettoyage Cartel doit liberer les cooldowns de mobilite des gardes actifs supprimes.");
+        Assert.IsTrue(
+            cleanupBlock.IndexOf("_cartelNextCombatOrderAt.Remove(deadDismissingNpcHandles[i]);", StringComparison.Ordinal) >= 0,
+            "Le nettoyage Cartel doit liberer les cooldowns de combat des gardes en repli supprimes.");
+        Assert.IsTrue(
+            cleanupBlock.IndexOf("_cartelLastGuardRescueAt.Remove(deadDismissingNpcHandles[i]);", StringComparison.Ordinal) >= 0,
+            "Le nettoyage Cartel doit liberer le suivi de rescue des gardes en repli supprimes.");
+        Assert.IsTrue(
+            cleanupBlock.IndexOf("_cartelNextGuardMobilityOrderAt.Remove(deadDismissingNpcHandles[i]);", StringComparison.Ordinal) >= 0,
+            "Le nettoyage Cartel doit liberer les cooldowns de mobilite des gardes en repli supprimes.");
+    }
+
+    [TestMethod]
+    public void SourceFile_CartelDismissalCleanupRemovesMobilityTrackers()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string dismissalBlock = ExtractSourceSection(
+            source,
+            "private void UpdateCartelDismissal(Ped player, bool latePass)",
+            "private void DeleteDismissedVehicleAndOccupants(Vehicle vehicle)");
+        string deleteVehicleBlock = ExtractSourceSection(
+            source,
+            "private void DeleteDismissedVehicleAndOccupants(Vehicle vehicle)",
+            "private Vector3 CalculateCartelRetreatPoint(Vector3 playerPosition, Vector3 vehiclePosition)");
+
+        Assert.IsTrue(
+            dismissalBlock.IndexOf("_cartelNextGuardMobilityOrderAt.Remove(npcHandlesToDelete[i]);", StringComparison.Ordinal) >= 0,
+            "La suppression de gardes Cartel en repli doit nettoyer le cooldown de mobilite.");
+        Assert.IsTrue(
+            deleteVehicleBlock.IndexOf("_cartelNextGuardMobilityOrderAt.Remove(occupantsToDelete[i]);", StringComparison.Ordinal) >= 0,
+            "La suppression des occupants de vehicule Cartel doit nettoyer le cooldown de mobilite.");
+    }
+
+    [TestMethod]
+    public void SourceFile_CartelHandleCleanupClearsCachedThreatWhenTrackedHandleDies()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string cleanupBlock = ExtractSourceSection(
+            source,
+            "private void CleanupCartelHandleSets()",
+            "private void SpawnCartelConvoy()");
+
+        Assert.IsTrue(
+            cleanupBlock.IndexOf("_cartelCachedThreatPed != null", StringComparison.Ordinal) >= 0,
+            "Le nettoyage Cartel doit verifier si la menace mise en cache correspond a un handle supprime.");
+        Assert.IsTrue(
+            cleanupBlock.IndexOf("ClearCachedCartelThreat();", StringComparison.Ordinal) >= 0,
+            "Le nettoyage Cartel doit vider la menace mise en cache quand son handle est retire.");
+    }
+
+    [TestMethod]
+    public void SourceFile_CartelVehicleTrackingCleanupRemovesAntiPulseTrackers()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string cleanupBlock = ExtractSourceSection(
+            source,
+            "private void ClearCartelVehicleTracking(int handle)",
+            "private void TeleportCartelVehicleToRoad(Vehicle vehicle, Ped player, Vector3 point)");
+
+        Assert.IsTrue(
+            cleanupBlock.IndexOf("_cartelFullyUpgradedVehicleHandles.Remove(handle);", StringComparison.Ordinal) >= 0,
+            "Le nettoyage Cartel doit libérer le tracker d'upgrade lourd.");
+        Assert.IsTrue(
+            cleanupBlock.IndexOf("_cartelLastVehicleSoftMaintenanceAt.Remove(handle);", StringComparison.Ordinal) >= 0,
+            "Le nettoyage Cartel doit libérer le tracker de maintenance légère.");
+        Assert.IsTrue(
+            cleanupBlock.IndexOf("_cartelLastVehicleOrderTarget.Remove(handle);", StringComparison.Ordinal) >= 0,
+            "Le nettoyage Cartel doit libérer le tracker de cible d'ordre.");
+    }
+
+    [TestMethod]
+    public void SourceFile_CartelVehicleTrackingCleanupPurgesCombatTrackerDefensively()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string cleanupBlock = ExtractSourceSection(
+            source,
+            "private void ClearCartelVehicleTracking(int handle)",
+            "private void TeleportCartelVehicleToRoad(Vehicle vehicle, Ped player, Vector3 point)");
+
+        Assert.IsTrue(
+            cleanupBlock.IndexOf("_cartelNextCombatOrderAt.Remove(handle);", StringComparison.Ordinal) >= 0,
+            "Le nettoyage Cartel doit aussi purger defensivement le tracker d'ordres de combat.");
+    }
+
+    [TestMethod]
+    public void SourceFile_CartelGroundingCallsStayLimitedToPlacementUpgradeAndRescueTeleport()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+
+        Assert.AreEqual(
+            3,
+            CountOccurrences(source, "Function.Call(Hash.SET_VEHICLE_ON_GROUND_PROPERLY"),
+            "Le projet doit limiter SET_VEHICLE_ON_GROUND_PROPERLY au placement initial, à l'upgrade initial et à la téléportation de secours.");
+    }
+
+    [TestMethod]
+    public void ResolveCartelGuardModelIdentity_FallsBackToRequestedCartelAssetName()
+    {
+        object script = CreateScript();
+
+        object identity = InvokeInstance(script, "ResolveCartelGuardModelIdentity");
+
+        Assert.IsTrue(GetFieldValue<bool>(identity, "IsCustom"));
+        Assert.AreEqual("g_m_m_cartelgoons_01", GetFieldValue<string>(identity, "Name"));
+        Assert.AreEqual("CartelGoons01GMM", GetFieldValue<string>(identity, "DisplayName"));
+    }
+
+    [TestMethod]
+    public void CartelLoadoutAndVehicleIdentity_UseRequestedDefaults()
+    {
+        object script = CreateScript();
+
+        object loadout = InvokeInstance(script, "CreateCartelPrimaryLoadout");
+
+        Assert.AreEqual("ServiceCarbine", GetFieldValue<object>(loadout, "Weapon").ToString());
+        Assert.AreEqual(9999, GetFieldValue<int>(loadout, "Ammo"));
+        Assert.AreEqual("Tactique", GetFieldValue<object>(loadout, "Preset").ToString());
+        Assert.IsTrue(GetFieldValue<bool>(loadout, "ExtendedClip"));
+        Assert.IsFalse(GetFieldValue<bool>(loadout, "Suppressor"));
+        Assert.IsTrue(GetFieldValue<bool>(loadout, "Flashlight"));
+        Assert.IsTrue(GetFieldValue<bool>(loadout, "Grip"));
+        Assert.AreEqual("Small", GetFieldValue<object>(loadout, "Scope").ToString());
+        Assert.IsFalse(GetFieldValue<bool>(loadout, "Muzzle"));
+        Assert.IsFalse(GetFieldValue<bool>(loadout, "ImprovedBarrel"));
+        Assert.AreEqual("Standard", GetFieldValue<object>(loadout, "Mk2Ammo").ToString());
+
+        object vehicleIdentity = InvokeInstance(script, "ResolveCartelVehicleIdentity");
+
+        Assert.AreEqual("Baller6", GetFieldValue<string>(vehicleIdentity, "Name"));
+        Assert.AreEqual((int)InvokeStatic("EnumToIntHash", VehicleHash.Baller6), GetFieldValue<int>(vehicleIdentity, "Hash"));
+        Assert.AreEqual("Baller6 blindée Cartel", GetFieldValue<string>(vehicleIdentity, "DisplayName"));
+    }
+
+    [TestMethod]
+    public void SourceFile_OnTickRefreshesCartelContactAfterRelationshipUpdate()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+
+        int refreshIndex = source.IndexOf("RefreshPlayerRelationshipIfNeeded();", StringComparison.Ordinal);
+        Assert.IsTrue(refreshIndex >= 0, "L'appel au rafraichissement des relations doit rester present dans OnTick.");
+
+        int updateIndex = source.IndexOf("UpdateCartelContactAndConvoy();", refreshIndex, StringComparison.Ordinal);
+        Assert.IsTrue(updateIndex > refreshIndex, "OnTick doit appeler la mise a jour Cartel juste apres les relations joueur.");
+
+        int customInputIndex = source.IndexOf("if (_customModelInputRequested)", updateIndex, StringComparison.Ordinal);
+        Assert.IsTrue(customInputIndex > updateIndex, "L'appel Cartel doit rester avant la gestion d'entree de modele custom.");
+    }
+
+    [TestMethod]
+    public void SourceFile_OnTickRunsCartelLateUpdateAfterNpcUpdate()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+
+        int updateNpcsIndex = source.IndexOf("UpdateNpcs();", StringComparison.Ordinal);
+        Assert.IsTrue(updateNpcsIndex >= 0, "L'appel UpdateNpcs doit rester present dans OnTick.");
+
+        int lateUpdateIndex = source.IndexOf("UpdateCartelConvoyLate();", updateNpcsIndex, StringComparison.Ordinal);
+        Assert.IsTrue(lateUpdateIndex > updateNpcsIndex, "OnTick doit appeler la passe tardive Cartel juste apres UpdateNpcs.");
+
+        int placedVehiclesIndex = source.IndexOf("UpdatePlacedVehicles();", lateUpdateIndex, StringComparison.Ordinal);
+        Assert.IsTrue(placedVehiclesIndex > lateUpdateIndex, "La passe tardive Cartel doit rester avant la mise a jour des vehicules places.");
+    }
+
+    [DataTestMethod]
+    [DataRow(-1, 8, 7)]
+    [DataRow(0, 8, 0)]
+    [DataRow(8, 8, 0)]
+    [DataRow(17, 8, 1)]
+    [DataRow(5, 0, 0)]
+    public void Wrap_ReturnsExpectedValue(int value, int count, int expected)
+    {
+        int actual = (int)InvokeStatic("Wrap", value, count);
+        Assert.AreEqual(expected, actual);
+    }
+
+    [DataTestMethod]
+    [DataRow(-5, 1, 10, 1)]
+    [DataRow(5, 1, 10, 5)]
+    [DataRow(15, 1, 10, 10)]
+    public void Clamp_ReturnsExpectedValue(int value, int min, int max, int expected)
+    {
+        int actual = (int)InvokeStatic("Clamp", value, min, max);
+        Assert.AreEqual(expected, actual);
+    }
+
+    [DataTestMethod]
+    [DataRow(-5.0f, -1.0f, 1.0f, -1.0f)]
+    [DataRow(0.5f, -1.0f, 1.0f, 0.5f)]
+    [DataRow(3.0f, -1.0f, 1.0f, 1.0f)]
+    public void ClampFloat_ReturnsExpectedValue(float value, float min, float max, float expected)
+    {
+        float actual = (float)InvokeStatic("ClampFloat", value, min, max);
+        Assert.AreEqual(expected, actual, 0.0001f);
+    }
+
+    [DataTestMethod]
+    [DataRow(113, 25, 125)]
+    [DataRow(100, 25, 100)]
+    [DataRow(99, 0, 99)]
+    [DataRow(12, -5, 12)]
+    public void RoundToStep_ReturnsExpectedValue(int value, int step, int expected)
+    {
+        int actual = (int)InvokeStatic("RoundToStep", value, step);
+        Assert.AreEqual(expected, actual);
+    }
+
+    [DataTestMethod]
+    [DataRow("Static", 1, "Attacker")]
+    [DataRow("Attacker", 1, "Neutral")]
+    [DataRow("Neutral", 1, "Ally")]
+    [DataRow("Ally", 1, "Static")]
+    [DataRow("Static", -1, "Ally")]
+    [DataRow("Ally", -1, "Neutral")]
+    [DataRow("Neutral", -1, "Attacker")]
+    public void CycleBehavior_WrapsAcrossStableBehaviorOrder(string currentName, int direction, string expectedName)
+    {
+        Type behaviorType = GetNestedType("EnemyBehavior");
+        object current = Enum.Parse(behaviorType, currentName);
+
+        object actual = InvokeStatic("CycleBehavior", current, direction);
+
+        Assert.AreEqual(expectedName, actual.ToString());
+    }
+
+    [DataTestMethod]
+    [DataRow("Static", "Statique / hostile \u00E0 vue")]
+    [DataRow("Attacker", "Attaquer / agressif")]
+    [DataRow("Neutral", "Neutre / garde passif")]
+    [DataRow("Ally", "Alli\u00E9 / garde d\u00E9fense")]
+    public void BehaviorDisplayName_ReturnsExpectedLabel(string behaviorName, string expected)
+    {
+        Type behaviorType = GetNestedType("EnemyBehavior");
+        object behavior = Enum.Parse(behaviorType, behaviorName);
+
+        string actual = (string)InvokeStatic("BehaviorDisplayName", behavior);
+
+        Assert.AreEqual(expected, actual);
+    }
+
+    [DataTestMethod]
+    [DataRow("Npc", "NPC")]
+    [DataRow("Vehicle", "Vehicule")]
+    [DataRow("Object", "Objet")]
+    public void PlacementTypeDisplayName_ReturnsExpectedLabel(string placementTypeName, string expected)
+    {
+        Type placementType = GetNestedType("PlacementEntityType");
+        object placement = Enum.Parse(placementType, placementTypeName);
+
+        string actual = (string)InvokeStatic("PlacementTypeDisplayName", placement);
+
+        Assert.AreEqual(expected, actual);
+    }
+
+    [TestMethod]
+    public void HeadingFromTo_UsesGtaHeadingConvention()
+    {
+        float north = (float)InvokeStatic("HeadingFromTo", new Vector3(0.0f, 0.0f, 0.0f), new Vector3(0.0f, 10.0f, 0.0f));
+        float east = (float)InvokeStatic("HeadingFromTo", new Vector3(0.0f, 0.0f, 0.0f), new Vector3(10.0f, 0.0f, 0.0f));
+        float south = (float)InvokeStatic("HeadingFromTo", new Vector3(0.0f, 0.0f, 0.0f), new Vector3(0.0f, -10.0f, 0.0f));
+        float west = (float)InvokeStatic("HeadingFromTo", new Vector3(0.0f, 0.0f, 0.0f), new Vector3(-10.0f, 0.0f, 0.0f));
+
+        Assert.AreEqual(0.0f, north, 0.001f);
+        Assert.AreEqual(90.0f, east, 0.001f);
+        Assert.AreEqual(180.0f, south, 0.001f);
+        Assert.AreEqual(270.0f, west, 0.001f);
+    }
+
+    [DataTestMethod]
+    [DataRow(-10.0f, 350.0f)]
+    [DataRow(0.0f, 0.0f)]
+    [DataRow(45.0f, 45.0f)]
+    [DataRow(361.0f, 1.0f)]
+    [DataRow(720.0f, 0.0f)]
+    public void NormalizeHeading_WrapsIntoCurrentRange(float value, float expected)
+    {
+        float actual = (float)InvokeStatic("NormalizeHeading", value);
+
+        Assert.AreEqual(expected, actual, 0.001f);
+    }
+
+    [TestMethod]
+    public void Normalize_ReturnsUnitVectorForNonZeroInput()
+    {
+        Vector3 actual = (Vector3)InvokeStatic("Normalize", new Vector3(3.0f, 4.0f, 0.0f));
+
+        Assert.AreEqual(0.6f, actual.X, 0.0001f);
+        Assert.AreEqual(0.8f, actual.Y, 0.0001f);
+        Assert.AreEqual(0.0f, actual.Z, 0.0001f);
+        Assert.AreEqual(1.0f, actual.Length(), 0.0001f);
+    }
+
+    [TestMethod]
+    public void Normalize_ReturnsZeroVectorForNearZeroInput()
+    {
+        Vector3 actual = (Vector3)InvokeStatic("Normalize", new Vector3(0.00001f, 0.0f, 0.0f));
+
+        Assert.AreEqual(Vector3.Zero, actual);
+    }
+
+    [TestMethod]
+    public void IsZeroVector_UsesCurrentTolerance()
+    {
+        bool nearZero = (bool)InvokeStatic("IsZeroVector", new Vector3(0.0009f, -0.0009f, 0.0009f));
+        bool outsideTolerance = (bool)InvokeStatic("IsZeroVector", new Vector3(0.0011f, 0.0f, 0.0f));
+
+        Assert.IsTrue(nearZero);
+        Assert.IsFalse(outsideTolerance);
+    }
+
+    [TestMethod]
+    public void FormatVector_UsesInvariantFormatting()
+    {
+        string actual = (string)InvokeStatic("FormatVector", new Vector3(12.34f, -5.67f, 89.01f));
+        Assert.AreEqual("X 12.3 | Y -5.7 | Z 89.0", actual);
+    }
+
+    [TestMethod]
+    public void FitText_ReturnsEmptyForNull()
+    {
+        string actual = (string)InvokeStatic("FitText", null, 10);
+        Assert.AreEqual(string.Empty, actual);
+    }
+
+    [DataTestMethod]
+    [DataRow("", 10, "")]
+    [DataRow("Test", 10, "Test")]
+    [DataRow("abcdef", 3, "abc")]
+    [DataRow("abcdef", 5, "ab...")]
+    public void FitText_ReturnsExpectedValue(string text, int maxLength, string expected)
+    {
+        string actual = (string)InvokeStatic("FitText", text, maxLength);
+        Assert.AreEqual(expected, actual);
+    }
+
+    [TestMethod]
+    public void EnumToIntHash_HandlesUnsignedUnderlyingEnums()
+    {
+        int actual = (int)InvokeStatic("EnumToIntHash", UnsignedHashExample.Value);
+        int expected = unchecked((int)0xF1234567U);
+        Assert.AreEqual(expected, actual);
+    }
+
+    [TestMethod]
+    public void BuildModelOptions_KeepCustomFirstSortRemainingEntriesAndRemoveDuplicateHashes()
+    {
+        IList modelOptions = (IList)InvokeStatic("BuildModelOptions");
+
+        Assert.IsTrue(modelOptions.Count > 1, "Le catalogue de modeles doit contenir l'entree custom et des peds du jeu.");
+
+        HashSet<int> seenHashes = new HashSet<int>();
+        string previousName = null;
+
+        for (int index = 0; index < modelOptions.Count; index++)
+        {
+            object option = modelOptions[index];
+            bool isCustom = GetFieldValue<bool>(option, "IsCustom");
+            string displayName = GetFieldValue<string>(option, "DisplayName");
+            int hash = GetFieldValue<int>(option, "Hash");
+
+            Assert.IsFalse(string.IsNullOrWhiteSpace(displayName), "Chaque entree doit avoir un libelle exploitable.");
+
+            if (index == 0)
+            {
+                Assert.IsTrue(isCustom);
+                Assert.AreEqual("Custom", displayName);
+                continue;
+            }
+
+            Assert.IsFalse(isCustom, "Seule la premiere entree doit representer le modele custom.");
+            Assert.IsTrue(seenHashes.Add(hash), "Chaque hash de ped doit apparaitre une seule fois.");
+
+            if (previousName != null)
+            {
+                Assert.IsTrue(
+                    StringComparer.OrdinalIgnoreCase.Compare(previousName, displayName) <= 0,
+                    "Les modeles non custom doivent rester tries par nom.");
+            }
+
+            previousName = displayName;
+        }
+    }
+
+    [TestMethod]
+    public void BuildWeaponOptions_KeepUnarmedFirstSortRemainingEntriesAndRemoveDuplicateHashes()
+    {
+        IList weaponOptions = (IList)InvokeStatic("BuildWeaponOptions");
+
+        Assert.IsTrue(weaponOptions.Count > 1, "Le catalogue d'armes doit contenir au moins une entree exploitable.");
+
+        HashSet<int> seenHashes = new HashSet<int>();
+        string previousName = null;
+
+        for (int index = 0; index < weaponOptions.Count; index++)
+        {
+            object option = weaponOptions[index];
+            string displayName = GetFieldValue<string>(option, "DisplayName");
+            int hash = (int)InvokeStatic("EnumToIntHash", (Enum)GetFieldValue<object>(option, "Hash"));
+
+            Assert.IsFalse(string.IsNullOrWhiteSpace(displayName), "Chaque entree d'arme doit avoir un libelle exploitable.");
+            Assert.IsTrue(seenHashes.Add(hash), "Chaque hash d'arme doit apparaitre une seule fois.");
+
+            if (index == 0)
+            {
+                Assert.AreEqual("Unarmed", displayName);
+                continue;
+            }
+
+            if (previousName != null)
+            {
+                Assert.IsTrue(
+                    StringComparer.OrdinalIgnoreCase.Compare(previousName, displayName) <= 0,
+                    "Les armes apres Unarmed doivent rester triees par nom.");
+            }
+
+            previousName = displayName;
+        }
+    }
+
+    [TestMethod]
+    public void FindDefaultModelIndex_PrefersSwatEntry()
+    {
+        object script = CreateScriptWithField(
+            "_modelOptions",
+            CreateModelOptionsList(
+                CreateModelOption("Custom", true, 0),
+                CreateModelOption("StreetCop", false, 10),
+                CreateModelOption("Swat01SMY", false, 20),
+                CreateModelOption("Worker", false, 30)));
+
+        int actual = (int)InvokeInstance(script, "FindDefaultModelIndex");
+
+        Assert.AreEqual(2, actual);
+    }
+
+    [TestMethod]
+    public void FindDefaultModelIndex_FallsBackToCopWhenSwatIsMissing()
+    {
+        object script = CreateScriptWithField(
+            "_modelOptions",
+            CreateModelOptionsList(
+                CreateModelOption("Custom", true, 0),
+                CreateModelOption("BeachGuy", false, 10),
+                CreateModelOption("RoadCop", false, 20)));
+
+        int actual = (int)InvokeInstance(script, "FindDefaultModelIndex");
+
+        Assert.AreEqual(2, actual);
+    }
+
+    [TestMethod]
+    public void FindDefaultModelIndex_ReturnsZeroWhenNoPreferredModelExists()
+    {
+        object script = CreateScriptWithField(
+            "_modelOptions",
+            CreateModelOptionsList(
+                CreateModelOption("Custom", true, 0),
+                CreateModelOption("BeachGuy", false, 10),
+                CreateModelOption("Worker", false, 20)));
+
+        int actual = (int)InvokeInstance(script, "FindDefaultModelIndex");
+
+        Assert.AreEqual(0, actual);
+    }
+
+    [TestMethod]
+    public void FindDefaultWeaponIndex_PrefersCarbineRifle()
+    {
+        object script = CreateScriptWithField(
+            "_weaponOptions",
+            CreateWeaponOptionsList(
+                CreateWeaponOption("Knife", WeaponHash.Knife),
+                CreateWeaponOption("Pistol", WeaponHash.Pistol),
+                CreateWeaponOption("CarbineRifle", WeaponHash.CarbineRifle)));
+
+        int actual = (int)InvokeInstance(script, "FindDefaultWeaponIndex");
+
+        Assert.AreEqual(2, actual);
+    }
+
+    [TestMethod]
+    public void FindDefaultWeaponIndex_FallsBackToPistolWhenCarbineIsMissing()
+    {
+        object script = CreateScriptWithField(
+            "_weaponOptions",
+            CreateWeaponOptionsList(
+                CreateWeaponOption("Knife", WeaponHash.Knife),
+                CreateWeaponOption("Pistol", WeaponHash.Pistol),
+                CreateWeaponOption("SMG", WeaponHash.SMG)));
+
+        int actual = (int)InvokeInstance(script, "FindDefaultWeaponIndex");
+
+        Assert.AreEqual(1, actual);
+    }
+
+    [TestMethod]
+    public void FindDefaultWeaponIndex_ReturnsZeroWhenNoPreferredWeaponExists()
+    {
+        object script = CreateScriptWithField(
+            "_weaponOptions",
+            CreateWeaponOptionsList(
+                CreateWeaponOption("Knife", WeaponHash.Knife),
+                CreateWeaponOption("SMG", WeaponHash.SMG)));
+
+        int actual = (int)InvokeInstance(script, "FindDefaultWeaponIndex");
+
+        Assert.AreEqual(0, actual);
+    }
+
+    [TestMethod]
+    public void GetRelationshipGroupForBehavior_MapsCurrentGroups()
+    {
+        Type behaviorType = GetNestedType("EnemyBehavior");
+        object script = CreateScript();
+
+        SetFieldValue(script, "_hostileGroupHash", 11);
+        SetFieldValue(script, "_neutralGroupHash", 22);
+        SetFieldValue(script, "_allyGroupHash", 33);
+
+        Assert.AreEqual(11, (int)InvokeInstance(script, "GetRelationshipGroupForBehavior", Enum.Parse(behaviorType, "Static")));
+        Assert.AreEqual(11, (int)InvokeInstance(script, "GetRelationshipGroupForBehavior", Enum.Parse(behaviorType, "Attacker")));
+        Assert.AreEqual(22, (int)InvokeInstance(script, "GetRelationshipGroupForBehavior", Enum.Parse(behaviorType, "Neutral")));
+        Assert.AreEqual(33, (int)InvokeInstance(script, "GetRelationshipGroupForBehavior", Enum.Parse(behaviorType, "Ally")));
+    }
+
+    [TestMethod]
+    public void CurrentModelKey_UsesNormalizedCustomModelName()
+    {
+        object script = CreateScript();
+
+        SetFieldValue(
+            script,
+            "_modelOptions",
+            CreateModelOptionsList(
+                CreateModelOption("Custom", true, 0),
+                CreateModelOption("Swat01SMY", false, 123)));
+        SetFieldValue(script, "_selectedModelIndex", 0);
+        SetFieldValue(script, "_customModelName", "  S_M_Y_SWAT_01  ");
+
+        string actual = (string)InvokeInstance(script, "CurrentModelKey");
+
+        Assert.AreEqual("custom:s_m_y_swat_01", actual);
+    }
+
+    [TestMethod]
+    public void CurrentModelKey_UsesHashForBuiltInModel()
+    {
+        object script = CreateScript();
+
+        SetFieldValue(
+            script,
+            "_modelOptions",
+            CreateModelOptionsList(
+                CreateModelOption("Custom", true, 0),
+                CreateModelOption("Swat01SMY", false, 123)));
+        SetFieldValue(script, "_selectedModelIndex", 1);
+
+        string actual = (string)InvokeInstance(script, "CurrentModelKey");
+
+        Assert.AreEqual("hash:123", actual);
+    }
+
+    [TestMethod]
+    public void PlacementEntityType_KeepsInteriorCycleOrder()
+    {
+        Type placementType = GetNestedType("PlacementEntityType");
+
+        CollectionAssert.AreEqual(
+            new[] { "Npc", "Vehicle", "Object", "Entrance", "Exit" },
+            Enum.GetNames(placementType));
+    }
+
+    [TestMethod]
+    public void PlacementTypeDisplayName_ReturnsInteriorPortalLabels()
+    {
+        Type placementType = GetNestedType("PlacementEntityType");
+
+        Assert.AreEqual("Entree", (string)InvokeStatic("PlacementTypeDisplayName", Enum.Parse(placementType, "Entrance")));
+        Assert.AreEqual("Sortie", (string)InvokeStatic("PlacementTypeDisplayName", Enum.Parse(placementType, "Exit")));
+    }
+
+    [TestMethod]
+    public void BuildInteriorCategories_ContainsKnownEntriesAndSkipsCayoPerico()
+    {
+        IList categories = (IList)InvokeStatic("BuildInteriorCategories");
+
+        bool foundBunker = false;
+        bool foundFacility = false;
+        bool foundCasino = false;
+        bool foundCayo = false;
+
+        foreach (object category in categories)
+        {
+            string categoryName = GetFieldValue<string>(category, "Name");
+            IList options = (IList)GetFieldValue<object>(category, "Options");
+
+            if (categoryName.IndexOf("cayo", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                categoryName.IndexOf("perico", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                foundCayo = true;
+            }
+
+            foreach (object option in options)
+            {
+                string id = GetFieldValue<string>(option, "Id");
+                string displayName = GetFieldValue<string>(option, "DisplayName");
+
+                if (string.Equals(id, "bunker_generic", StringComparison.Ordinal))
+                {
+                    foundBunker = true;
+                }
+
+                if (string.Equals(id, "facility", StringComparison.Ordinal))
+                {
+                    foundFacility = true;
+                }
+
+                if (string.Equals(id, "casino_main", StringComparison.Ordinal))
+                {
+                    foundCasino = true;
+                }
+
+                if (id.IndexOf("cayo", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    id.IndexOf("perico", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    displayName.IndexOf("cayo", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    displayName.IndexOf("perico", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    foundCayo = true;
+                }
+            }
+        }
+
+        Assert.IsTrue(foundBunker, "Le catalogue des interieurs doit inclure le bunker generique.");
+        Assert.IsTrue(foundFacility, "Le catalogue des interieurs doit inclure la facility.");
+        Assert.IsTrue(foundCasino, "Le catalogue des interieurs doit inclure le casino.");
+        Assert.IsFalse(foundCayo, "Le catalogue des interieurs ne doit pas inclure Cayo Perico par defaut.");
+    }
+
+    [TestMethod]
+    public void BuildInteriorCategories_UsesUpdatedCriminalBaseCoordinates()
+    {
+        IList categories = (IList)InvokeStatic("BuildInteriorCategories");
+
+        object facility = FindInteriorOption(categories, "facility");
+        object iaaFacility = FindInteriorOption(categories, "iaa_facility");
+        object serverFarm = FindInteriorOption(categories, "server_farm");
+        object smugglersHangar = FindInteriorOption(categories, "smugglers_hangar");
+        object submarine = FindInteriorOption(categories, "submarine");
+
+        Assert.IsNotNull(facility, "La facility Doomsday doit rester presente.");
+        Assert.AreEqual("Doomsday Facility", GetFieldValue<string>(facility, "DisplayName"));
+        AssertVector3Equals(new Vector3(483.2006f, 4810.5405f, -58.91929f), GetFieldValue<Vector3>(facility, "Position"), 0.001f);
+        Assert.AreEqual(18.04706f, GetFieldValue<float>(facility, "Heading"), 0.001f);
+
+        Assert.IsNotNull(iaaFacility, "IAA Facility doit rester presente.");
+        AssertVector3Equals(new Vector3(2151.137f, 2921.3303f, -61.90187f), GetFieldValue<Vector3>(iaaFacility, "Position"), 0.001f);
+        Assert.AreEqual(85.82783f, GetFieldValue<float>(iaaFacility, "Heading"), 0.001f);
+
+        Assert.IsNotNull(serverFarm, "IAA Server Farm doit rester present.");
+        Assert.AreEqual("IAA Server Farm", GetFieldValue<string>(serverFarm, "DisplayName"));
+        AssertVector3Equals(new Vector3(2158.1184f, 2920.9382f, -81.07539f), GetFieldValue<Vector3>(serverFarm, "Position"), 0.001f);
+        Assert.AreEqual(270.48007f, GetFieldValue<float>(serverFarm, "Heading"), 0.001f);
+
+        Assert.IsNotNull(smugglersHangar, "Le hangar Smuggler's Run doit rester present.");
+        AssertVector3Equals(new Vector3(-1266.9995f, -3014.6135f, -49.51799f), GetFieldValue<Vector3>(smugglersHangar, "Position"), 0.001f);
+        Assert.AreEqual(359.93738f, GetFieldValue<float>(smugglersHangar, "Heading"), 0.001f);
+
+        Assert.IsNotNull(submarine, "Le sous-marin / Kosatka doit rester present.");
+        AssertVector3Equals(new Vector3(514.29266f, 4885.8706f, -62.58986f), GetFieldValue<Vector3>(submarine, "Position"), 0.001f);
+        Assert.AreEqual(180.25909f, GetFieldValue<float>(submarine, "Heading"), 0.001f);
+    }
+
+    [TestMethod]
+    public void SourceFile_MainMenuUsesContextualPlacementSlotsAndPortalSpawnHooks()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+
+        StringAssert.Contains(source, "DrawMainMenuRow(x, width, rowY + rowHeight * 8, 8, PlacementSlotCategoryLabel(), PlacementSlotCategoryValue());");
+        StringAssert.Contains(source, "DrawMainMenuRow(x, width, rowY + rowHeight * 9, 9, PlacementSlotOptionLabel(), PlacementSlotOptionValue());");
+        StringAssert.Contains(source, "UpdateInteriorPortals();");
+        StringAssert.Contains(source, "return TryPlaceInteriorEntrance(requestedPosition, surfaceNormal, precise, hasHeadingOverride, headingOverride);");
+        StringAssert.Contains(source, "return TryPlaceInteriorExit(requestedPosition, surfaceNormal, precise, hasHeadingOverride, headingOverride);");
+        StringAssert.Contains(source, "ConfirmInteriorEntrancePlacementSpawn();");
+        StringAssert.Contains(source, "ConfirmInteriorExitPlacementSpawn();");
+    }
+
+    [TestMethod]
+    public void SourceFile_MainMenuAddsInteriorPortalCleanupAction()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string menuBlock = ExtractSourceSection(
+            source,
+            "private void ActivateMainMenuItem()",
+            "private void DrawMenu()");
+
+        StringAssert.Contains(source, "DrawMainMenuRow(x, width, rowY + rowHeight * 23, 23, \"Nettoyer entrees/sorties\", \"Supprimer les reperes interieurs\");");
+        StringAssert.Contains(menuBlock, "case 23:");
+        StringAssert.Contains(menuBlock, "CleanAllInteriorPortals();");
+    }
+
+    [TestMethod]
+    public void SourceFile_MainMenuUsesCustomNpcPlacerVisualFrame()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+
+        StringAssert.Contains(source, "DrawText(TrainerSubtitle, x + 24, y + 42");
+        StringAssert.Contains(source, "DrawMainSummaryPanel(x + width + 18, y, 338, 212);");
+        StringAssert.Contains(source, "private void DrawPanelFrame(int x, int y, int width, int height, Color accentColor)");
+        StringAssert.Contains(source, "private void DrawBadge(int x, int y, int width, string text, Color background, Color accentColor)");
+        StringAssert.Contains(source, "private Color GetMainMenuAccent(int index)");
+    }
+
+    [TestMethod]
+    public void SourceFile_MainMenuUsesDynamicCollapsibleSections()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+
+        StringAssert.Contains(source, "private List<MainMenuEntry> BuildMainMenuEntries()");
+        StringAssert.Contains(source, "private int _mainMenuScrollOffset;");
+        StringAssert.Contains(source, "private bool _mainMenuNpcExpanded = true;");
+        StringAssert.Contains(source, "private void EnsureMainMenuSelectionVisible(int entryCount)");
+        StringAssert.Contains(source, "private void DrawMainMenuScrollbar(int x, int y, int width, int height, int entryCount, int visibleRows)");
+        StringAssert.Contains(source, "case Keys.PageUp:");
+        StringAssert.Contains(source, "case Keys.PageDown:");
+
+        int placementTypeIndex = source.IndexOf("MainMenuAction.PlacementType, \"Type de placement\"", StringComparison.Ordinal);
+        int precisePlacementIndex = source.IndexOf("MainMenuAction.PrecisePlacement, \"Placement camera precis\"", StringComparison.Ordinal);
+        int distancePlacementIndex = source.IndexOf("MainMenuAction.DistancePlacement, \"Placement direct\"", StringComparison.Ordinal);
+        int placementDistanceIndex = source.IndexOf("MainMenuAction.PlacementDistance, \"Distance placement direct\"", StringComparison.Ordinal);
+
+        Assert.IsTrue(placementTypeIndex >= 0, "La ligne Type de placement doit rester presente.");
+        Assert.IsTrue(precisePlacementIndex > placementTypeIndex, "Le placement camera precis doit rester en deuxieme position.");
+        Assert.IsTrue(distancePlacementIndex > precisePlacementIndex, "Le placement direct doit rester apres le placement camera precis.");
+        Assert.IsTrue(placementDistanceIndex > distancePlacementIndex, "La distance du placement direct doit rester apres l'action directe.");
+
+        StringAssert.Contains(source, "MainMenuAction.SectionNpc");
+        StringAssert.Contains(source, "\"NPC\"");
+        StringAssert.Contains(source, "MainMenuAction.SectionVehicle");
+        StringAssert.Contains(source, "\"Vehicules\"");
+        StringAssert.Contains(source, "MainMenuAction.SectionObject");
+        StringAssert.Contains(source, "\"Objets\"");
+        StringAssert.Contains(source, "MainMenuAction.SectionInterior");
+        StringAssert.Contains(source, "\"Entrees / sorties\"");
+        StringAssert.Contains(source, "MainMenuAction.SectionSave");
+        StringAssert.Contains(source, "\"Sauvegarde\"");
+        StringAssert.Contains(source, "MainMenuAction.SectionCleanup");
+        StringAssert.Contains(source, "\"Nettoyage\"");
+        StringAssert.Contains(source, "return GetPlacementTypeColor(_selectedPlacementType);");
+        StringAssert.Contains(source, "return Color.FromArgb(245, 60, 220, 150);");
+    }
+
+    [TestMethod]
+    public void SourceFile_AutoRespawnPersistsAndRequiresPlayerToLeaveArea()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+
+        StringAssert.Contains(source, "DrawMainMenuRow(x, width, rowY + rowHeight * 15, 15, \"Reapparition auto\", BoolText(_selectedAutoRespawn));");
+        StringAssert.Contains(source, "writer.WriteAttributeString(\"autoRespawn\",");
+        StringAssert.Contains(source, "ReadBoolAttribute(node, \"autoRespawn\", false)");
+        StringAssert.Contains(source, "CanAutoRespawnAt(player");
+        StringAssert.Contains(source, "distance < AutoRespawnLeaveDistance");
+        StringAssert.Contains(source, "TryProcessNpcAutoRespawn");
+        StringAssert.Contains(source, "TryProcessPlacedVehicleAutoRespawn");
+        StringAssert.Contains(source, "TryProcessPlacedObjectAutoRespawn");
+    }
+
+    [TestMethod]
+    public void SourceFiles_SaveLoadAndInteriorLabelsKeepPortalContract()
+    {
+        string mainSource = File.ReadAllText(GetSourceFilePath());
+        string interiorsSource = File.ReadAllText(GetInteriorsSourceFilePath());
+
+        StringAssert.Contains(mainSource, "writer.WriteAttributeString(\"version\", \"5\")");
+        StringAssert.Contains(mainSource, "savedPortals = WriteInteriorPortalsXml(writer);");
+        StringAssert.Contains(mainSource, "loadedPortals = LoadInteriorPortalsFromXml(doc);");
+
+        StringAssert.Contains(interiorsSource, "return \"Categorie interieur\";");
+        StringAssert.Contains(interiorsSource, "return \"Sortie active\";");
+        StringAssert.Contains(interiorsSource, "return \"Destination sortie\";");
+        StringAssert.Contains(interiorsSource, "\"Retour au marqueur d'entree\"");
+    }
+
+    [TestMethod]
+    public void SourceFiles_InteriorPortalsUseAdvancedLoadingAndSafeTeleport()
+    {
+        string interiorsSource = File.ReadAllText(GetInteriorsSourceFilePath());
+        string advancedSource = File.ReadAllText(GetAdvancedInteriorsSourceFilePath());
+
+        StringAssert.Contains(interiorsSource, "MaintainActiveInteriorVisualsSafe(player);");
+        StringAssert.Contains(interiorsSource, "bool prepared = PrepareInteriorForTeleportSafe(portal.Interior);");
+        StringAssert.Contains(interiorsSource, "TeleportPlayerWithFadeSafe(player, portal.Interior.Position, portal.Interior.Heading);");
+        StringAssert.Contains(interiorsSource, "ApplyInteriorEntitySetsSafe(portal.Interior);");
+        StringAssert.Contains(interiorsSource, "TeleportPlayerWithFadeSafe(player, returnPosition, returnHeading);");
+        StringAssert.Contains(interiorsSource, "JoinInteriorIpls(BuildEffectiveInteriorIplList(portal.Interior))");
+
+        StringAssert.Contains(advancedSource, "private bool PrepareInteriorForTeleportSafe(InteriorOption interior)");
+        StringAssert.Contains(advancedSource, "private static List<string> BuildEffectiveInteriorIplList(InteriorOption interior)");
+        StringAssert.Contains(advancedSource, "private void TeleportPlayerWithFadeSafe(Ped player, Vector3 targetPosition, float heading)");
+        StringAssert.Contains(advancedSource, "private void StabilizeInteriorViewportAfterTeleportSafe(Ped player, InteriorOption interior, float heading)");
+        StringAssert.Contains(advancedSource, "private void MaintainActiveInteriorVisualsSafe(Ped player)");
+        StringAssert.Contains(advancedSource, "private void CleanAllInteriorPortals()");
+        StringAssert.Contains(advancedSource, "private const ulong AdvancedNativeOnEnterMp = 0x0888C3502DBBEEF5UL;");
+        StringAssert.Contains(advancedSource, "private const ulong AdvancedNativeRefreshInterior = 0x41F37C3427C75AE0UL;");
+        StringAssert.Contains(advancedSource, "private const ulong AdvancedNativeForceRoomForEntity = 0x52923C4710DD9907UL;");
+        StringAssert.Contains(advancedSource, "private const ulong AdvancedNativeForceRoomForGameViewport = 0x920D853F3E17F1DAUL;");
+        StringAssert.Contains(advancedSource, "private const ulong AdvancedNativeSetFocusPosAndVel = 0xBB7454BAFF08FE25UL;");
+        StringAssert.Contains(advancedSource, "private const int AdvancedInteriorMaintainIntervalMs = 250;");
+    }
+
+    [TestMethod]
+    public void BuildEffectiveInteriorIplList_AddsAutomaticDlcIpls()
+    {
+        object facility = CreateInteriorOption("facility", "Online - bases criminelles", "Doomsday Facility", new Vector3(483.2006f, 4810.5405f, -58.91929f), 18.04706f);
+        object smugglers = CreateInteriorOption("smugglers_hangar", "Online - bases criminelles", "Hangar Smuggler's Run", new Vector3(-1266.9995f, -3014.6135f, -49.51799f), 359.93738f);
+        object apartment = CreateInteriorOption("apt_modern_1", "Appartements online IPL", "Modern 1 Apartment", new Vector3(-786.8663f, 315.7642f, 217.6385f), 0.0f, "apa_v_mp_h_01_a");
+
+        IList facilityIpls = (IList)InvokeStatic("BuildEffectiveInteriorIplList", facility);
+        IList smugglersIpls = (IList)InvokeStatic("BuildEffectiveInteriorIplList", smugglers);
+        IList apartmentIpls = (IList)InvokeStatic("BuildEffectiveInteriorIplList", apartment);
+
+        AssertListContains(facilityIpls, "xm_x17dlc_int_placement");
+        AssertListContains(facilityIpls, "xm_x17dlc_int_placement_interior_4_x17dlc_int_facility_milo_");
+        AssertListContains(smugglersIpls, "sm_smugdlc_interior_placement");
+        AssertListContains(smugglersIpls, "sm_smugdlc_interior_placement_interior_0_smugdlc_int_01_milo_");
+        AssertListContains(apartmentIpls, "apa_v_mp_h_01_a");
+        Assert.AreEqual(1, CountStringOccurrences(apartmentIpls, "apa_v_mp_h_01_a"), "La liste d'IPLs effective ne doit pas dupliquer un IPL deja present.");
+    }
+
+    [TestMethod]
+    public void AdvancedInteriorFlags_KeepApartmentViewportPreparationContract()
+    {
+        object apartment = CreateInteriorOption("apt_modern_1", "Appartements online IPL", "Modern 1 Apartment", new Vector3(-786.8663f, 315.7642f, 217.6385f), 0.0f, "apa_v_mp_h_01_a");
+        object bunker = CreateInteriorOption("bunker_generic", "Online - bases criminelles", "Bunker interieur generique", new Vector3(899.5518f, -3246.038f, -98.04907f), 0.0f);
+        object legacy = CreateInteriorOption("maison_safe", "Maisons", "Maison safe", new Vector3(1.0f, 2.0f, 3.0f), 90.0f);
+
+        bool apartmentNeedsMpMap = (bool)InvokeStatic("ShouldLoadMultiplayerMapSafe", apartment);
+        bool apartmentNeedsReadyWait = (bool)InvokeStatic("ShouldWaitForInteriorReadySafe", apartment);
+        bool bunkerNeedsReadyWait = (bool)InvokeStatic("ShouldWaitForInteriorReadySafe", bunker);
+        bool legacyNeedsReadyWait = (bool)InvokeStatic("ShouldWaitForInteriorReadySafe", legacy);
+
+        Assert.IsTrue(apartmentNeedsMpMap, "Les appartements online doivent continuer a demander le chargement de la map multi.");
+        Assert.IsTrue(apartmentNeedsReadyWait, "Les appartements online doivent continuer a attendre un interieur pret apres teleportation.");
+        Assert.IsTrue(bunkerNeedsReadyWait, "Le bunker doit continuer a attendre un interieur pret.");
+        Assert.IsFalse(legacyNeedsReadyWait, "Un interieur legacy simple ne doit pas bloquer le flux sur un interior id pret.");
+    }
+
+    [DataTestMethod]
+    [DataRow("maison", "maison.xml")]
+    [DataRow("setup.XML", "setup.XML")]
+    [DataRow("  escorte  ", "escorte.xml")]
+    public void NormalizeSaveFileName_AppendsXmlAndTrimsInput(string input, string expected)
+    {
+        string actual = (string)InvokeStatic("NormalizeSaveFileName", input);
+
+        Assert.AreEqual(expected, actual);
+    }
+
+    [DataTestMethod]
+    [DataRow("..", "maison.xml")]
+    [DataRow(@"..\villa", "villa.xml")]
+    [DataRow("bad*name", "bad_name.xml")]
+    [DataRow("safe\0name", "safename.xml")]
+    public void NormalizeSaveFileName_RewritesUnsafeInput(string input, string expected)
+    {
+        string actual = (string)InvokeStatic("NormalizeSaveFileName", input);
+
+        Assert.AreEqual(expected, actual);
+    }
+
+    [TestMethod]
+    public void NormalizeSaveFileName_LimitsLongNames()
+    {
+        string input = new string('a', 160) + ".xml";
+
+        string actual = (string)InvokeStatic("NormalizeSaveFileName", input);
+
+        Assert.IsTrue(actual.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
+        Assert.IsTrue(actual.Length <= GetStaticFieldValue<int>("MaxSaveFileNameLength"));
+    }
+
+    [TestMethod]
+    public void TryResolveSavePathForLoad_UsesConfiguredDirectoryAndBackup()
+    {
+        string previousDirectory = Environment.GetEnvironmentVariable("DONJ_ENEMY_SPAWNER_SAVE_DIR");
+        string tempDirectory = Path.Combine(Path.GetTempPath(), "DonJEnemySpawnerTests_" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            Directory.CreateDirectory(tempDirectory);
+            Environment.SetEnvironmentVariable("DONJ_ENEMY_SPAWNER_SAVE_DIR", tempDirectory);
+
+            string backupPath = Path.Combine(tempDirectory, "villa.xml.bak");
+            File.WriteAllText(backupPath, "<DonJEnemySpawnerSave />");
+
+            object script = CreateScript();
+            object[] args = { "villa", null, null };
+
+            bool resolved = (bool)InvokeInstance(script, "TryResolveSavePathForLoad", args);
+
+            Assert.IsTrue(resolved, "Le chargement doit retrouver le backup si le XML principal manque.");
+            Assert.AreEqual(Path.GetFullPath(backupPath), Path.GetFullPath((string)args[1]));
+            Assert.AreEqual(Path.GetFullPath(tempDirectory), Path.GetFullPath((string)args[2]));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DONJ_ENEMY_SPAWNER_SAVE_DIR", previousDirectory);
+
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public void ReplaceFileAtomically_ReplacesTargetAndKeepsBackup()
+    {
+        string tempDirectory = Path.Combine(Path.GetTempPath(), "DonJEnemySpawnerTests_" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            Directory.CreateDirectory(tempDirectory);
+
+            string targetPath = Path.Combine(tempDirectory, "base.xml");
+            string tempPath = Path.Combine(tempDirectory, "base.xml.tmp");
+            string backupPath = targetPath + ".bak";
+
+            File.WriteAllText(targetPath, "old");
+            File.WriteAllText(tempPath, "new");
+
+            InvokeStatic("ReplaceFileAtomically", tempPath, targetPath);
+
+            Assert.AreEqual("new", File.ReadAllText(targetPath));
+            Assert.AreEqual("old", File.ReadAllText(backupPath));
+            Assert.IsFalse(File.Exists(tempPath), "Le fichier temporaire doit etre consomme par le remplacement.");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public void SourceFile_SaveSystemPersistsLastFileAndUsesStableFallbacks()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+
+        StringAssert.Contains(source, "InitializePersistentSaveState();");
+        StringAssert.Contains(source, "private const string LastSaveFileMarkerName = \"_last_save.txt\";");
+        StringAssert.Contains(source, "private const string SaveDirectoryEnvironmentVariable = \"DONJ_ENEMY_SPAWNER_SAVE_DIR\";");
+        StringAssert.Contains(source, "private const string DefaultEnhancedGtaRoot = @\"C:\\Program Files (x86)\\Steam\\steamapps\\common\\Grand Theft Auto V Enhanced\";");
+        StringAssert.Contains(source, "writer.WriteAttributeString(\"saveFile\", normalizedFileName);");
+        StringAssert.Contains(source, "writer.WriteAttributeString(\"saveDirectory\", saveDirectory);");
+        StringAssert.Contains(source, "ReplaceFileAtomically(tempPath, path);");
+        StringAssert.Contains(source, "PersistLastSaveFileNameSafe(normalizedFileName);");
+        StringAssert.Contains(source, "TryResolveSavePathForLoad(normalizedFileName, out path, out searchedDirectory)");
+        StringAssert.Contains(source, "MigrateLoadedSaveToCanonicalLocationSafe(path, normalizedFileName);");
+        StringAssert.Contains(source, "GetDocumentsSaveDirectorySafe()");
+        StringAssert.Contains(source, "GetLocalAppDataSaveDirectorySafe()");
+        StringAssert.Contains(source, "File.Replace(tempPath, targetPath, backupPath, true);");
+        StringAssert.Contains(source, "DonJCustomNpcPlacer.ENdll");
+        StringAssert.Contains(source, "DonJCustomNpcPlacer.dll");
+    }
+
+    [TestMethod]
+    public void ProjectFile_UsesStableFrameworkAndEnhancedOutputLayout()
+    {
+        XDocument document = XDocument.Load(GetProjectFilePath());
+
+        Assert.AreEqual("net48", GetPropertyValue(document, "TargetFramework"));
+        Assert.AreEqual("Library", GetPropertyValue(document, "OutputType"));
+        Assert.AreEqual("DonJCustomNpcPlacer", GetPropertyValue(document, "AssemblyName"));
+        Assert.AreEqual("true", GetPropertyValue(document, "UseWindowsForms"));
+        Assert.AreEqual("false", GetPropertyValue(document, "AppendTargetFrameworkToOutputPath"));
+        Assert.AreEqual(
+            @"C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V Enhanced",
+            GetPropertyValue(document, "DefaultEnhancedGtaRoot"));
+        Assert.AreEqual(@"$(GtaRoot)\Scripts", GetPropertyValue(document, "GtaScriptsDir"));
+    }
+
+    [TestMethod]
+    public void SourceFile_NeutralGuardsReactToNearbyPlayerHostilityWithShortMemory()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+
+        string tickBlock = ExtractSourceSection(
+            source,
+            "private void OnTick(object sender, EventArgs e)",
+            "private void OnKeyDown(object sender, KeyEventArgs e)");
+
+        string neutralHostilityBlock = ExtractSourceSection(
+            source,
+            "private void UpdatePlayerHostilityMemory(Ped player)",
+            "private void AlertNearbyNeutralGuards(Vector3 eventPosition, Ped player, Entity witnessedEntity)");
+
+        string alertBlock = ExtractSourceSection(
+            source,
+            "private void AlertNearbyNeutralGuards(Vector3 eventPosition, Ped player, Entity witnessedEntity)",
+            "private void ConvertNeutralToHostile(SpawnedNpc npc, Ped player)");
+
+        Assert.IsTrue(
+            source.IndexOf("private const int PlayerHostilityMemoryMs = 2200;", StringComparison.Ordinal) >= 0,
+            "Les gardes neutres doivent garder une memoire courte des actes hostiles du joueur.");
+
+        Assert.IsTrue(
+            tickBlock.IndexOf("UpdatePlayerHostilityMemory(Game.Player.Character);", StringComparison.Ordinal) >= 0,
+            "La memoire d'hostilite joueur doit etre mise a jour avant UpdateNpcs.");
+
+        Assert.IsTrue(
+            neutralHostilityBlock.IndexOf("Hash.IS_BULLET_IN_AREA", StringComparison.Ordinal) >= 0,
+            "Les gardes neutres doivent pouvoir reagir a une balle proche.");
+
+        Assert.IsTrue(
+            neutralHostilityBlock.IndexOf("Hash.GET_PED_LAST_WEAPON_IMPACT_COORD", StringComparison.Ordinal) >= 0,
+            "Les gardes neutres doivent pouvoir reagir a un impact de balle proche.");
+
+        Assert.IsTrue(
+            neutralHostilityBlock.IndexOf("Hash.HAS_ENTITY_BEEN_DAMAGED_BY_ENTITY", StringComparison.Ordinal) >= 0,
+            "Les gardes neutres doivent detecter les degats du joueur sur des peds ou vehicules proches.");
+
+        Assert.IsTrue(
+            neutralHostilityBlock.IndexOf("Hash.IS_PED_IN_MELEE_COMBAT", StringComparison.Ordinal) >= 0,
+            "Les gardes neutres doivent detecter le combat au corps-a-corps proche du joueur.");
+
+        Assert.IsTrue(
+            neutralHostilityBlock.IndexOf("NeutralNearbyVehicleAttackReactionDistance", StringComparison.Ordinal) >= 0,
+            "Les gardes neutres doivent couvrir les vehicules attaques proches.");
+
+        Assert.IsTrue(
+            alertBlock.IndexOf("HasRecentPlayerGunfireNearGuard(candidate.Ped, player, out heardShotPosition)", StringComparison.Ordinal) >= 0,
+            "L'alerte des gardes neutres proches doit utiliser la memoire de tir, pas seulement l'instant IS_PED_SHOOTING.");
+    }
+
+    [TestMethod]
+    public void ProjectFile_DeploysReleaseBuildAsEndll()
+    {
+        XDocument document = XDocument.Load(GetProjectFilePath());
+
+        XElement localEndllTarget = FindTarget(document, "CreateLocalEndll");
+        XElement deployTarget = FindTarget(document, "DeployAsEndll");
+
+        Assert.IsNotNull(localEndllTarget, "La cible MSBuild CreateLocalEndll est introuvable.");
+        Assert.IsNotNull(deployTarget, "La cible MSBuild DeployAsEndll est introuvable.");
+
+        string localTargetXml = localEndllTarget.ToString(SaveOptions.DisableFormatting);
+        string targetXml = deployTarget.ToString(SaveOptions.DisableFormatting);
+
+        StringAssert.Contains(localTargetXml, "$(TargetDir)$(AssemblyName).ENdll");
+        StringAssert.Contains(localTargetXml, "$(TargetPath)");
+        StringAssert.Contains(targetXml, "$(GtaScriptsDir)\\$(AssemblyName).ENdll");
+        StringAssert.Contains(targetXml, "$(GtaScriptsDir)\\$(AssemblyName).dll");
+        StringAssert.Contains(targetXml, "$(GtaScriptsDir)\\$(AssemblyName).pdb");
+        StringAssert.Contains(targetXml, "$(GtaScriptsDir)\\DonJEnemySpawner.ENdll");
+        StringAssert.Contains(targetXml, "$(GtaScriptsDir)\\DonJEnemySpawner.dll");
+        StringAssert.Contains(targetXml, "$(GtaScriptsDir)\\DonJEnemySpawner.pdb");
+        StringAssert.Contains(targetXml, "DonJ Custom NPC Placer deploye vers");
+        StringAssert.Contains(targetXml, "SkipUnchangedFiles=\"false\"");
+    }
+
+    [TestMethod]
+    public void ProjectFile_ValidatesEnhancedRootAndKeepsApiReferencePrivateFalse()
+    {
+        XDocument document = XDocument.Load(GetProjectFilePath());
+
+        Assert.IsNull(FindTarget(document, "CopyGameDll"), "L'ancienne cible CopyGameDll ne doit plus exister.");
+
+        XElement validateTarget = FindTarget(document, "ValidateGtaReference");
+        Assert.IsNotNull(validateTarget, "La cible MSBuild ValidateGtaReference est introuvable.");
+
+        string validateTargetXml = validateTarget.ToString(SaveOptions.DisableFormatting);
+        StringAssert.Contains(validateTargetXml, "GTA5_Enhanced.exe");
+        StringAssert.Contains(validateTargetXml, "NIBScriptHookVDotNet2.dll");
+        StringAssert.Contains(validateTargetXml, "ScriptHookVDotNet2.dll");
+
+        XElement reference = FindReference(document, "$(ShvdnApiReferenceName)");
+        Assert.IsNotNull(reference, "La reference API v2 resolue dynamiquement est introuvable.");
+
+        XElement hintPath = reference.Element("HintPath");
+        Assert.IsNotNull(hintPath, "La reference API v2 doit definir un HintPath.");
+        Assert.AreEqual("$(ShvdnApiPath)", hintPath.Value);
+
+        XElement privateElement = reference.Element("Private");
+        Assert.IsNotNull(privateElement, "La reference ScriptHookVDotNet2 doit declarer Private=false.");
+        Assert.AreEqual("false", privateElement.Value);
+    }
+
+    [TestMethod]
+    public void TestProjectFile_UsesStableRuntimeAndCopiesApiReferenceLocally()
+    {
+        XDocument document = XDocument.Load(GetTestProjectFilePath());
+
+        Assert.AreEqual("net48", GetPropertyValue(document, "TargetFramework"));
+        Assert.AreEqual("false", GetPropertyValue(document, "AppendTargetFrameworkToOutputPath"));
+        Assert.AreEqual("false", GetPropertyValue(document, "IsPackable"));
+
+        XElement reference = FindReference(document, "$(ShvdnApiReferenceName)");
+        Assert.IsNotNull(reference, "Le projet de tests doit aussi referencer l'API v2 resolue dynamiquement.");
+
+        XElement privateElement = reference.Element("Private");
+        Assert.IsNotNull(privateElement, "Le projet de tests doit copier l'API v2 pour VSTest.");
+        Assert.AreEqual("true", privateElement.Value);
+    }
+
+    [TestMethod]
+    public void TestProjectFile_KeepsMSTestPackagesAndProjectReference()
+    {
+        XDocument document = XDocument.Load(GetTestProjectFilePath());
+
+        Assert.IsNotNull(FindPackageReference(document, "Microsoft.NET.Test.Sdk"));
+        Assert.IsNotNull(FindPackageReference(document, "MSTest.TestAdapter"));
+        Assert.IsNotNull(FindPackageReference(document, "MSTest.TestFramework"));
+        Assert.IsNotNull(
+            FindProjectReference(document, @"..\..\src\DonJEnemySpawner\DonJEnemySpawner.csproj"),
+            "Le projet de tests doit continuer a referencer le mod principal.");
+    }
+
+    private static object InvokeStatic(string methodName, params object[] args)
+    {
+        MethodInfo method = ScriptType.GetMethod(methodName, PrivateStatic);
+        Assert.IsNotNull(method, $"La methode privee statique '{methodName}' est introuvable.");
+        return method.Invoke(null, args);
+    }
+
+    private static object InvokeInstance(object target, string methodName, params object[] args)
+    {
+        MethodInfo method = ScriptType.GetMethod(methodName, PrivateInstance);
+        Assert.IsNotNull(method, $"La methode privee d'instance '{methodName}' est introuvable.");
+        return method.Invoke(target, args);
+    }
+
+    private static T GetStaticFieldValue<T>(string fieldName)
+    {
+        FieldInfo field = ScriptType.GetField(fieldName, PrivateStatic);
+        Assert.IsNotNull(field, $"Le champ prive statique '{fieldName}' est introuvable.");
+
+        object rawValue = field.IsLiteral ? field.GetRawConstantValue() : field.GetValue(null);
+        return (T)rawValue;
+    }
+
+    private static T GetFieldValue<T>(object target, string fieldName)
+    {
+        FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.IsNotNull(field, $"Le champ '{fieldName}' est introuvable sur '{target.GetType().FullName}'.");
+        return (T)field.GetValue(target);
+    }
+
+    private static void SetFieldValue(object target, string fieldName, object value)
+    {
+        FieldInfo field = target.GetType().GetField(fieldName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.IsNotNull(field, $"Le champ '{fieldName}' est introuvable sur '{target.GetType().FullName}'.");
+        field.SetValue(target, value);
+    }
+
+    private static Type GetNestedType(string nestedTypeName)
+    {
+        Type nestedType = ScriptType.GetNestedType(nestedTypeName, BindingFlags.NonPublic);
+        Assert.IsNotNull(nestedType, $"Le type imbrique prive '{nestedTypeName}' est introuvable.");
+        return nestedType;
+    }
+
+    private static object CreateScriptWithField(string fieldName, object value)
+    {
+        object script = CreateScript();
+        SetFieldValue(script, fieldName, value);
+        return script;
+    }
+
+    private static object CreateScript()
+    {
+        return FormatterServices.GetUninitializedObject(ScriptType);
+    }
+
+    private static object CreateModelOption(string displayName, bool isCustom, int hash)
+    {
+        object option = Activator.CreateInstance(GetNestedType("ModelOption"), true);
+        SetFieldValue(option, "DisplayName", displayName);
+        SetFieldValue(option, "IsCustom", isCustom);
+        SetFieldValue(option, "Hash", hash);
+        return option;
+    }
+
+    private static object CreateWeaponOption(string displayName, WeaponHash hash)
+    {
+        object option = Activator.CreateInstance(GetNestedType("WeaponOption"), true);
+        SetFieldValue(option, "DisplayName", displayName);
+        SetFieldValue(option, "Hash", hash);
+        return option;
+    }
+
+    private static object CreateInteriorOption(string id, string category, string displayName, Vector3 position, float heading, params string[] ipls)
+    {
+        object option = Activator.CreateInstance(GetNestedType("InteriorOption"), true);
+        SetFieldValue(option, "Id", id);
+        SetFieldValue(option, "Category", category);
+        SetFieldValue(option, "DisplayName", displayName);
+        SetFieldValue(option, "Position", position);
+        SetFieldValue(option, "Heading", heading);
+        SetFieldValue(option, "Ipls", new List<string>(ipls ?? Array.Empty<string>()));
+        return option;
+    }
+
+    private static object CreateModelOptionsList(params object[] options)
+    {
+        return CreateTypedList(GetNestedType("ModelOption"), options);
+    }
+
+    private static object CreateWeaponOptionsList(params object[] options)
+    {
+        return CreateTypedList(GetNestedType("WeaponOption"), options);
+    }
+
+    private static object CreateTypedList(Type itemType, params object[] items)
+    {
+        IList list = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(itemType));
+
+        foreach (object item in items)
+        {
+            list.Add(item);
+        }
+
+        return list;
+    }
+
+    private static string GetProjectFilePath()
+    {
+        return Path.Combine(GetRepositoryRoot(), "src", "DonJEnemySpawner", "DonJEnemySpawner.csproj");
+    }
+
+    private static string GetSourceFilePath()
+    {
+        return Path.Combine(GetRepositoryRoot(), "src", "DonJEnemySpawner", "DonJEnemySpawner.cs");
+    }
+
+    private static string GetInteriorsSourceFilePath()
+    {
+        return Path.Combine(GetRepositoryRoot(), "src", "DonJEnemySpawner", "DonJEnemySpawner.Interiors.cs");
+    }
+
+    private static string GetAdvancedInteriorsSourceFilePath()
+    {
+        return Path.Combine(GetRepositoryRoot(), "src", "DonJEnemySpawner", "DonJEnemySpawner.Interiors.AdvancedLoading.cs");
+    }
+
+    private static object FindInteriorOption(IList categories, string id)
+    {
+        foreach (object category in categories)
+        {
+            IList options = (IList)GetFieldValue<object>(category, "Options");
+
+            foreach (object option in options)
+            {
+                if (string.Equals(GetFieldValue<string>(option, "Id"), id, StringComparison.Ordinal))
+                {
+                    return option;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static void AssertVector3Equals(Vector3 expected, Vector3 actual, float tolerance)
+    {
+        Assert.AreEqual(expected.X, actual.X, tolerance);
+        Assert.AreEqual(expected.Y, actual.Y, tolerance);
+        Assert.AreEqual(expected.Z, actual.Z, tolerance);
+    }
+
+    private static void AssertListContains(IList list, string expected)
+    {
+        foreach (object item in list)
+        {
+            if (string.Equals(item as string, expected, StringComparison.Ordinal))
+            {
+                return;
+            }
+        }
+
+        Assert.Fail($"La liste ne contient pas '{expected}'.");
+    }
+
+    private static int CountStringOccurrences(IList list, string expected)
+    {
+        int count = 0;
+
+        foreach (object item in list)
+        {
+            if (string.Equals(item as string, expected, StringComparison.Ordinal))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static string ExtractSourceSection(string source, string startMarker, string endMarker)
+    {
+        int startIndex = source.IndexOf(startMarker, StringComparison.Ordinal);
+        Assert.IsTrue(startIndex >= 0, $"Le marqueur de début '{startMarker}' est introuvable dans la source.");
+
+        int endIndex = source.IndexOf(endMarker, startIndex, StringComparison.Ordinal);
+        Assert.IsTrue(endIndex > startIndex, $"Le marqueur de fin '{endMarker}' est introuvable dans la source.");
+
+        return source.Substring(startIndex, endIndex - startIndex);
+    }
+
+    private static int CountOccurrences(string source, string value)
+    {
+        int count = 0;
+        int searchIndex = 0;
+
+        while (true)
+        {
+            int foundIndex = source.IndexOf(value, searchIndex, StringComparison.Ordinal);
+
+            if (foundIndex < 0)
+            {
+                return count;
+            }
+
+            count++;
+            searchIndex = foundIndex + value.Length;
+        }
+    }
+
+    private static string GetTestProjectFilePath()
+    {
+        return Path.Combine(GetRepositoryRoot(), "tests", "DonJEnemySpawner.Tests", "DonJEnemySpawner.Tests.csproj");
+    }
+
+    private static string GetRepositoryRoot()
+    {
+        DirectoryInfo directory = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+
+        while (directory != null)
+        {
+            string candidate = Path.Combine(directory.FullName, "GTA5modDEV.sln");
+
+            if (File.Exists(candidate))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        Assert.Fail("Impossible de retrouver la racine du depot depuis le dossier de test.");
+        return string.Empty;
+    }
+
+    private static string GetPropertyValue(XDocument document, string propertyName)
+    {
+        foreach (XElement propertyGroup in document.Root.Elements("PropertyGroup"))
+        {
+            XElement property = propertyGroup.Element(propertyName);
+
+            if (property != null)
+            {
+                return property.Value;
+            }
+        }
+
+        Assert.Fail($"La propriete '{propertyName}' est introuvable.");
+        return string.Empty;
+    }
+
+    private static XElement FindTarget(XDocument document, string name)
+    {
+        foreach (XElement target in document.Root.Elements("Target"))
+        {
+            XAttribute nameAttribute = target.Attribute("Name");
+
+            if (nameAttribute != null && string.Equals(nameAttribute.Value, name, StringComparison.Ordinal))
+            {
+                return target;
+            }
+        }
+
+        return null;
+    }
+
+    private static XElement FindReference(XDocument document, string includeValue)
+    {
+        foreach (XElement itemGroup in document.Root.Elements("ItemGroup"))
+        {
+            foreach (XElement reference in itemGroup.Elements("Reference"))
+            {
+                XAttribute includeAttribute = reference.Attribute("Include");
+
+                if (includeAttribute != null &&
+                    string.Equals(includeAttribute.Value, includeValue, StringComparison.Ordinal))
+                {
+                    return reference;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static XElement FindProjectReference(XDocument document, string includeValue)
+    {
+        foreach (XElement itemGroup in document.Root.Elements("ItemGroup"))
+        {
+            foreach (XElement projectReference in itemGroup.Elements("ProjectReference"))
+            {
+                XAttribute includeAttribute = projectReference.Attribute("Include");
+
+                if (includeAttribute != null &&
+                    string.Equals(
+                        NormalizePathLikeValue(includeAttribute.Value),
+                        NormalizePathLikeValue(includeValue),
+                        StringComparison.Ordinal))
+                {
+                    return projectReference;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static XElement FindPackageReference(XDocument document, string includeValue)
+    {
+        foreach (XElement itemGroup in document.Root.Elements("ItemGroup"))
+        {
+            foreach (XElement packageReference in itemGroup.Elements("PackageReference"))
+            {
+                XAttribute includeAttribute = packageReference.Attribute("Include");
+
+                if (includeAttribute != null &&
+                    string.Equals(includeAttribute.Value, includeValue, StringComparison.Ordinal))
+                {
+                    return packageReference;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string NormalizePathLikeValue(string value)
+    {
+        string normalized = value.Replace('/', '\\');
+
+        while (normalized.Contains("\\\\"))
+        {
+            normalized = normalized.Replace("\\\\", "\\");
+        }
+
+        return normalized;
+    }
+}

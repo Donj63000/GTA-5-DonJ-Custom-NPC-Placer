@@ -1,0 +1,95 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <AssemblyName>DonJCustomNpcPlacer</AssemblyName>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+
+    <!-- Je sors directement la DLL dans bin\Release. -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+
+    <!-- Chemin GTA Enhanced attendu sur ce poste, surchargeable via /p:GtaRoot=... -->
+    <DefaultEnhancedGtaRoot>C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V Enhanced</DefaultEnhancedGtaRoot>
+    <GtaRoot Condition="'$(GtaRoot)' == '' and Exists('$(DefaultEnhancedGtaRoot)\GTA5_Enhanced.exe')">$(DefaultEnhancedGtaRoot)</GtaRoot>
+    <GtaRoot Condition="'$(GtaRoot)' == ''">$(DefaultEnhancedGtaRoot)</GtaRoot>
+    <GtaScriptsDir Condition="'$(GtaScriptsDir)' == ''">$(GtaRoot)\Scripts</GtaScriptsDir>
+
+    <!-- API v2 cible : NIBScriptHookVDotNet2.dll en priorité, sinon ScriptHookVDotNet2.dll. -->
+    <ShvdnApiReferenceName Condition="Exists('$(GtaRoot)\NIBScriptHookVDotNet2.dll')">NIBScriptHookVDotNet2</ShvdnApiReferenceName>
+    <ShvdnApiPath Condition="Exists('$(GtaRoot)\NIBScriptHookVDotNet2.dll')">$(GtaRoot)\NIBScriptHookVDotNet2.dll</ShvdnApiPath>
+    <ShvdnApiReferenceName Condition="'$(ShvdnApiReferenceName)' == '' and Exists('$(GtaRoot)\ScriptHookVDotNet2.dll')">ScriptHookVDotNet2</ShvdnApiReferenceName>
+    <ShvdnApiPath Condition="'$(ShvdnApiPath)' == '' and Exists('$(GtaRoot)\ScriptHookVDotNet2.dll')">$(GtaRoot)\ScriptHookVDotNet2.dll</ShvdnApiPath>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(ShvdnApiReferenceName)' != ''">
+    <Reference Include="$(ShvdnApiReferenceName)">
+      <HintPath>$(ShvdnApiPath)</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+
+  <Target Name="ValidateGtaReference" BeforeTargets="ResolveReferences">
+    <Error
+      Condition="!Exists('$(GtaRoot)\GTA5_Enhanced.exe')"
+      Text="GTA5_Enhanced.exe introuvable dans '$(GtaRoot)'. Corrige GtaRoot dans DonJEnemySpawner.csproj avec le vrai dossier GTA Enhanced." />
+
+    <Error
+      Condition="'$(ShvdnApiPath)' == ''"
+      Text="Ni NIBScriptHookVDotNet2.dll ni ScriptHookVDotNet2.dll n'ont ete trouves dans '$(GtaRoot)'. GtaRoot doit pointer vers le dossier GTA contenant l'API v2 chargee par le runtime." />
+  </Target>
+
+  <Target Name="CreateLocalEndll" AfterTargets="Build">
+    <Delete Files="$(TargetDir)$(AssemblyName).ENdll"
+            Condition="Exists('$(TargetDir)$(AssemblyName).ENdll')" />
+
+    <Copy SourceFiles="$(TargetPath)"
+          DestinationFiles="$(TargetDir)$(AssemblyName).ENdll"
+          SkipUnchangedFiles="false" />
+  </Target>
+
+  <Target Name="DeployAsEndll" AfterTargets="CreateLocalEndll" Condition="'$(Configuration)' == 'Release'">
+    <MakeDir Directories="$(GtaScriptsDir)"
+             Condition="!Exists('$(GtaScriptsDir)')" />
+
+    <!-- Nettoyage de la nouvelle variante. -->
+    <Delete Files="$(GtaScriptsDir)\$(AssemblyName).dll"
+            Condition="Exists('$(GtaScriptsDir)\$(AssemblyName).dll')" />
+
+    <Delete Files="$(GtaScriptsDir)\$(AssemblyName).ENdll"
+            Condition="Exists('$(GtaScriptsDir)\$(AssemblyName).ENdll')" />
+
+    <Delete Files="$(GtaScriptsDir)\$(AssemblyName).pdb"
+            Condition="Exists('$(GtaScriptsDir)\$(AssemblyName).pdb')" />
+
+    <!-- Nettoyage de l'ancien nom pour eviter que deux scripts se chargent en meme temps. -->
+    <Delete Files="$(GtaScriptsDir)\DonJEnemySpawner.dll"
+            Condition="Exists('$(GtaScriptsDir)\DonJEnemySpawner.dll')" />
+
+    <Delete Files="$(GtaScriptsDir)\DonJEnemySpawner.ENdll"
+            Condition="Exists('$(GtaScriptsDir)\DonJEnemySpawner.ENdll')" />
+
+    <Delete Files="$(GtaScriptsDir)\DonJEnemySpawner.pdb"
+            Condition="Exists('$(GtaScriptsDir)\DonJEnemySpawner.pdb')" />
+
+    <Copy SourceFiles="$(TargetDir)$(AssemblyName).ENdll"
+          DestinationFiles="$(GtaScriptsDir)\$(AssemblyName).ENdll"
+          SkipUnchangedFiles="false" />
+
+    <Copy SourceFiles="$(TargetDir)$(AssemblyName).pdb"
+          DestinationFiles="$(GtaScriptsDir)\$(AssemblyName).pdb"
+          Condition="Exists('$(TargetDir)$(AssemblyName).pdb')"
+          SkipUnchangedFiles="false" />
+
+    <Message Importance="High"
+             Text="DonJ Custom NPC Placer deploye vers : $(GtaScriptsDir)\$(AssemblyName).ENdll" />
+  </Target>
+</Project>

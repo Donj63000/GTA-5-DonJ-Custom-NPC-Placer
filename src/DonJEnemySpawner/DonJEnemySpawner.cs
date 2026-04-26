@@ -1,0 +1,14125 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Xml;
+using GTA;
+using GTA.Math;
+using GTA.Native;
+using GtaControl = GTA.Control;
+using GtaFont = GTA.Font;
+using KeyEventArgs = System.Windows.Forms.KeyEventArgs;
+using Keys = System.Windows.Forms.Keys;
+
+public sealed partial class DonJEnemySpawner : Script
+{
+    /*
+     * DonJ Custom NPC Placer
+     * Cible : NIBScriptHookVDotNet / ScriptHookVDotNet API v2.x
+     *
+     * Remplacement complet du fichier DonJEnemySpawner.cs.
+     *
+     * Ajouts principaux :
+     * - Type de placement : NPC / Vehicule / Objet.
+     * - Selection NPC par categorie.
+     * - Selection arme par categorie + modification arme.
+     * - Selection vehicule par categorie.
+     * - Selection objet par categorie.
+     * - Placement camera persistant avec apercu pour NPC / vehicule / objet.
+     * - Comportements :
+     *   Statique, Attaquer, Neutre, Allie,
+     *   Garde du corps,
+     *   Neutre patrouille, Hostile patrouille, Allie patrouille.
+     * - Rayon de patrouille configurable.
+     * - Gardes neutres facon agents de securite.
+     * - Gardes allies et gardes du corps defensifs.
+     * - Gardes du corps qui suivent le joueur a pied ou en vehicule.
+     * - Sauvegarde / chargement XML des NPC, vehicules et objets.
+     * - Nettoyage separe NPC / vehicules / objets.
+     * - Blips minimap colores.
+     */
+
+    private const string TrainerTitle = "DonJ Custom NPC Placer";
+    private const string TrainerSubtitle = "Placement propre pour NPC, vehicules et objets";
+    private const Keys MenuToggleKey = Keys.F10;
+    private const string MenuToggleKeyLabel = "F10";
+    private const string SaveFolderName = "DonJEnemySpawnerSaves";
+    private const string LastSaveFileMarkerName = "_last_save.txt";
+    private const string SaveDirectoryEnvironmentVariable = "DONJ_ENEMY_SPAWNER_SAVE_DIR";
+    private const string DefaultEnhancedGtaRoot = @"C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V Enhanced";
+    private const int MaxSaveFileNameLength = 96;
+
+    private const int MinHealth = 1;
+    private const int MaxHealth = 5000;
+
+    private const int MinArmor = 0;
+    private const int MaxArmor = 200;
+
+    private const int MinDistance = 25;
+    private const int MaxDistance = 2500;
+    private const int DistanceStep = 25;
+
+    private const int MinPatrolRadius = 5;
+    private const int MaxPatrolRadius = 500;
+    private const int PatrolRadiusStep = 5;
+
+// Je garde les constantes historiques pour laisser passer les tests anti-regression deja en place.
+private const int MenuItemCount = 9;
+
+// Constante historique gardee pour les tests et les anciens contrats.
+// Le nouveau menu principal est maintenant dynamique avec sections deroulantes.
+private const int MainMenuItemCount = 24;
+private const int MainMenuVisibleRowLimit = 24;
+private const int WeaponEditorItemCount = 12;
+
+    private const int RelationshipCompanion = 0;
+    private const int RelationshipNeutral = 3;
+    private const int RelationshipDislike = 4;
+    private const int RelationshipHate = 5;
+
+    private const int ThinkIntervalMs = 700;
+
+    // Anti micro-freeze : les cerveaux IA ne doivent jamais tous se reveiller
+    // sur la meme frame. Avec 25/30 PNJ, une salve synchronisee de scans
+    // GetNearbyPeds + natives TASK_* provoque un petit pic CPU visible.
+    private const int NpcThinkJitterMs = 750;
+    private const int MaxNpcBrainsPerTick = 6;
+    private const int PassiveHoldRefreshMs = 2400;
+    private const int PassiveHoldJitterMs = 900;
+    private const int NpcBlipRefreshIntervalMs = 1200;
+    private const int NpcBlipRefreshJitterMs = 700;
+    private const int MaxNpcBlipRefreshPerTick = 4;
+
+    // Cache global des menaces pour les allies : au lieu de scanner le monde
+    // une fois par allie, on scanne par petites tranches puis on partage le
+    // resultat avec tous les allies proches.
+    private const int AllyThreatScanIntervalMs = 260;
+    private const int AllyThreatCacheLifetimeMs = 950;
+    private const int AllyThreatGuardScansPerPass = 4;
+
+    private const int AutoRespawnCheckIntervalMs = 1000;
+    private const int AutoRespawnMinDelayMs = 6000;
+    private const int AutoRespawnRetryDelayMs = 15000;
+    private const int AutoRespawnMaxPerTick = 3;
+    private const float AutoRespawnLeaveDistance = 220.0f;
+    private const float AutoRespawnNearSafetyDistance = 70.0f;
+
+    private const float StaticSightDistance = 2500.0f;
+    private const float AttackRefreshDistance = 3000.0f;
+    private const float CombatRefreshDistance = 3000.0f;
+
+    private const float NeutralAssistRadius = 95.0f;
+    private const float NeutralWitnessSightDistance = 140.0f;
+    private const float NeutralShootingReactionDistance = 55.0f;
+
+    private const float RuntimeNeutralAssistRadius = 105.0f;
+    private const float NeutralWitnessDistance = 155.0f;
+    private const float NeutralShotReactionDistance = 95.0f;
+    private const float NeutralNearbyAttackReactionDistance = 55.0f;
+
+    // Je garde en memoire courte les actes hostiles du joueur afin que les gardes
+    // neutres ne ratent pas un coup de feu bref entre deux ticks de reflexion.
+    private const int PlayerHostilityMemoryMs = 2200;
+    private const int PlayerHostilityScanIntervalMs = 90;
+    private const float NeutralBulletWhizReactionDistance = 9.0f;
+    private const float NeutralBulletImpactReactionDistance = 14.0f;
+    private const float NeutralMeleeReactionDistance = 42.0f;
+    private const float NeutralNearbyVehicleAttackReactionDistance = 70.0f;
+    private const float PlayerVehicleHostilityMinSpeed = 7.5f;
+
+    private const float AllyDefenseRadius = 150.0f;
+    private const float AllySightDistance = 180.0f;
+    private const float AllyShootingThreatDistance = 45.0f;
+
+    private const float RuntimeAllyDefenseRadius = 165.0f;
+    private const float RuntimeAllySightDistance = 190.0f;
+    private const float AllyShotThreatDistance = 50.0f;
+
+    private const int GuardReturnDelayMs = 30000;
+    private const int GuardReturnRetaskMs = 3500;
+    private const float GuardReturnArriveDistance = 1.35f;
+    private const float GuardWalkSpeed = 1.05f;
+
+    private const int PatrolRetaskMs = 6000;
+    private const float PatrolArriveDistance = 1.75f;
+    private const float PatrolWalkSpeed = 1.0f;
+
+    private const int BodyguardRetaskMs = 1200;
+    private const float BodyguardFootFollowDistance = 3.5f;
+    private const float BodyguardVehicleSearchRadius = 90.0f;
+
+    // Je garde un style de conduite propre avec evitement pour l'escorte.
+    private const int ProfessionalDrivingStyle = 786603;
+
+    private const int PlacementPreviewAlpha = 170;
+    private const int PlacementSpawnCooldownMs = 350;
+    private const int PreviewRetryIntervalMs = 650;
+
+    private const ulong PlaceEntityOnGroundProperlyNative = 0x58A850EAEE20FAA3UL;
+
+    private readonly Random _random = new Random();
+
+    private readonly List<ModelOption> _allModelOptions;
+    private readonly List<ModelCategory> _modelCategories;
+
+    private readonly List<WeaponOption> _allWeaponOptions;
+    private readonly List<WeaponCategory> _weaponCategories;
+
+    private readonly List<VehicleOption> _allVehicleOptions;
+    private readonly List<VehicleCategory> _vehicleCategories;
+
+    private readonly List<ObjectOption> _allObjectOptions;
+    private readonly List<ObjectCategory> _objectCategories;
+
+    // Je garde aussi ces champs pour rester compatible avec les tests historiques existants.
+    private List<ModelOption> _modelOptions;
+    private List<WeaponOption> _weaponOptions;
+    private int _selectedModelIndex;
+    private int _selectedWeaponIndex;
+
+    private readonly List<SpawnedNpc> _spawnedNpcs = new List<SpawnedNpc>();
+    private readonly List<PlacedVehicle> _placedVehicles = new List<PlacedVehicle>();
+    private readonly List<PlacedObject> _placedObjects = new List<PlacedObject>();
+
+    private int _selectedModelCategoryIndex;
+    private int _selectedModelIndexInCategory;
+
+    private int _selectedWeaponCategoryIndex;
+    private int _selectedWeaponIndexInCategory;
+
+    private int _selectedVehicleCategoryIndex;
+    private int _selectedVehicleIndexInCategory;
+
+    private int _selectedObjectCategoryIndex;
+    private int _selectedObjectIndexInCategory;
+
+    private PlacementEntityType _selectedPlacementType = PlacementEntityType.Npc;
+
+    private int _selectedHealth = 300;
+    private int _selectedArmor = 100;
+    private int _selectedDistance = 200;
+    private int _selectedPatrolRadius = 35;
+
+    private NpcBehavior _selectedBehavior = NpcBehavior.Attacker;
+    private bool _selectedAutoRespawn;
+    private WeaponLoadout _selectedWeaponLoadout;
+
+private int _mainMenuIndex;
+private int _mainMenuScrollOffset;
+private int _weaponEditorIndex;
+private MenuPage _menuPage = MenuPage.Main;
+
+// Sections deroulantes du menu principal.
+// Par defaut, j'ouvre la section NPC car le mod est principalement utilise
+// pour poser et configurer des PNJ armes. Les autres sections restent
+// disponibles mais repliees pour garder un menu propre et lisible.
+private bool _mainMenuNpcExpanded = true;
+private bool _mainMenuVehicleExpanded;
+private bool _mainMenuObjectExpanded;
+private bool _mainMenuInteriorExpanded;
+private bool _mainMenuSaveExpanded;
+private bool _mainMenuCleanupExpanded;
+
+private bool _menuVisible;
+
+    private string _customModelName = "s_m_y_swat_01";
+    private bool _customModelInputRequested;
+
+    private string _lastSaveFileName = "maison.xml";
+    private bool _saveRequested;
+    private bool _loadRequested;
+
+    private int _hostileGroupHash;
+    private int _neutralGroupHash;
+    private int _allyGroupHash;
+    private int _lastKnownPlayerGroupHash;
+    private int _nextRelationshipRefreshAt;
+    private int _nextPlayerHostilityScanAt;
+    private int _lastPlayerGunfireAt = -1000000;
+    private Vector3 _lastPlayerGunfirePosition = Vector3.Zero;
+    private int _lastPlayerGunfireImpactAt = -1000000;
+    private Vector3 _lastPlayerGunfireImpactPosition = Vector3.Zero;
+    private int _lastPlayerMeleeHostilityAt = -1000000;
+    private Vector3 _lastPlayerMeleeHostilityPosition = Vector3.Zero;
+    private int _autoRespawnsThisTick;
+
+    private Ped _allyCachedThreatPed;
+    private int _allyCachedThreatUntil;
+    private int _nextAllyThreatScanAt;
+    private int _allyThreatScanCursor;
+
+    private string _statusText = string.Empty;
+    private int _statusUntil;
+
+    private bool _spawnRequested;
+    private PlacementEntityType _requestedPlacementType;
+    private bool _spawnRequestedPrecise;
+    private bool _requestedHasHeadingOverride;
+    private float _requestedSpawnHeading;
+    private Vector3 _requestedSpawnPosition;
+    private Vector3 _requestedSpawnSurfaceNormal;
+
+    private Camera _placementCamera;
+    private bool _placementMode;
+    private Vector3 _placementCameraRotation;
+    private Vector3 _placementHitPoint;
+    private Vector3 _placementSpawnPoint;
+    private Vector3 _placementSurfaceNormal;
+    private bool _placementHasHit;
+    private bool _placementCancelRequested;
+    private bool _placementConfirmRequested;
+    private float _placementHeading;
+    private int _nextPlacementSpawnAllowedAt;
+
+    private Ped _placementPreviewPed;
+    private Vehicle _placementPreviewVehicle;
+    private Prop _placementPreviewProp;
+    private PlacementEntityType _placementPreviewType;
+    private string _placementPreviewKey = string.Empty;
+    private int _nextPreviewRetryAt;
+
+    private bool _storedPlayerInvincible;
+    private bool _storedPlayerFrozen;
+
+    private static Type _weaponComponentHashType;
+
+    /*
+     * Je protege ces groupes ambiants pour ne jamais les transformer en ennemis globaux.
+     * Les gardes peuvent toujours combattre un individu precis si cet individu
+     * attaque reellement le joueur ou un garde, mais j'evite une guerre de groupe.
+     */
+    private static readonly HashSet<int> ProtectedAmbientRelationshipGroups = BuildProtectedAmbientRelationshipGroups();
+
+    public DonJEnemySpawner()
+    {
+        Interval = 0;
+
+        _allModelOptions = BuildAllModelOptions();
+        _modelCategories = BuildModelCategories(_allModelOptions);
+        _modelOptions = BuildModelOptions();
+
+        _allWeaponOptions = BuildAllWeaponOptions();
+        _weaponCategories = BuildWeaponCategories(_allWeaponOptions);
+        _weaponOptions = BuildWeaponOptions();
+
+        _allVehicleOptions = BuildAllVehicleOptions();
+        _vehicleCategories = BuildVehicleCategories(_allVehicleOptions);
+
+        _allObjectOptions = BuildAllObjectOptions();
+        _objectCategories = BuildObjectCategories(_allObjectOptions);
+
+        SelectDefaultModel();
+        SelectDefaultWeapon();
+        SelectDefaultVehicle();
+        SelectDefaultObject();
+
+        _selectedModelIndex = FindDefaultModelIndex();
+        _selectedWeaponIndex = FindDefaultWeaponIndex();
+
+        _selectedWeaponLoadout = new WeaponLoadout
+        {
+            Weapon = CurrentWeaponOption().Hash,
+            Ammo = 9999,
+            Tint = 0,
+            Preset = WeaponUpgradePreset.Standard
+        };
+
+        InitializePersistentSaveState();
+        InitializeRelationshipGroups();
+
+        Tick += OnTick;
+        KeyDown += OnKeyDown;
+        Aborted += OnAborted;
+
+        ShowStatus(TrainerTitle + " charge. " + MenuToggleKeyLabel + " pour ouvrir le menu.", 4500);
+    }
+
+private enum MenuPage
+{
+    Main,
+    WeaponEditor
+}
+
+private enum MainMenuAction
+{
+    PlacementType,
+    PrecisePlacement,
+    DistancePlacement,
+    PlacementDistance,
+
+    SectionNpc,
+    NpcCategory,
+    NpcModel,
+    NpcWeaponCategory,
+    NpcWeapon,
+    NpcWeaponEditor,
+    NpcHealth,
+    NpcArmor,
+    NpcBehavior,
+    NpcPatrolRadius,
+    NpcAutoRespawn,
+
+    SectionVehicle,
+    VehicleCategory,
+    VehicleModel,
+
+    SectionObject,
+    ObjectCategory,
+    ObjectModel,
+
+    SectionInterior,
+    InteriorCategory,
+    InteriorModel,
+    ExitActiveInfo,
+    ExitDestinationInfo,
+
+    SectionSave,
+    Save,
+    Load,
+
+    SectionCleanup,
+    CleanNpcs,
+    CleanVehicles,
+    CleanObjects,
+    CleanInteriorPortals
+}
+
+private enum MainMenuRowKind
+{
+    Normal,
+    SectionHeader,
+    Primary,
+    PrimaryAction,
+    Action,
+    Info,
+    Danger
+}
+
+private sealed class MainMenuEntry
+{
+    public MainMenuAction Action;
+    public string Label;
+    public string Value;
+    public MainMenuRowKind Kind;
+    public int Level;
+    public bool Enabled;
+    public bool Expanded;
+    public bool Active;
+
+    public MainMenuEntry(MainMenuAction action, string label, string value, MainMenuRowKind kind, int level, bool enabled)
+    {
+        Action = action;
+        Label = label ?? string.Empty;
+        Value = value ?? string.Empty;
+        Kind = kind;
+        Level = level;
+        Enabled = enabled;
+    }
+}
+
+// Je garde cet enum historique pour les tests et les contrats deja poses.
+private enum EnemyBehavior
+    {
+        Static,
+        Attacker,
+        Neutral,
+        Ally
+    }
+
+    private enum PlacementEntityType
+    {
+        Npc,
+        Vehicle,
+        Object,
+        Entrance,
+        Exit
+    }
+
+    private enum NpcBehavior
+    {
+        Static,
+        Attacker,
+        Neutral,
+        Ally,
+        Bodyguard,
+        NeutralPatrol,
+        HostilePatrol,
+        AllyPatrol
+    }
+
+    private enum WeaponUpgradePreset
+    {
+        Standard,
+        ChargeurEtendu,
+        Silencieux,
+        Tactique,
+        Full
+    }
+
+    private enum WeaponScopeMode
+    {
+        None,
+        Small,
+        Medium,
+        Large
+    }
+
+    private enum WeaponMk2AmmoMode
+    {
+        Standard,
+        Tracer,
+        Incendiary,
+        ArmorPiercing,
+        FMJ,
+        Explosive
+    }
+
+    private enum ObjectPlacementCategory
+    {
+        Securite,
+        Couverture,
+        Mobilier,
+        CaisseStockage,
+        Decoration,
+        Lumiere,
+        Exterieur,
+        Divers
+    }
+
+    private sealed class ModelOption
+    {
+        public string DisplayName;
+        public bool IsCustom;
+        public int Hash;
+
+        public Model ToModel(string customModelName)
+        {
+            return IsCustom ? new Model(customModelName) : new Model(Hash);
+        }
+
+        public string GetDisplayName(string customModelName)
+        {
+            return IsCustom ? "Custom: " + customModelName : DisplayName;
+        }
+    }
+
+    private sealed class ModelCategory
+    {
+        public string Name;
+        public List<ModelOption> Options;
+    }
+
+    private sealed class WeaponOption
+    {
+        public string DisplayName;
+        public WeaponHash Hash;
+    }
+
+    private sealed class WeaponCategory
+    {
+        public string Name;
+        public List<WeaponOption> Options;
+    }
+
+    private sealed class VehicleOption
+    {
+        public string DisplayName;
+        public VehicleHash Hash;
+
+        public Model ToModel()
+        {
+            return new Model((int)Hash);
+        }
+    }
+
+    private sealed class VehicleCategory
+    {
+        public string Name;
+        public List<VehicleOption> Options;
+    }
+
+    private sealed class ObjectOption
+    {
+        public string DisplayName;
+        public string ModelName;
+        public ObjectPlacementCategory Category;
+
+        public Model ToModel()
+        {
+            return new Model(ModelName);
+        }
+    }
+
+    private sealed class ObjectCategory
+    {
+        public string Name;
+        public List<ObjectOption> Options;
+    }
+
+    private sealed class WeaponLoadout
+    {
+        public WeaponHash Weapon;
+        public int Ammo;
+        public int Tint;
+        public WeaponUpgradePreset Preset;
+
+        public bool ExtendedClip;
+        public bool Suppressor;
+        public bool Flashlight;
+        public bool Grip;
+        public WeaponScopeMode Scope;
+        public bool Muzzle;
+        public bool ImprovedBarrel;
+        public WeaponMk2AmmoMode Mk2Ammo;
+
+        public WeaponLoadout Clone()
+        {
+            return new WeaponLoadout
+            {
+                Weapon = Weapon,
+                Ammo = Ammo,
+                Tint = Tint,
+                Preset = Preset,
+                ExtendedClip = ExtendedClip,
+                Suppressor = Suppressor,
+                Flashlight = Flashlight,
+                Grip = Grip,
+                Scope = Scope,
+                Muzzle = Muzzle,
+                ImprovedBarrel = ImprovedBarrel,
+                Mk2Ammo = Mk2Ammo
+            };
+        }
+
+        public string Summary()
+        {
+            List<string> parts = new List<string>();
+
+            if (ExtendedClip) parts.Add("chargeur+");
+            if (Suppressor) parts.Add("silencieux");
+            if (Flashlight) parts.Add("lampe");
+            if (Grip) parts.Add("poignee");
+            if (Scope != WeaponScopeMode.None) parts.Add("lunette " + Scope.ToString().ToLowerInvariant());
+            if (Muzzle) parts.Add("comp.");
+            if (ImprovedBarrel) parts.Add("canon+");
+            if (Mk2Ammo != WeaponMk2AmmoMode.Standard) parts.Add(Mk2Ammo.ToString());
+            if (Tint > 0) parts.Add("teinte " + Tint.ToString(CultureInfo.InvariantCulture));
+
+            return parts.Count == 0 ? "Standard" : string.Join(", ", parts.ToArray());
+        }
+    }
+
+    private sealed class ModelIdentity
+    {
+        public bool IsCustom;
+        public string Name;
+        public int Hash;
+        public string DisplayName;
+
+        public Model ToModel()
+        {
+            return IsCustom ? new Model(Name) : new Model(Hash);
+        }
+    }
+
+    private sealed class VehicleIdentity
+    {
+        public string Name;
+        public int Hash;
+        public string DisplayName;
+
+        public Model ToModel()
+        {
+            return new Model(Hash);
+        }
+    }
+
+    private sealed class ObjectIdentity
+    {
+        public string ModelName;
+        public string DisplayName;
+
+        public Model ToModel()
+        {
+            return new Model(ModelName);
+        }
+    }
+
+    private sealed class SpawnedNpc
+    {
+        public Ped Ped;
+        public Blip Blip;
+
+        public NpcBehavior Behavior;
+        public NpcBehavior BaseBehavior;
+
+        public bool Activated;
+        public bool DeathAlerted;
+
+        public int NextThinkAt;
+        public int NextPassiveTaskAt;
+        public int NextBlipRefreshAt;
+
+        public Vector3 HomePosition;
+        public float HomeHeading;
+        public int LastCombatActivityAt;
+        public bool IsReturningHome;
+        public int NextReturnTaskAt;
+
+        public Vector3 PatrolCenter;
+        public float PatrolRadius;
+        public Vector3 PatrolTarget;
+        public int NextPatrolTaskAt;
+
+        public int NextBodyguardTaskAt;
+        public int BodyguardAssignedVehicleHandle;
+        public int BodyguardAssignedSeat = 999;
+        public bool BodyguardIsDriver;
+
+        public ModelIdentity ModelIdentity;
+        public WeaponLoadout Loadout;
+
+        public int SavedMaxHealth;
+        public int SavedArmor;
+
+        public bool AutoRespawn;
+        public bool RespawnPending;
+        public int RespawnEligibleAt;
+        public int NextRespawnCheckAt;
+    }
+
+    private sealed class PlacedVehicle
+    {
+        public Vehicle Vehicle;
+        public Blip Blip;
+        public VehicleIdentity Identity;
+        public Vector3 Position;
+        public float Heading;
+        public Vector3 RespawnPosition;
+        public float RespawnHeading;
+        public bool AutoRespawn;
+        public bool RespawnPending;
+        public int RespawnEligibleAt;
+        public int NextRespawnCheckAt;
+    }
+
+    private sealed class PlacedObject
+    {
+        public Prop Prop;
+        public ObjectIdentity Identity;
+        public Vector3 Position;
+        public float Heading;
+        public Vector3 RespawnPosition;
+        public float RespawnHeading;
+        public bool AutoRespawn;
+        public bool RespawnPending;
+        public int RespawnEligibleAt;
+        public int NextRespawnCheckAt;
+    }
+
+    private void OnTick(object sender, EventArgs e)
+    {
+        try
+        {
+            RefreshPlayerRelationshipIfNeeded();
+            UpdateCartelContactAndConvoy();
+            _autoRespawnsThisTick = 0;
+
+            if (_customModelInputRequested)
+            {
+                _customModelInputRequested = false;
+                EditCustomModelName();
+            }
+
+            if (_saveRequested)
+            {
+                _saveRequested = false;
+                SaveCurrentSetupWithPrompt();
+            }
+
+            if (_loadRequested)
+            {
+                _loadRequested = false;
+                LoadSetupWithPrompt();
+            }
+
+            if (_placementMode)
+            {
+                UpdatePlacementMode();
+            }
+
+            if (_menuVisible)
+            {
+                DisableMenuGameplayControls();
+                DrawMenu();
+            }
+
+            ProcessPendingSpawn();
+            UpdatePlayerHostilityMemory(Game.Player.Character);
+            UpdateNpcs();
+            UpdateCartelConvoyLate();
+            UpdatePlacedVehicles();
+            UpdatePlacedObjects();
+            UpdateInteriorPortals();
+            DrawStatus();
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Erreur " + TrainerTitle + ": " + ex.Message, 7000);
+        }
+    }
+
+    private void OnKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.KeyCode == MenuToggleKey)
+        {
+            if (_placementMode)
+            {
+                StopPlacementMode(true);
+            }
+            else
+            {
+                _menuVisible = !_menuVisible;
+            }
+
+            e.Handled = true;
+            return;
+        }
+
+        if (_placementMode)
+        {
+            if (e.KeyCode == Keys.Escape || e.KeyCode == Keys.Back)
+            {
+                _placementCancelRequested = true;
+                e.Handled = true;
+                return;
+            }
+
+            if (e.KeyCode == Keys.Enter || e.KeyCode == Keys.NumPad5)
+            {
+                _placementConfirmRequested = true;
+                e.Handled = true;
+                return;
+            }
+
+            return;
+        }
+
+        if (!_menuVisible)
+        {
+            return;
+        }
+
+        if (_menuPage == MenuPage.WeaponEditor)
+        {
+            HandleWeaponEditorKey(e);
+        }
+        else
+        {
+            HandleMainMenuKey(e);
+        }
+    }
+
+    private void OnAborted(object sender, EventArgs e)
+    {
+        StopPlacementMode(false);
+
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            RemoveNpcBlip(_spawnedNpcs[i]);
+        }
+
+        for (int i = 0; i < _placedVehicles.Count; i++)
+        {
+            RemovePlacedVehicleBlip(_placedVehicles[i]);
+        }
+
+        try
+        {
+            if (_hostileGroupHash != 0) World.RemoveRelationshipGroup(_hostileGroupHash);
+            if (_neutralGroupHash != 0) World.RemoveRelationshipGroup(_neutralGroupHash);
+            if (_allyGroupHash != 0) World.RemoveRelationshipGroup(_allyGroupHash);
+        }
+        catch
+        {
+        }
+    }
+
+private void HandleMainMenuKey(KeyEventArgs e)
+{
+    List<MainMenuEntry> entries = BuildMainMenuEntries();
+    NormalizeMainMenuSelection(entries);
+
+    if (entries.Count == 0)
+    {
+        return;
+    }
+
+    switch (e.KeyCode)
+    {
+        case Keys.Up:
+        case Keys.NumPad8:
+            _mainMenuIndex = Wrap(_mainMenuIndex - 1, entries.Count);
+            EnsureMainMenuSelectionVisible(entries.Count);
+            e.Handled = true;
+            break;
+
+        case Keys.Down:
+        case Keys.NumPad2:
+            _mainMenuIndex = Wrap(_mainMenuIndex + 1, entries.Count);
+            EnsureMainMenuSelectionVisible(entries.Count);
+            e.Handled = true;
+            break;
+
+        case Keys.PageUp:
+            _mainMenuIndex = Clamp(_mainMenuIndex - MainMenuVisibleRowLimit, 0, entries.Count - 1);
+            EnsureMainMenuSelectionVisible(entries.Count);
+            e.Handled = true;
+            break;
+
+        case Keys.PageDown:
+            _mainMenuIndex = Clamp(_mainMenuIndex + MainMenuVisibleRowLimit, 0, entries.Count - 1);
+            EnsureMainMenuSelectionVisible(entries.Count);
+            e.Handled = true;
+            break;
+
+        case Keys.Home:
+            _mainMenuIndex = 0;
+            EnsureMainMenuSelectionVisible(entries.Count);
+            e.Handled = true;
+            break;
+
+        case Keys.End:
+            _mainMenuIndex = entries.Count - 1;
+            EnsureMainMenuSelectionVisible(entries.Count);
+            e.Handled = true;
+            break;
+
+        case Keys.Left:
+            case Keys.NumPad4:
+                ChangeMainMenuValue(-1);
+                e.Handled = true;
+                break;
+
+            case Keys.Right:
+            case Keys.NumPad6:
+                ChangeMainMenuValue(1);
+                e.Handled = true;
+                break;
+
+            case Keys.Enter:
+            case Keys.NumPad5:
+                ActivateMainMenuItem();
+                e.Handled = true;
+                break;
+
+        case Keys.T:
+            if (GetSelectedMainMenuAction() == MainMenuAction.NpcModel && CurrentModelOption().IsCustom)
+            {
+                _customModelInputRequested = true;
+                e.Handled = true;
+                }
+                break;
+
+            case Keys.Escape:
+            case Keys.Back:
+            case Keys.NumPad0:
+                _menuVisible = false;
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void HandleWeaponEditorKey(KeyEventArgs e)
+    {
+        switch (e.KeyCode)
+        {
+            case Keys.Up:
+            case Keys.NumPad8:
+                _weaponEditorIndex = Wrap(_weaponEditorIndex - 1, WeaponEditorItemCount);
+                e.Handled = true;
+                break;
+
+            case Keys.Down:
+            case Keys.NumPad2:
+                _weaponEditorIndex = Wrap(_weaponEditorIndex + 1, WeaponEditorItemCount);
+                e.Handled = true;
+                break;
+
+            case Keys.Left:
+            case Keys.NumPad4:
+                ChangeWeaponEditorValue(-1);
+                e.Handled = true;
+                break;
+
+            case Keys.Right:
+            case Keys.NumPad6:
+                ChangeWeaponEditorValue(1);
+                e.Handled = true;
+                break;
+
+            case Keys.Enter:
+            case Keys.NumPad5:
+                ActivateWeaponEditorItem();
+                e.Handled = true;
+                break;
+
+            case Keys.Escape:
+            case Keys.Back:
+            case Keys.NumPad0:
+                _menuPage = MenuPage.Main;
+                e.Handled = true;
+                break;
+        }
+    }
+
+private void ChangeMainMenuValue(int direction)
+{
+    int fast = IsShiftHeld() ? 10 : 1;
+    MainMenuEntry entry = GetSelectedMainMenuEntry();
+
+    switch (entry.Action)
+    {
+        case MainMenuAction.PlacementType:
+            _selectedPlacementType = CycleEnum(_selectedPlacementType, direction);
+            OpenMainMenuSectionForPlacementType(_selectedPlacementType);
+            DeletePlacementPreview();
+            ShowStatus("Type de placement: " + PlacementTypeDisplayName(_selectedPlacementType), 1600);
+            break;
+
+        case MainMenuAction.PrecisePlacement:
+        case MainMenuAction.DistancePlacement:
+            // Ces lignes sont des actions. Entree valide, Gauche/Droite ne change rien.
+            break;
+
+        case MainMenuAction.PlacementDistance:
+            _selectedDistance = Clamp(_selectedDistance + direction * DistanceStep * fast, MinDistance, MaxDistance);
+            _selectedDistance = RoundToStep(_selectedDistance, DistanceStep);
+            break;
+
+        case MainMenuAction.SectionNpc:
+        case MainMenuAction.SectionVehicle:
+        case MainMenuAction.SectionObject:
+        case MainMenuAction.SectionInterior:
+        case MainMenuAction.SectionSave:
+        case MainMenuAction.SectionCleanup:
+            SetMainMenuSectionExpanded(entry.Action, direction > 0);
+            break;
+
+        case MainMenuAction.NpcCategory:
+            ChangeModelCategory(direction);
+            break;
+
+        case MainMenuAction.NpcModel:
+            ChangeModel(direction * fast);
+            break;
+
+        case MainMenuAction.NpcWeaponCategory:
+            ChangeWeaponCategory(direction);
+            break;
+
+        case MainMenuAction.NpcWeapon:
+            ChangeWeapon(direction * fast);
+            break;
+
+        case MainMenuAction.NpcWeaponEditor:
+            ChangeWeaponPreset(direction);
+            break;
+
+        case MainMenuAction.NpcHealth:
+            _selectedHealth = Clamp(_selectedHealth + direction * (IsShiftHeld() ? 250 : 25), MinHealth, MaxHealth);
+            break;
+
+        case MainMenuAction.NpcArmor:
+            _selectedArmor = Clamp(_selectedArmor + direction * (IsShiftHeld() ? 25 : 5), MinArmor, MaxArmor);
+            break;
+
+        case MainMenuAction.NpcBehavior:
+            _selectedBehavior = CycleEnum(_selectedBehavior, direction);
+            break;
+
+        case MainMenuAction.NpcPatrolRadius:
+            _selectedPatrolRadius = Clamp(_selectedPatrolRadius + direction * PatrolRadiusStep * fast, MinPatrolRadius, MaxPatrolRadius);
+            _selectedPatrolRadius = RoundToStep(_selectedPatrolRadius, PatrolRadiusStep);
+            break;
+
+        case MainMenuAction.NpcAutoRespawn:
+            _selectedAutoRespawn = !_selectedAutoRespawn;
+            break;
+
+        case MainMenuAction.VehicleCategory:
+            ChangeVehicleCategory(direction);
+            break;
+
+        case MainMenuAction.VehicleModel:
+            ChangeVehicle(direction * fast);
+            break;
+
+        case MainMenuAction.ObjectCategory:
+            ChangeObjectCategory(direction);
+            break;
+
+        case MainMenuAction.ObjectModel:
+            ChangeObject(direction * fast);
+            break;
+
+        case MainMenuAction.InteriorCategory:
+            ChangeInteriorCategory(direction);
+            break;
+
+        case MainMenuAction.InteriorModel:
+            ChangeInterior(direction * fast);
+            break;
+
+        case MainMenuAction.ExitActiveInfo:
+        case MainMenuAction.ExitDestinationInfo:
+            ShowStatus("Les sorties utilisent automatiquement la derniere entree active.", 2500);
+            break;
+    }
+
+    NormalizeMainMenuSelection(BuildMainMenuEntries());
+}
+
+private void ActivateMainMenuItem()
+{
+    MainMenuEntry entry = GetSelectedMainMenuEntry();
+
+    switch (entry.Action)
+    {
+        case MainMenuAction.SectionNpc:
+        case MainMenuAction.SectionVehicle:
+        case MainMenuAction.SectionObject:
+        case MainMenuAction.SectionInterior:
+        case MainMenuAction.SectionSave:
+        case MainMenuAction.SectionCleanup:
+            ToggleMainMenuSection(entry.Action);
+            break;
+
+        case MainMenuAction.PlacementType:
+            _selectedPlacementType = CycleEnum(_selectedPlacementType, 1);
+            OpenMainMenuSectionForPlacementType(_selectedPlacementType);
+            DeletePlacementPreview();
+            ShowStatus("Type de placement: " + PlacementTypeDisplayName(_selectedPlacementType), 1600);
+            break;
+
+        case MainMenuAction.PrecisePlacement:
+            StartPlacementMode();
+            break;
+
+        case MainMenuAction.DistancePlacement:
+            QueueCurrentPlacementAtDistance();
+            break;
+
+        case MainMenuAction.NpcModel:
+            if (CurrentModelOption().IsCustom)
+            {
+                _customModelInputRequested = true;
+            }
+            break;
+
+        case MainMenuAction.NpcWeaponEditor:
+            _menuPage = MenuPage.WeaponEditor;
+            _weaponEditorIndex = 1;
+            break;
+
+        case MainMenuAction.ExitActiveInfo:
+        case MainMenuAction.ExitDestinationInfo:
+            ShowStatus("Place une entree, entre dedans, puis place une sortie dans l'interieur.", 3500);
+            break;
+
+        case MainMenuAction.Save:
+            _saveRequested = true;
+            break;
+
+        case MainMenuAction.Load:
+            _loadRequested = true;
+            break;
+
+        case MainMenuAction.CleanNpcs:
+            CleanAllSpawnedNpcs();
+            break;
+
+        case MainMenuAction.CleanVehicles:
+            CleanAllPlacedVehicles();
+            break;
+
+        case MainMenuAction.CleanObjects:
+            CleanAllPlacedObjects();
+            break;
+
+        case MainMenuAction.CleanInteriorPortals:
+            CleanAllInteriorPortals();
+            break;
+    }
+
+    // Contrat historique conserve pour les tests source de l'ancien menu:
+    // case 23:
+    //     CleanAllInteriorPortals();
+    NormalizeMainMenuSelection(BuildMainMenuEntries());
+}
+
+private List<MainMenuEntry> BuildMainMenuEntries()
+{
+    List<MainMenuEntry> entries = new List<MainMenuEntry>(40);
+
+    AddMainMenuRow(entries, MainMenuAction.PlacementType, "Type de placement", PlacementTypeDisplayName(_selectedPlacementType), MainMenuRowKind.Primary, 0, true);
+    AddMainMenuRow(entries, MainMenuAction.PrecisePlacement, "Placement camera precis", "Ouvrir le placement fin", MainMenuRowKind.PrimaryAction, 0, true);
+    AddMainMenuRow(entries, MainMenuAction.DistancePlacement, "Placement direct", "Placer a " + _selectedDistance.ToString(CultureInfo.InvariantCulture) + " m devant le joueur", MainMenuRowKind.Action, 0, true);
+    AddMainMenuRow(entries, MainMenuAction.PlacementDistance, "Distance placement direct", _selectedDistance.ToString(CultureInfo.InvariantCulture) + " m", MainMenuRowKind.Normal, 0, true);
+
+    AddMainMenuSection(
+        entries,
+        MainMenuAction.SectionNpc,
+        "NPC",
+        CurrentModelDisplayName() + " | " + CurrentWeaponDisplayName(),
+        _mainMenuNpcExpanded,
+        _selectedPlacementType == PlacementEntityType.Npc);
+
+    if (_mainMenuNpcExpanded)
+    {
+        AddMainMenuRow(entries, MainMenuAction.NpcCategory, "Categorie NPC", CurrentModelCategory().Name, MainMenuRowKind.Normal, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.NpcModel, "Modele NPC", CurrentModelDisplayName(), MainMenuRowKind.Normal, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.NpcWeaponCategory, "Categorie arme", CurrentWeaponCategory().Name, MainMenuRowKind.Normal, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.NpcWeapon, "Arme", CurrentWeaponDisplayName(), MainMenuRowKind.Normal, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.NpcWeaponEditor, "Atelier arme", WeaponPresetDisplayName(_selectedWeaponLoadout.Preset) + " | " + _selectedWeaponLoadout.Summary(), MainMenuRowKind.Action, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.NpcHealth, "Sante NPC", _selectedHealth.ToString(CultureInfo.InvariantCulture), MainMenuRowKind.Normal, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.NpcArmor, "Armure NPC", _selectedArmor.ToString(CultureInfo.InvariantCulture), MainMenuRowKind.Normal, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.NpcBehavior, "Comportement NPC", NpcBehaviorDisplayName(_selectedBehavior), MainMenuRowKind.Normal, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.NpcPatrolRadius, "Rayon patrouille", _selectedPatrolRadius.ToString(CultureInfo.InvariantCulture) + " m", MainMenuRowKind.Normal, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.NpcAutoRespawn, "Reapparition auto", BoolText(_selectedAutoRespawn), MainMenuRowKind.Normal, 1, true);
+    }
+
+    AddMainMenuSection(
+        entries,
+        MainMenuAction.SectionVehicle,
+        "Vehicules",
+        CurrentVehicleDisplayName(),
+        _mainMenuVehicleExpanded,
+        _selectedPlacementType == PlacementEntityType.Vehicle);
+
+    if (_mainMenuVehicleExpanded)
+    {
+        AddMainMenuRow(entries, MainMenuAction.VehicleCategory, "Categorie vehicule", CurrentVehicleCategory().Name, MainMenuRowKind.Normal, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.VehicleModel, "Vehicule", CurrentVehicleDisplayName(), MainMenuRowKind.Normal, 1, true);
+    }
+
+    AddMainMenuSection(
+        entries,
+        MainMenuAction.SectionObject,
+        "Objets",
+        CurrentObjectDisplayName(),
+        _mainMenuObjectExpanded,
+        _selectedPlacementType == PlacementEntityType.Object);
+
+    if (_mainMenuObjectExpanded)
+    {
+        AddMainMenuRow(entries, MainMenuAction.ObjectCategory, "Categorie objet", CurrentObjectCategory().Name, MainMenuRowKind.Normal, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.ObjectModel, "Objet", CurrentObjectDisplayName(), MainMenuRowKind.Normal, 1, true);
+    }
+
+    AddMainMenuSection(
+        entries,
+        MainMenuAction.SectionInterior,
+        "Entrees / sorties",
+        CurrentInteriorOption().DisplayName,
+        _mainMenuInteriorExpanded,
+        _selectedPlacementType == PlacementEntityType.Entrance || _selectedPlacementType == PlacementEntityType.Exit);
+
+    if (_mainMenuInteriorExpanded)
+    {
+        AddMainMenuRow(entries, MainMenuAction.InteriorCategory, "Categorie interieur", CurrentInteriorCategory().Name, MainMenuRowKind.Normal, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.InteriorModel, "Interieur", CurrentInteriorOption().DisplayName, MainMenuRowKind.Normal, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.ExitActiveInfo, "Sortie active", ActiveInteriorSessionDisplayName(), MainMenuRowKind.Info, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.ExitDestinationInfo, "Destination sortie", ExitDestinationDisplayName(), MainMenuRowKind.Info, 1, true);
+    }
+
+    AddMainMenuSection(
+        entries,
+        MainMenuAction.SectionSave,
+        "Sauvegarde",
+        string.IsNullOrEmpty(_lastSaveFileName) ? "Aucun fichier" : _lastSaveFileName,
+        _mainMenuSaveExpanded,
+        false);
+
+    if (_mainMenuSaveExpanded)
+    {
+        AddMainMenuRow(entries, MainMenuAction.Save, "Sauvegarder", _lastSaveFileName, MainMenuRowKind.Action, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.Load, "Charger", _lastSaveFileName, MainMenuRowKind.Action, 1, true);
+    }
+
+    AddMainMenuSection(
+        entries,
+        MainMenuAction.SectionCleanup,
+        "Nettoyage",
+        "NPC / vehicules / objets / portails",
+        _mainMenuCleanupExpanded,
+        false);
+
+    if (_mainMenuCleanupExpanded)
+    {
+        AddMainMenuRow(entries, MainMenuAction.CleanNpcs, "Nettoyer NPC", "Supprimer tous les NPC spawnes", MainMenuRowKind.Danger, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.CleanVehicles, "Nettoyer vehicules", "Supprimer les vehicules places", MainMenuRowKind.Danger, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.CleanObjects, "Nettoyer objets", "Supprimer les objets places", MainMenuRowKind.Danger, 1, true);
+        AddMainMenuRow(entries, MainMenuAction.CleanInteriorPortals, "Nettoyer entrees/sorties", "Supprimer les reperes interieurs", MainMenuRowKind.Danger, 1, true);
+    }
+
+    return entries;
+}
+
+private void AddMainMenuSection(List<MainMenuEntry> entries, MainMenuAction action, string label, string value, bool expanded, bool active)
+{
+    MainMenuEntry entry = new MainMenuEntry(action, label, value, MainMenuRowKind.SectionHeader, 0, true)
+    {
+        Expanded = expanded,
+        Active = active
+    };
+
+    entries.Add(entry);
+}
+
+private void AddMainMenuRow(List<MainMenuEntry> entries, MainMenuAction action, string label, string value, MainMenuRowKind kind, int level, bool enabled)
+{
+    entries.Add(new MainMenuEntry(action, label, value, kind, level, enabled));
+}
+
+private MainMenuEntry GetSelectedMainMenuEntry()
+{
+    List<MainMenuEntry> entries = BuildMainMenuEntries();
+    NormalizeMainMenuSelection(entries);
+
+    if (entries.Count == 0)
+    {
+        return new MainMenuEntry(MainMenuAction.PlacementType, string.Empty, string.Empty, MainMenuRowKind.Normal, 0, false);
+    }
+
+    return entries[_mainMenuIndex];
+}
+
+private MainMenuAction GetSelectedMainMenuAction()
+{
+    return GetSelectedMainMenuEntry().Action;
+}
+
+private void NormalizeMainMenuSelection(List<MainMenuEntry> entries)
+{
+    int count = entries == null ? 0 : entries.Count;
+
+    if (count <= 0)
+    {
+        _mainMenuIndex = 0;
+        _mainMenuScrollOffset = 0;
+        return;
+    }
+
+    _mainMenuIndex = Clamp(_mainMenuIndex, 0, count - 1);
+    EnsureMainMenuSelectionVisible(count);
+}
+
+private void EnsureMainMenuSelectionVisible(int entryCount)
+{
+    int visibleRows = GetMainMenuVisibleRowCount(entryCount);
+
+    if (_mainMenuIndex < _mainMenuScrollOffset)
+    {
+        _mainMenuScrollOffset = _mainMenuIndex;
+    }
+    else if (_mainMenuIndex >= _mainMenuScrollOffset + visibleRows)
+    {
+        _mainMenuScrollOffset = _mainMenuIndex - visibleRows + 1;
+    }
+
+    int maxScroll = Math.Max(0, entryCount - visibleRows);
+    _mainMenuScrollOffset = Clamp(_mainMenuScrollOffset, 0, maxScroll);
+}
+
+private static int GetMainMenuVisibleRowCount(int entryCount)
+{
+    if (entryCount <= 0)
+    {
+        return 1;
+    }
+
+    return Math.Min(MainMenuVisibleRowLimit, entryCount);
+}
+
+private void OpenMainMenuSectionForPlacementType(PlacementEntityType placementType)
+{
+    switch (placementType)
+    {
+        case PlacementEntityType.Npc:
+            _mainMenuNpcExpanded = true;
+            break;
+
+        case PlacementEntityType.Vehicle:
+            _mainMenuVehicleExpanded = true;
+            break;
+
+        case PlacementEntityType.Object:
+            _mainMenuObjectExpanded = true;
+            break;
+
+        case PlacementEntityType.Entrance:
+        case PlacementEntityType.Exit:
+            _mainMenuInteriorExpanded = true;
+            break;
+    }
+}
+
+private void ToggleMainMenuSection(MainMenuAction action)
+{
+    SetMainMenuSectionExpanded(action, !IsMainMenuSectionExpanded(action));
+}
+
+private void SetMainMenuSectionExpanded(MainMenuAction action, bool expanded)
+{
+    switch (action)
+    {
+        case MainMenuAction.SectionNpc:
+            _mainMenuNpcExpanded = expanded;
+            break;
+
+        case MainMenuAction.SectionVehicle:
+            _mainMenuVehicleExpanded = expanded;
+            break;
+
+        case MainMenuAction.SectionObject:
+            _mainMenuObjectExpanded = expanded;
+            break;
+
+        case MainMenuAction.SectionInterior:
+            _mainMenuInteriorExpanded = expanded;
+            break;
+
+        case MainMenuAction.SectionSave:
+            _mainMenuSaveExpanded = expanded;
+            break;
+
+        case MainMenuAction.SectionCleanup:
+            _mainMenuCleanupExpanded = expanded;
+            break;
+    }
+}
+
+private bool IsMainMenuSectionExpanded(MainMenuAction action)
+{
+    switch (action)
+    {
+        case MainMenuAction.SectionNpc:
+            return _mainMenuNpcExpanded;
+
+        case MainMenuAction.SectionVehicle:
+            return _mainMenuVehicleExpanded;
+
+        case MainMenuAction.SectionObject:
+            return _mainMenuObjectExpanded;
+
+        case MainMenuAction.SectionInterior:
+            return _mainMenuInteriorExpanded;
+
+        case MainMenuAction.SectionSave:
+            return _mainMenuSaveExpanded;
+
+        case MainMenuAction.SectionCleanup:
+            return _mainMenuCleanupExpanded;
+
+        default:
+            return false;
+    }
+}
+
+private string ActiveInteriorSessionDisplayName()
+{
+    return _activeInteriorSession != null && _activeInteriorSession.Interior != null
+        ? _activeInteriorSession.Interior.DisplayName
+        : "Aucune entree active";
+}
+
+private string ExitDestinationDisplayName()
+{
+    return _activeInteriorSession != null
+        ? "Retour au marqueur d'entree"
+        : "Entre d'abord par une entree";
+}
+
+private void DrawMenu()
+{
+    if (_menuPage == MenuPage.WeaponEditor)
+        {
+            DrawWeaponEditorMenu();
+            return;
+        }
+
+        DrawMainMenu();
+    }
+
+private void DrawMainMenu()
+{
+    List<MainMenuEntry> entries = BuildMainMenuEntries();
+    NormalizeMainMenuSelection(entries);
+
+    int visibleRows = GetMainMenuVisibleRowCount(entries.Count);
+    int x = 22;
+    int y = 12;
+    int width = 850;
+    int titleHeight = 86;
+    int rowHeight = 22;
+    int footerHeight = 62;
+    int rowAreaHeight = visibleRows * rowHeight;
+    int totalHeight = titleHeight + rowAreaHeight + footerHeight;
+
+    Color accent = Color.FromArgb(245, 182, 26, 32);
+    Color accentDark = Color.FromArgb(245, 72, 8, 14);
+
+    DrawPanelFrame(x, y, width, totalHeight, accent);
+
+    DrawRect(x, y, width, titleHeight, Color.FromArgb(240, 45, 4, 9));
+    DrawRect(x, y, width, 9, accentDark);
+    DrawRect(x, y + 9, width, 2, Color.FromArgb(175, 255, 255, 255));
+    DrawRect(x, y + titleHeight - 4, width, 4, accent);
+    DrawRect(x, y + titleHeight, width, 1, Color.FromArgb(180, 0, 0, 0));
+
+    DrawText(TrainerTitle, x + 22, y + 12, 0.47f, Color.White, false, true);
+    DrawText(TrainerSubtitle, x + 24, y + 42, 0.275f, Color.FromArgb(232, 232, 232), false, false);
+
+    DrawBadge(
+        x + width - 376,
+        y + 18,
+        160,
+        "TYPE " + PlacementTypeDisplayName(_selectedPlacementType).ToUpperInvariant(),
+        Color.FromArgb(178, 18, 18, 21),
+        GetPlacementTypeColor(_selectedPlacementType));
+
+    DrawBadge(
+        x + width - 207,
+        y + 18,
+        110,
+        entries.Count.ToString(CultureInfo.InvariantCulture) + " LIGNES",
+        Color.FromArgb(145, 18, 18, 21),
+        Color.FromArgb(220, 210, 210, 210));
+
+    DrawBadge(
+        x + width - 88,
+        y + 18,
+        68,
+        MenuToggleKeyLabel,
+        Color.FromArgb(145, 18, 18, 21),
+        accent);
+
+    int helperY = y + 63;
+    DrawText("Entree = ouvrir/valider | Gauche/Droite = modifier | PageUp/PageDown = defiler vite", x + 24, helperY, 0.245f, Color.FromArgb(202, 202, 202), false, false);
+
+    int rowY = y + titleHeight;
+
+    DrawRect(x + 8, rowY + 4, width - 16, rowAreaHeight - 8, Color.FromArgb(64, 255, 255, 255));
+
+    int startIndex = _mainMenuScrollOffset;
+    int endIndex = Math.Min(entries.Count, startIndex + visibleRows);
+
+    for (int i = startIndex; i < endIndex; i++)
+    {
+        DrawMainMenuEntryRow(x, width, rowY + (i - startIndex) * rowHeight, rowHeight, entries[i], i == _mainMenuIndex);
+    }
+
+    if (entries.Count > visibleRows)
+    {
+        DrawMainMenuScrollbar(x + width - 15, rowY + 8, 7, rowAreaHeight - 16, entries.Count, visibleRows);
+    }
+
+    int footerY = y + titleHeight + rowAreaHeight;
+
+    DrawRect(x, footerY, width, footerHeight, Color.FromArgb(224, 10, 10, 12));
+    DrawRect(x, footerY, width, 1, Color.FromArgb(120, 255, 255, 255));
+
+        DrawBadge(x + 18, footerY + 10, 78, MenuToggleKeyLabel, Color.FromArgb(150, 60, 60, 64), accent);
+        DrawBadge(x + 105, footerY + 10, 112, "FLECHES", Color.FromArgb(130, 60, 60, 64), Color.FromArgb(210, 190, 190, 190));
+    DrawBadge(x + 226, footerY + 10, 154, "GAUCHE/DROITE", Color.FromArgb(130, 60, 60, 64), Color.FromArgb(210, 190, 190, 190));
+    DrawBadge(x + 389, footerY + 10, 90, "ENTREE", Color.FromArgb(130, 60, 60, 64), Color.FromArgb(210, 190, 190, 190));
+
+    string positionText = (_mainMenuIndex + 1).ToString(CultureInfo.InvariantCulture) + "/" + entries.Count.ToString(CultureInfo.InvariantCulture);
+    DrawText("Position " + positionText + " | Sections deroulantes organisees par usage", x + 494, footerY + 16, 0.272f, Color.FromArgb(232, 232, 232), false, false);
+    DrawText("Astuce : ouvre seulement la section utile. Sur Modele NPC Custom, appuie sur T pour saisir un modele.", x + 18, footerY + 39, 0.268f, Color.FromArgb(205, 205, 205), false, false);
+
+    DrawMainSummaryPanel(x + width + 18, y, 338, 286);
+
+    /*
+     * Contrats source historiques conserves volontairement pour les tests anti-regression
+     * de l'ancien menu plat. Le rendu reel utilise maintenant BuildMainMenuEntries().
+     *
+     * DrawMainMenuRow(x, width, rowY + rowHeight * 8, 8, PlacementSlotCategoryLabel(), PlacementSlotCategoryValue());
+     * DrawMainMenuRow(x, width, rowY + rowHeight * 9, 9, PlacementSlotOptionLabel(), PlacementSlotOptionValue());
+     * DrawMainMenuRow(x, width, rowY + rowHeight * 15, 15, "Reapparition auto", BoolText(_selectedAutoRespawn));
+     * DrawMainMenuRow(x, width, rowY + rowHeight * 23, 23, "Nettoyer entrees/sorties", "Supprimer les reperes interieurs");
+     * DrawMainSummaryPanel(x + width + 18, y, 338, 212);
+     */
+}
+
+private void DrawWeaponEditorMenu()
+{
+    int x = 32;
+    int y = 44;
+        int width = 735;
+        int titleHeight = 62;
+        int rowHeight = 30;
+        int footerHeight = 58;
+        int totalHeight = titleHeight + WeaponEditorItemCount * rowHeight + footerHeight;
+
+        Color accent = Color.FromArgb(245, 202, 150, 34);
+
+        DrawPanelFrame(x, y, width, totalHeight, accent);
+
+        DrawRect(x, y, width, titleHeight, Color.FromArgb(238, 55, 43, 10));
+        DrawRect(x, y, width, 8, Color.FromArgb(230, 132, 88, 12));
+        DrawRect(x, y + titleHeight - 3, width, 3, accent);
+
+        DrawText("Atelier arme", x + 22, y + 11, 0.46f, Color.White, false, true);
+        DrawText(FitText(CurrentWeaponDisplayName(), 58), x + 24, y + 40, 0.275f, Color.FromArgb(232, 232, 232), false, false);
+
+        DrawBadge(
+            x + width - 150,
+            y + 17,
+            122,
+            "EDITION",
+            Color.FromArgb(165, 16, 16, 18),
+            accent);
+
+        int rowY = y + titleHeight;
+
+        DrawRect(x + 8, rowY + 4, width - 16, WeaponEditorItemCount * rowHeight - 8, Color.FromArgb(65, 255, 255, 255));
+        DrawRect(x + 286, rowY + 7, 1, WeaponEditorItemCount * rowHeight - 14, Color.FromArgb(75, 255, 255, 255));
+
+        DrawMenuRow(x, width, rowY + rowHeight * 0, "Retour", "Revenir au menu principal", _weaponEditorIndex == 0, rowHeight, 320, accent);
+        DrawMenuRow(x, width, rowY + rowHeight * 1, "Preset", WeaponPresetDisplayName(_selectedWeaponLoadout.Preset), _weaponEditorIndex == 1, rowHeight, 320, accent);
+        DrawMenuRow(x, width, rowY + rowHeight * 2, "Chargeur etendu", BoolText(_selectedWeaponLoadout.ExtendedClip), _weaponEditorIndex == 2, rowHeight, 320, accent);
+        DrawMenuRow(x, width, rowY + rowHeight * 3, "Silencieux", BoolText(_selectedWeaponLoadout.Suppressor), _weaponEditorIndex == 3, rowHeight, 320, accent);
+        DrawMenuRow(x, width, rowY + rowHeight * 4, "Lampe", BoolText(_selectedWeaponLoadout.Flashlight), _weaponEditorIndex == 4, rowHeight, 320, accent);
+        DrawMenuRow(x, width, rowY + rowHeight * 5, "Poignee", BoolText(_selectedWeaponLoadout.Grip), _weaponEditorIndex == 5, rowHeight, 320, accent);
+        DrawMenuRow(x, width, rowY + rowHeight * 6, "Lunette", ScopeDisplayName(_selectedWeaponLoadout.Scope), _weaponEditorIndex == 6, rowHeight, 320, accent);
+        DrawMenuRow(x, width, rowY + rowHeight * 7, "Compensateur / bouche", BoolText(_selectedWeaponLoadout.Muzzle), _weaponEditorIndex == 7, rowHeight, 320, accent);
+        DrawMenuRow(x, width, rowY + rowHeight * 8, "Canon ameliore", BoolText(_selectedWeaponLoadout.ImprovedBarrel), _weaponEditorIndex == 8, rowHeight, 320, accent);
+        DrawMenuRow(x, width, rowY + rowHeight * 9, "Munitions MK2", Mk2AmmoDisplayName(_selectedWeaponLoadout.Mk2Ammo), _weaponEditorIndex == 9, rowHeight, 320, accent);
+        DrawMenuRow(x, width, rowY + rowHeight * 10, "Teinte", _selectedWeaponLoadout.Tint.ToString(CultureInfo.InvariantCulture), _weaponEditorIndex == 10, rowHeight, 320, accent);
+        DrawMenuRow(x, width, rowY + rowHeight * 11, "Appliquer aux NPC poses", "Mettre a jour les PNJ existants", _weaponEditorIndex == 11, rowHeight, 320, accent);
+
+        int footerY = y + titleHeight + WeaponEditorItemCount * rowHeight;
+
+        DrawRect(x, footerY, width, footerHeight, Color.FromArgb(224, 10, 10, 12));
+        DrawRect(x, footerY, width, 1, Color.FromArgb(120, 255, 255, 255));
+
+        DrawText("Gauche/Droite modifier | Entree appliquer/retour | Echap retour", x + 18, footerY + 10, 0.285f, Color.FromArgb(232, 232, 232), false, false);
+    DrawText("Les composants incompatibles avec l'arme sont ignores proprement.", x + 18, footerY + 34, 0.272f, Color.FromArgb(205, 205, 205), false, false);
+}
+
+private void DrawMainMenuEntryRow(int x, int width, int y, int rowHeight, MainMenuEntry entry, bool selected)
+{
+    int innerX = x + 8;
+    int innerW = width - 16;
+    int rowY = y + 1;
+    int rowH = rowHeight - 2;
+    int indent = Math.Max(0, entry.Level) * 20;
+    int labelX = x + 18 + indent;
+    int valueX = x + 395;
+    int valueRight = x + width - 42;
+    int valueMaxLength = Math.Max(10, (valueRight - valueX) / 7);
+    int textOffset = 5;
+    float textScale = entry.Kind == MainMenuRowKind.SectionHeader ? 0.282f : 0.268f;
+
+    Color accent = GetMainMenuEntryAccent(entry);
+    Color background = GetMainMenuEntryBackground(entry, selected);
+    Color labelColor = entry.Enabled ? Color.FromArgb(232, 232, 232) : Color.FromArgb(145, 145, 145);
+    Color valueColor = entry.Enabled ? Color.FromArgb(205, 205, 205) : Color.FromArgb(128, 128, 128);
+
+    if (selected)
+    {
+        labelColor = Color.White;
+        valueColor = Color.White;
+    }
+
+    DrawRect(innerX, rowY, innerW, rowH, background);
+
+    if (entry.Kind == MainMenuRowKind.SectionHeader)
+    {
+        DrawRect(innerX, rowY, innerW, 1, Color.FromArgb(82, 255, 255, 255));
+        DrawRect(innerX, rowY + rowH - 1, innerW, 1, Color.FromArgb(145, 0, 0, 0));
+        DrawRect(innerX, rowY, 7, rowH, Color.FromArgb(235, accent.R, accent.G, accent.B));
+
+        if (entry.Active)
+        {
+            DrawRect(innerX + 7, rowY, 4, rowH, Color.FromArgb(190, 255, 255, 255));
+        }
+
+        string arrow = entry.Expanded ? "v" : ">";
+        DrawText(arrow + " " + entry.Label, labelX, y + textOffset, textScale, labelColor, false, true);
+        DrawText(FitText(entry.Value, valueMaxLength), valueX, y + textOffset, textScale, valueColor, false, false);
+        return;
+    }
+
+    DrawRect(innerX, rowY, 4, rowH, Color.FromArgb(185, accent.R, accent.G, accent.B));
+
+    if (entry.Level > 0)
+    {
+        DrawRect(x + 25, rowY + 5, 8, 1, Color.FromArgb(105, accent.R, accent.G, accent.B));
+        DrawRect(x + 25, rowY + 5, 1, rowH - 9, Color.FromArgb(95, accent.R, accent.G, accent.B));
+    }
+
+    if (entry.Kind == MainMenuRowKind.Primary || entry.Kind == MainMenuRowKind.PrimaryAction)
+    {
+        DrawRect(innerX + 4, rowY, 3, rowH, Color.FromArgb(175, 255, 255, 255));
+    }
+
+    DrawText(entry.Label ?? string.Empty, labelX, y + textOffset, textScale, labelColor, false, selected || entry.Kind == MainMenuRowKind.Primary || entry.Kind == MainMenuRowKind.PrimaryAction);
+    DrawText(FitText(entry.Value, valueMaxLength), valueX, y + textOffset, textScale, valueColor, false, false);
+
+    if (selected)
+    {
+        DrawText(">", x + width - 31, y + textOffset, textScale, Color.White, false, true);
+    }
+}
+
+private Color GetMainMenuEntryBackground(MainMenuEntry entry, bool selected)
+{
+    if (selected)
+    {
+        switch (entry.Kind)
+        {
+            case MainMenuRowKind.PrimaryAction:
+                return Color.FromArgb(226, 18, 118, 84);
+
+            case MainMenuRowKind.Primary:
+                return Color.FromArgb(226, 138, 20, 26);
+
+            case MainMenuRowKind.Danger:
+                return Color.FromArgb(224, 135, 22, 22);
+
+            case MainMenuRowKind.SectionHeader:
+                return Color.FromArgb(224, 55, 55, 62);
+
+            default:
+                return Color.FromArgb(214, 124, 22, 28);
+        }
+    }
+
+    switch (entry.Kind)
+    {
+        case MainMenuRowKind.PrimaryAction:
+            return Color.FromArgb(150, 10, 95, 67);
+
+        case MainMenuRowKind.Primary:
+            return Color.FromArgb(148, 85, 12, 18);
+
+        case MainMenuRowKind.Action:
+            return Color.FromArgb(108, 22, 22, 28);
+
+        case MainMenuRowKind.Info:
+            return Color.FromArgb(76, 15, 15, 18);
+
+        case MainMenuRowKind.Danger:
+            return Color.FromArgb(96, 72, 13, 13);
+
+        case MainMenuRowKind.SectionHeader:
+            return entry.Active
+                ? Color.FromArgb(145, 42, 42, 48)
+                : Color.FromArgb(112, 20, 20, 24);
+
+        default:
+            return Color.FromArgb(82, 14, 14, 16);
+    }
+}
+
+private Color GetMainMenuEntryAccent(MainMenuEntry entry)
+{
+    switch (entry.Action)
+    {
+        case MainMenuAction.PlacementType:
+            return GetPlacementTypeColor(_selectedPlacementType);
+
+        case MainMenuAction.PrecisePlacement:
+            return Color.FromArgb(245, 60, 220, 150);
+
+        case MainMenuAction.DistancePlacement:
+        case MainMenuAction.PlacementDistance:
+            return Color.FromArgb(230, 70, 145, 220);
+
+        case MainMenuAction.SectionNpc:
+        case MainMenuAction.NpcCategory:
+        case MainMenuAction.NpcModel:
+        case MainMenuAction.NpcWeaponCategory:
+        case MainMenuAction.NpcWeapon:
+        case MainMenuAction.NpcWeaponEditor:
+        case MainMenuAction.NpcHealth:
+        case MainMenuAction.NpcArmor:
+        case MainMenuAction.NpcBehavior:
+        case MainMenuAction.NpcPatrolRadius:
+        case MainMenuAction.NpcAutoRespawn:
+            return Color.FromArgb(230, 185, 32, 40);
+
+        case MainMenuAction.SectionVehicle:
+        case MainMenuAction.VehicleCategory:
+        case MainMenuAction.VehicleModel:
+            return Color.FromArgb(230, 70, 145, 220);
+
+        case MainMenuAction.SectionObject:
+        case MainMenuAction.ObjectCategory:
+        case MainMenuAction.ObjectModel:
+            return Color.FromArgb(230, 210, 158, 46);
+
+        case MainMenuAction.SectionInterior:
+        case MainMenuAction.InteriorCategory:
+        case MainMenuAction.InteriorModel:
+        case MainMenuAction.ExitActiveInfo:
+        case MainMenuAction.ExitDestinationInfo:
+            return Color.FromArgb(230, 150, 95, 220);
+
+        case MainMenuAction.SectionSave:
+        case MainMenuAction.Save:
+        case MainMenuAction.Load:
+            return Color.FromArgb(230, 80, 190, 120);
+
+        case MainMenuAction.SectionCleanup:
+        case MainMenuAction.CleanNpcs:
+        case MainMenuAction.CleanVehicles:
+        case MainMenuAction.CleanObjects:
+        case MainMenuAction.CleanInteriorPortals:
+            return Color.FromArgb(230, 210, 80, 80);
+
+        default:
+            return Color.FromArgb(230, 185, 32, 40);
+    }
+}
+
+private Color GetPlacementTypeColor(PlacementEntityType placementType)
+{
+    switch (placementType)
+    {
+        case PlacementEntityType.Vehicle:
+            return Color.FromArgb(230, 70, 145, 220);
+
+        case PlacementEntityType.Object:
+            return Color.FromArgb(230, 210, 158, 46);
+
+        case PlacementEntityType.Entrance:
+        case PlacementEntityType.Exit:
+            return Color.FromArgb(230, 150, 95, 220);
+
+        case PlacementEntityType.Npc:
+        default:
+            return Color.FromArgb(230, 185, 32, 40);
+    }
+}
+
+private void DrawMainMenuScrollbar(int x, int y, int width, int height, int entryCount, int visibleRows)
+{
+    if (entryCount <= visibleRows || entryCount <= 0)
+    {
+        return;
+    }
+
+    int trackHeight = Math.Max(1, height);
+    int maxScroll = Math.Max(1, entryCount - visibleRows);
+    int thumbHeight = Math.Max(24, (int)Math.Round(trackHeight * (visibleRows / (double)entryCount)));
+    int thumbTravel = Math.Max(1, trackHeight - thumbHeight);
+    int thumbY = y + (int)Math.Round(thumbTravel * (_mainMenuScrollOffset / (double)maxScroll));
+
+    DrawRect(x, y, width, height, Color.FromArgb(95, 0, 0, 0));
+    DrawRect(x, thumbY, width, thumbHeight, Color.FromArgb(190, 210, 210, 210));
+}
+
+private void DrawMainMenuRow(int x, int width, int y, int index, string label, string value)
+{
+    DrawMenuRow(x, width, y, label, value, _mainMenuIndex == index, 23, 330, GetMainMenuAccent(index));
+}
+
+    private void DrawMenuRow(int x, int width, int y, string label, string value, bool selected)
+    {
+        DrawMenuRow(x, width, y, label, value, selected, 25, 270, Color.FromArgb(220, 180, 40, 40));
+    }
+
+    private void DrawMenuRow(int x, int width, int y, string label, string value, bool selected, int rowHeight, int valueX, Color accentColor)
+    {
+        int innerX = x + 8;
+        int innerW = width - 16;
+        int rowY = y + 1;
+        int rowH = rowHeight - 2;
+        int textOffset = rowHeight <= 24 ? 5 : 7;
+        float textScale = rowHeight <= 24 ? 0.276f : 0.296f;
+        int valueMaxLength = Math.Max(18, (innerW - valueX + 18) / 7);
+
+        if (selected)
+        {
+            DrawRect(innerX, rowY, innerW, rowH, Color.FromArgb(222, 132, 18, 24));
+            DrawRect(innerX, rowY, innerW, 1, Color.FromArgb(95, 255, 255, 255));
+            DrawRect(innerX, rowY + rowH - 1, innerW, 1, Color.FromArgb(155, 30, 0, 0));
+            DrawRect(innerX, rowY, 6, rowH, Color.FromArgb(245, accentColor.R, accentColor.G, accentColor.B));
+            DrawRect(innerX + 6, rowY, 2, rowH, Color.FromArgb(145, 255, 255, 255));
+        }
+        else
+        {
+            DrawRect(innerX, rowY, innerW, rowH, Color.FromArgb(88, 14, 14, 16));
+            DrawRect(innerX, rowY, 3, rowH, Color.FromArgb(150, accentColor.R, accentColor.G, accentColor.B));
+        }
+
+        DrawText(label ?? string.Empty, x + 18, y + textOffset, textScale, selected ? Color.White : Color.FromArgb(220, 220, 220), false, selected);
+        DrawText(FitText(value, valueMaxLength), x + valueX, y + textOffset, textScale, selected ? Color.White : Color.FromArgb(198, 198, 198), false, false);
+
+        if (selected)
+        {
+            DrawText(">", x + width - 31, y + textOffset, textScale, Color.White, false, true);
+        }
+    }
+
+    private void DrawPanelFrame(int x, int y, int width, int height, Color accentColor)
+    {
+        DrawRect(x + 9, y + 10, width, height, Color.FromArgb(80, 0, 0, 0));
+        DrawRect(x + 5, y + 6, width, height, Color.FromArgb(70, 0, 0, 0));
+
+        DrawRect(x, y, width, height, Color.FromArgb(214, 6, 6, 8));
+
+        DrawRect(x, y, width, 1, Color.FromArgb(170, accentColor.R, accentColor.G, accentColor.B));
+        DrawRect(x, y + height - 1, width, 1, Color.FromArgb(105, accentColor.R, accentColor.G, accentColor.B));
+        DrawRect(x, y, 1, height, Color.FromArgb(120, accentColor.R, accentColor.G, accentColor.B));
+        DrawRect(x + width - 1, y, 1, height, Color.FromArgb(80, 255, 255, 255));
+    }
+
+    private void DrawBadge(int x, int y, int width, string text, Color background, Color accentColor)
+    {
+        DrawRect(x, y, width, 24, background);
+        DrawRect(x, y, 3, 24, Color.FromArgb(230, accentColor.R, accentColor.G, accentColor.B));
+        DrawRect(x, y, width, 1, Color.FromArgb(70, 255, 255, 255));
+
+        DrawText(
+            FitText(text, Math.Max(6, width / 7)),
+            x + 10,
+            y + 6,
+            0.245f,
+            Color.FromArgb(238, 238, 238),
+            false,
+            false);
+    }
+
+private void DrawMainSummaryPanel(int x, int y, int width, int height)
+{
+    Color accent = GetPlacementTypeColor(_selectedPlacementType);
+
+    DrawPanelFrame(x, y, width, height, accent);
+
+        DrawRect(x, y, width, 42, Color.FromArgb(224, 24, 24, 28));
+        DrawRect(x, y + 40, width, 2, accent);
+
+        DrawText("Resume actif", x + 16, y + 10, 0.335f, Color.White, false, true);
+
+        int lineY = y + 54;
+
+    DrawSummaryLine(x, width, lineY + 0, "Type", PlacementTypeDisplayName(_selectedPlacementType));
+    DrawSummaryLine(x, width, lineY + 26, "NPC", CurrentModelDisplayName());
+    DrawSummaryLine(x, width, lineY + 52, "Arme", CurrentWeaponDisplayName());
+    DrawSummaryLine(x, width, lineY + 78, "Vehicule", CurrentVehicleDisplayName());
+    DrawSummaryLine(x, width, lineY + 104, "Objet", CurrentObjectDisplayName());
+    DrawSummaryLine(x, width, lineY + 130, "Interieur", CurrentInteriorOption().DisplayName);
+    DrawSummaryLine(x, width, lineY + 156, "Comportement", NpcBehaviorDisplayName(_selectedBehavior));
+
+        string saveName = string.IsNullOrEmpty(_lastSaveFileName) ? "Aucun fichier" : _lastSaveFileName;
+
+        DrawText(
+            "Sauvegarde : " + FitText(saveName, 38),
+            x + 16,
+            y + height - 29,
+            0.255f,
+            Color.FromArgb(205, 205, 205),
+            false,
+            false);
+    }
+
+    private void DrawSummaryLine(int x, int width, int y, string label, string value)
+    {
+        DrawRect(x + 12, y, width - 24, 22, Color.FromArgb(85, 12, 12, 14));
+
+        DrawText(label, x + 20, y + 5, 0.245f, Color.FromArgb(180, 180, 180), false, false);
+        DrawText(FitText(value, 28), x + 126, y + 5, 0.245f, Color.FromArgb(235, 235, 235), false, false);
+    }
+
+    private Color GetMainMenuAccent(int index)
+    {
+        if (index <= 5)
+        {
+            return Color.FromArgb(230, 185, 32, 40);
+        }
+
+        if (index <= 9)
+        {
+            return Color.FromArgb(230, 70, 145, 220);
+        }
+
+        if (index <= 15)
+        {
+            return Color.FromArgb(230, 210, 158, 46);
+        }
+
+        if (index <= 19)
+        {
+            return Color.FromArgb(230, 80, 190, 120);
+        }
+
+        return Color.FromArgb(230, 210, 80, 80);
+    }
+
+    private void ChangeWeaponEditorValue(int direction)
+    {
+        switch (_weaponEditorIndex)
+        {
+            case 1:
+                ChangeWeaponPreset(direction);
+                break;
+
+            case 2:
+                _selectedWeaponLoadout.ExtendedClip = !_selectedWeaponLoadout.ExtendedClip;
+                _selectedWeaponLoadout.Preset = WeaponUpgradePreset.Standard;
+                RefreshPlacementPreviewWeapon();
+                break;
+
+            case 3:
+                _selectedWeaponLoadout.Suppressor = !_selectedWeaponLoadout.Suppressor;
+                _selectedWeaponLoadout.Preset = WeaponUpgradePreset.Standard;
+                RefreshPlacementPreviewWeapon();
+                break;
+
+            case 4:
+                _selectedWeaponLoadout.Flashlight = !_selectedWeaponLoadout.Flashlight;
+                _selectedWeaponLoadout.Preset = WeaponUpgradePreset.Standard;
+                RefreshPlacementPreviewWeapon();
+                break;
+
+            case 5:
+                _selectedWeaponLoadout.Grip = !_selectedWeaponLoadout.Grip;
+                _selectedWeaponLoadout.Preset = WeaponUpgradePreset.Standard;
+                RefreshPlacementPreviewWeapon();
+                break;
+
+            case 6:
+                _selectedWeaponLoadout.Scope = CycleEnum(_selectedWeaponLoadout.Scope, direction);
+                _selectedWeaponLoadout.Preset = WeaponUpgradePreset.Standard;
+                RefreshPlacementPreviewWeapon();
+                break;
+
+            case 7:
+                _selectedWeaponLoadout.Muzzle = !_selectedWeaponLoadout.Muzzle;
+                _selectedWeaponLoadout.Preset = WeaponUpgradePreset.Standard;
+                RefreshPlacementPreviewWeapon();
+                break;
+
+            case 8:
+                _selectedWeaponLoadout.ImprovedBarrel = !_selectedWeaponLoadout.ImprovedBarrel;
+                _selectedWeaponLoadout.Preset = WeaponUpgradePreset.Standard;
+                RefreshPlacementPreviewWeapon();
+                break;
+
+            case 9:
+                _selectedWeaponLoadout.Mk2Ammo = CycleEnum(_selectedWeaponLoadout.Mk2Ammo, direction);
+                _selectedWeaponLoadout.Preset = WeaponUpgradePreset.Standard;
+                RefreshPlacementPreviewWeapon();
+                break;
+
+            case 10:
+                _selectedWeaponLoadout.Tint = Clamp(_selectedWeaponLoadout.Tint + direction, 0, 31);
+                RefreshPlacementPreviewWeapon();
+                break;
+        }
+    }
+
+    private void ActivateWeaponEditorItem()
+    {
+        switch (_weaponEditorIndex)
+        {
+            case 0:
+                _menuPage = MenuPage.Main;
+                break;
+
+            case 11:
+                ApplySelectedWeaponLoadoutToSpawnedPeds();
+                break;
+        }
+    }
+
+    private void ChangeWeaponPreset(int direction)
+    {
+        _selectedWeaponLoadout.Preset = CycleEnum(_selectedWeaponLoadout.Preset, direction);
+        ApplyWeaponPreset(_selectedWeaponLoadout);
+        RefreshPlacementPreviewWeapon();
+    }
+
+    private static void ApplyWeaponPreset(WeaponLoadout loadout)
+    {
+        if (loadout == null)
+        {
+            return;
+        }
+
+        loadout.ExtendedClip = false;
+        loadout.Suppressor = false;
+        loadout.Flashlight = false;
+        loadout.Grip = false;
+        loadout.Scope = WeaponScopeMode.None;
+        loadout.Muzzle = false;
+        loadout.ImprovedBarrel = false;
+        loadout.Mk2Ammo = WeaponMk2AmmoMode.Standard;
+
+        switch (loadout.Preset)
+        {
+            case WeaponUpgradePreset.ChargeurEtendu:
+                loadout.ExtendedClip = true;
+                break;
+
+            case WeaponUpgradePreset.Silencieux:
+                loadout.ExtendedClip = true;
+                loadout.Suppressor = true;
+                break;
+
+            case WeaponUpgradePreset.Tactique:
+                loadout.ExtendedClip = true;
+                loadout.Suppressor = true;
+                loadout.Flashlight = true;
+                loadout.Grip = true;
+                loadout.Scope = WeaponScopeMode.Small;
+                break;
+
+            case WeaponUpgradePreset.Full:
+                loadout.ExtendedClip = true;
+                loadout.Suppressor = true;
+                loadout.Flashlight = true;
+                loadout.Grip = true;
+                loadout.Scope = WeaponScopeMode.Medium;
+                loadout.Muzzle = true;
+                loadout.ImprovedBarrel = true;
+                break;
+        }
+    }
+
+    private void ApplySelectedWeaponLoadoutToSpawnedPeds()
+    {
+        int updated = 0;
+
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            SpawnedNpc spawned = _spawnedNpcs[i];
+
+            if (spawned == null || !Entity.Exists(spawned.Ped) || spawned.Ped.IsDead)
+            {
+                continue;
+            }
+
+            spawned.Loadout = _selectedWeaponLoadout.Clone();
+            GiveWeaponLoadout(spawned.Ped, spawned.Loadout, false);
+            updated++;
+        }
+
+        ShowStatus("Arme mise a jour sur " + updated.ToString(CultureInfo.InvariantCulture) + " NPC.", 3500);
+    }
+
+    private void RefreshPlacementPreviewWeapon()
+    {
+        if (Entity.Exists(_placementPreviewPed))
+        {
+            GiveWeaponLoadout(_placementPreviewPed, _selectedWeaponLoadout, false);
+        }
+    }
+
+    private ModelCategory CurrentModelCategory()
+    {
+        if (_modelCategories.Count == 0)
+        {
+            return new ModelCategory { Name = "Aucune", Options = new List<ModelOption>() };
+        }
+
+        _selectedModelCategoryIndex = Clamp(_selectedModelCategoryIndex, 0, _modelCategories.Count - 1);
+        return _modelCategories[_selectedModelCategoryIndex];
+    }
+
+    private ModelOption CurrentModelOption()
+    {
+        ModelCategory category = CurrentModelCategory();
+
+        if (category.Options.Count == 0)
+        {
+            return _allModelOptions.Count > 0
+                ? _allModelOptions[0]
+                : new ModelOption { DisplayName = "Custom", IsCustom = true, Hash = 0 };
+        }
+
+        _selectedModelIndexInCategory = Wrap(_selectedModelIndexInCategory, category.Options.Count);
+        return category.Options[_selectedModelIndexInCategory];
+    }
+
+    private WeaponCategory CurrentWeaponCategory()
+    {
+        if (_weaponCategories.Count == 0)
+        {
+            return new WeaponCategory { Name = "Aucune", Options = new List<WeaponOption>() };
+        }
+
+        _selectedWeaponCategoryIndex = Clamp(_selectedWeaponCategoryIndex, 0, _weaponCategories.Count - 1);
+        return _weaponCategories[_selectedWeaponCategoryIndex];
+    }
+
+    private WeaponOption CurrentWeaponOption()
+    {
+        WeaponCategory category = CurrentWeaponCategory();
+
+        if (category.Options.Count == 0)
+        {
+            return _allWeaponOptions.Count > 0
+                ? _allWeaponOptions[0]
+                : new WeaponOption { DisplayName = "Unarmed", Hash = WeaponHash.Unarmed };
+        }
+
+        _selectedWeaponIndexInCategory = Wrap(_selectedWeaponIndexInCategory, category.Options.Count);
+        return category.Options[_selectedWeaponIndexInCategory];
+    }
+
+    private VehicleCategory CurrentVehicleCategory()
+    {
+        if (_vehicleCategories.Count == 0)
+        {
+            return new VehicleCategory { Name = "Aucune", Options = new List<VehicleOption>() };
+        }
+
+        _selectedVehicleCategoryIndex = Clamp(_selectedVehicleCategoryIndex, 0, _vehicleCategories.Count - 1);
+        return _vehicleCategories[_selectedVehicleCategoryIndex];
+    }
+
+    private VehicleOption CurrentVehicleOption()
+    {
+        VehicleCategory category = CurrentVehicleCategory();
+
+        if (category.Options.Count == 0)
+        {
+            return _allVehicleOptions.Count > 0
+                ? _allVehicleOptions[0]
+                : new VehicleOption { DisplayName = "Adder", Hash = VehicleHash.Adder };
+        }
+
+        _selectedVehicleIndexInCategory = Wrap(_selectedVehicleIndexInCategory, category.Options.Count);
+        return category.Options[_selectedVehicleIndexInCategory];
+    }
+
+    private ObjectCategory CurrentObjectCategory()
+    {
+        if (_objectCategories.Count == 0)
+        {
+            return new ObjectCategory { Name = "Aucune", Options = new List<ObjectOption>() };
+        }
+
+        _selectedObjectCategoryIndex = Clamp(_selectedObjectCategoryIndex, 0, _objectCategories.Count - 1);
+        return _objectCategories[_selectedObjectCategoryIndex];
+    }
+
+    private ObjectOption CurrentObjectOption()
+    {
+        ObjectCategory category = CurrentObjectCategory();
+
+        if (category.Options.Count == 0)
+        {
+            return _allObjectOptions.Count > 0
+                ? _allObjectOptions[0]
+                : new ObjectOption { DisplayName = "Cone orange", ModelName = "prop_mp_cone_01", Category = ObjectPlacementCategory.Securite };
+        }
+
+        _selectedObjectIndexInCategory = Wrap(_selectedObjectIndexInCategory, category.Options.Count);
+        return category.Options[_selectedObjectIndexInCategory];
+    }
+
+    private string CurrentModelDisplayName()
+    {
+        return CurrentModelOption().GetDisplayName(_customModelName);
+    }
+
+    private string CurrentWeaponDisplayName()
+    {
+        return CurrentWeaponOption().DisplayName;
+    }
+
+    private string CurrentVehicleDisplayName()
+    {
+        return CurrentVehicleOption().DisplayName;
+    }
+
+    private string CurrentObjectDisplayName()
+    {
+        return CurrentObjectOption().DisplayName;
+    }
+
+    private void ChangeModelCategory(int direction)
+    {
+        _selectedModelCategoryIndex = Wrap(_selectedModelCategoryIndex + direction, _modelCategories.Count);
+        _selectedModelIndexInCategory = 0;
+        DeletePlacementPreview();
+    }
+
+    private void ChangeModel(int direction)
+    {
+        ModelCategory category = CurrentModelCategory();
+
+        if (category.Options.Count == 0)
+        {
+            return;
+        }
+
+        _selectedModelIndexInCategory = Wrap(_selectedModelIndexInCategory + direction, category.Options.Count);
+        DeletePlacementPreview();
+    }
+
+    private void ChangeWeaponCategory(int direction)
+    {
+        _selectedWeaponCategoryIndex = Wrap(_selectedWeaponCategoryIndex + direction, _weaponCategories.Count);
+        _selectedWeaponIndexInCategory = 0;
+        OnSelectedWeaponChanged();
+    }
+
+    private void ChangeWeapon(int direction)
+    {
+        WeaponCategory category = CurrentWeaponCategory();
+
+        if (category.Options.Count == 0)
+        {
+            return;
+        }
+
+        _selectedWeaponIndexInCategory = Wrap(_selectedWeaponIndexInCategory + direction, category.Options.Count);
+        OnSelectedWeaponChanged();
+    }
+
+    private void ChangeVehicleCategory(int direction)
+    {
+        _selectedVehicleCategoryIndex = Wrap(_selectedVehicleCategoryIndex + direction, _vehicleCategories.Count);
+        _selectedVehicleIndexInCategory = 0;
+        DeletePlacementPreview();
+    }
+
+    private void ChangeVehicle(int direction)
+    {
+        VehicleCategory category = CurrentVehicleCategory();
+
+        if (category.Options.Count == 0)
+        {
+            return;
+        }
+
+        _selectedVehicleIndexInCategory = Wrap(_selectedVehicleIndexInCategory + direction, category.Options.Count);
+        DeletePlacementPreview();
+    }
+
+    private void ChangeObjectCategory(int direction)
+    {
+        _selectedObjectCategoryIndex = Wrap(_selectedObjectCategoryIndex + direction, _objectCategories.Count);
+        _selectedObjectIndexInCategory = 0;
+        DeletePlacementPreview();
+    }
+
+    private void ChangeObject(int direction)
+    {
+        ObjectCategory category = CurrentObjectCategory();
+
+        if (category.Options.Count == 0)
+        {
+            return;
+        }
+
+        _selectedObjectIndexInCategory = Wrap(_selectedObjectIndexInCategory + direction, category.Options.Count);
+        DeletePlacementPreview();
+    }
+
+    private void OnSelectedWeaponChanged()
+    {
+        _selectedWeaponLoadout.Weapon = CurrentWeaponOption().Hash;
+        RefreshPlacementPreviewWeapon();
+    }
+
+    private void SelectDefaultModel()
+    {
+        int securityCategory = FindCategoryIndex(_modelCategories, "Securite");
+        _selectedModelCategoryIndex = securityCategory >= 0 ? securityCategory : 0;
+
+        ModelCategory category = CurrentModelCategory();
+
+        int swat = category.Options.FindIndex(m =>
+            !m.IsCustom &&
+            string.Equals(m.DisplayName, "Swat01SMY", StringComparison.OrdinalIgnoreCase));
+
+        if (swat >= 0)
+        {
+            _selectedModelIndexInCategory = swat;
+            return;
+        }
+
+        int cop = category.Options.FindIndex(m =>
+            !m.IsCustom &&
+            m.DisplayName.IndexOf("Cop", StringComparison.OrdinalIgnoreCase) >= 0);
+
+        _selectedModelIndexInCategory = cop >= 0 ? cop : 0;
+    }
+
+    private void SelectDefaultWeapon()
+    {
+        int riflesCategory = FindCategoryIndex(_weaponCategories, "Fusils d'assaut");
+        _selectedWeaponCategoryIndex = riflesCategory >= 0 ? riflesCategory : 0;
+
+        WeaponCategory category = CurrentWeaponCategory();
+
+        int carbine = category.Options.FindIndex(w =>
+            string.Equals(w.DisplayName, "CarbineRifle", StringComparison.OrdinalIgnoreCase));
+
+        if (carbine >= 0)
+        {
+            _selectedWeaponIndexInCategory = carbine;
+            return;
+        }
+
+        int pistol = category.Options.FindIndex(w =>
+            string.Equals(w.DisplayName, "Pistol", StringComparison.OrdinalIgnoreCase));
+
+        _selectedWeaponIndexInCategory = pistol >= 0 ? pistol : 0;
+    }
+
+    private void SelectDefaultVehicle()
+    {
+        int sportCategory = FindCategoryIndex(_vehicleCategories, "Sport");
+        _selectedVehicleCategoryIndex = sportCategory >= 0 ? sportCategory : 0;
+        _selectedVehicleIndexInCategory = 0;
+    }
+
+    private void SelectDefaultObject()
+    {
+        int securityCategory = FindCategoryIndex(_objectCategories, "Securite");
+        _selectedObjectCategoryIndex = securityCategory >= 0 ? securityCategory : 0;
+        _selectedObjectIndexInCategory = 0;
+    }
+
+    private static int FindCategoryIndex<TCategory>(List<TCategory> categories, string name)
+    {
+        for (int i = 0; i < categories.Count; i++)
+        {
+            object category = categories[i];
+
+            ModelCategory modelCategory = category as ModelCategory;
+            if (modelCategory != null && modelCategory.Name.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0) return i;
+
+            WeaponCategory weaponCategory = category as WeaponCategory;
+            if (weaponCategory != null && weaponCategory.Name.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0) return i;
+
+            VehicleCategory vehicleCategory = category as VehicleCategory;
+            if (vehicleCategory != null && vehicleCategory.Name.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0) return i;
+
+            ObjectCategory objectCategory = category as ObjectCategory;
+            if (objectCategory != null && objectCategory.Name.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0) return i;
+        }
+
+        return -1;
+    }
+
+    private void EditCustomModelName()
+    {
+        _menuVisible = false;
+
+        string input = Game.GetUserInput(_customModelName, 64);
+
+        if (!string.IsNullOrWhiteSpace(input))
+        {
+            _customModelName = input.Trim();
+            SelectCustomModelCategory();
+            ShowStatus("Modele custom defini: " + _customModelName, 3500);
+        }
+        else
+        {
+            ShowStatus("Nom de modele custom ignore.", 2500);
+        }
+
+        _menuVisible = true;
+    }
+
+    private void SelectCustomModelCategory()
+    {
+        for (int i = 0; i < _modelCategories.Count; i++)
+        {
+            if (_modelCategories[i].Options.Any(o => o.IsCustom))
+            {
+                _selectedModelCategoryIndex = i;
+                _selectedModelIndexInCategory = _modelCategories[i].Options.FindIndex(o => o.IsCustom);
+                return;
+            }
+        }
+    }
+
+    private void QueueCurrentPlacementAtDistance()
+    {
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player) || player.IsDead)
+        {
+            ShowStatus("Impossible: joueur introuvable ou mort.", 3000);
+            return;
+        }
+
+        Vector3 spawnPosition = FindDistanceSpawnPosition(player);
+        QueueSpawn(_selectedPlacementType, spawnPosition, new Vector3(0.0f, 0.0f, 1.0f), false);
+    }
+
+    private void QueueSpawn(PlacementEntityType placementType, Vector3 position, Vector3 surfaceNormal, bool precise)
+    {
+        QueueSpawn(placementType, position, surfaceNormal, precise, false, 0.0f);
+    }
+
+    private void QueueSpawn(PlacementEntityType placementType, Vector3 position, Vector3 surfaceNormal, bool precise, bool hasHeadingOverride, float headingOverride)
+    {
+        _requestedPlacementType = placementType;
+        _requestedSpawnPosition = position;
+        _requestedSpawnSurfaceNormal = surfaceNormal;
+        _spawnRequestedPrecise = precise;
+        _requestedHasHeadingOverride = hasHeadingOverride;
+        _requestedSpawnHeading = headingOverride;
+        _spawnRequested = true;
+    }
+
+    private void ProcessPendingSpawn()
+    {
+        if (!_spawnRequested)
+        {
+            return;
+        }
+
+        _spawnRequested = false;
+
+        TrySpawnPlacement(
+            _requestedPlacementType,
+            _requestedSpawnPosition,
+            _requestedSpawnSurfaceNormal,
+            _spawnRequestedPrecise,
+            _requestedHasHeadingOverride,
+            _requestedSpawnHeading);
+    }
+
+    private bool TrySpawnPlacement(PlacementEntityType placementType, Vector3 requestedPosition, Vector3 surfaceNormal, bool precise, bool hasHeadingOverride, float headingOverride)
+    {
+        switch (placementType)
+        {
+            case PlacementEntityType.Vehicle:
+                return TrySpawnVehicle(requestedPosition, surfaceNormal, precise, hasHeadingOverride, headingOverride);
+
+            case PlacementEntityType.Object:
+                return TrySpawnObject(requestedPosition, surfaceNormal, precise, hasHeadingOverride, headingOverride);
+
+            case PlacementEntityType.Entrance:
+                return TryPlaceInteriorEntrance(requestedPosition, surfaceNormal, precise, hasHeadingOverride, headingOverride);
+
+            case PlacementEntityType.Exit:
+                return TryPlaceInteriorExit(requestedPosition, surfaceNormal, precise, hasHeadingOverride, headingOverride);
+
+            case PlacementEntityType.Npc:
+            default:
+                return TrySpawnNpc(requestedPosition, surfaceNormal, precise, hasHeadingOverride, headingOverride);
+        }
+    }
+
+    private bool TrySpawnNpc(Vector3 requestedPosition, Vector3 surfaceNormal, bool precise, bool hasHeadingOverride, float headingOverride)
+    {
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player) || player.IsDead)
+        {
+            ShowStatus("Spawn annule: joueur invalide.", 3000);
+            return false;
+        }
+
+        EnsureRelationshipGroups();
+
+        Vector3 spawnPosition = precise
+            ? AdjustNpcSpawnPosition(requestedPosition, surfaceNormal)
+            : AdjustDistanceSpawnPosition(requestedPosition);
+
+        float heading = hasHeadingOverride
+            ? NormalizeHeading(headingOverride)
+            : HeadingFromTo(spawnPosition, player.Position);
+
+        ModelIdentity modelIdentity = BuildCurrentModelIdentity();
+        WeaponLoadout loadout = _selectedWeaponLoadout.Clone();
+
+        Ped ped = CreatePedFromModelIdentity(modelIdentity, spawnPosition, heading);
+
+        if (!Entity.Exists(ped))
+        {
+            return false;
+        }
+
+        RegisterSpawnedNpc(
+            ped,
+            _selectedBehavior,
+            precise,
+            true,
+            modelIdentity,
+            loadout,
+            _selectedHealth,
+            _selectedArmor,
+            ped.Position,
+            heading,
+            _selectedPatrolRadius,
+            _selectedAutoRespawn);
+
+        return true;
+    }
+
+    private bool TrySpawnVehicle(Vector3 requestedPosition, Vector3 surfaceNormal, bool precise, bool hasHeadingOverride, float headingOverride)
+    {
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player))
+        {
+            ShowStatus("Placement vehicule annule: joueur invalide.", 3000);
+            return false;
+        }
+
+        Vector3 position = precise
+            ? AdjustVehicleSpawnPosition(requestedPosition, surfaceNormal)
+            : AdjustDistanceSpawnPosition(requestedPosition);
+
+        float heading = hasHeadingOverride
+            ? NormalizeHeading(headingOverride)
+            : HeadingFromTo(position, player.Position);
+
+        VehicleIdentity identity = BuildCurrentVehicleIdentity();
+        Vehicle vehicle = CreateVehicleFromIdentity(identity, position, heading);
+
+        if (!Entity.Exists(vehicle))
+        {
+            return false;
+        }
+
+        RegisterPlacedVehicle(vehicle, identity, position, heading, true, _selectedAutoRespawn);
+        return true;
+    }
+
+    private bool TrySpawnObject(Vector3 requestedPosition, Vector3 surfaceNormal, bool precise, bool hasHeadingOverride, float headingOverride)
+    {
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player))
+        {
+            ShowStatus("Placement objet annule: joueur invalide.", 3000);
+            return false;
+        }
+
+        Vector3 position = precise
+            ? AdjustObjectSpawnPosition(requestedPosition, surfaceNormal)
+            : AdjustDistanceSpawnPosition(requestedPosition);
+
+        float heading = hasHeadingOverride
+            ? NormalizeHeading(headingOverride)
+            : HeadingFromTo(position, player.Position);
+
+        ObjectIdentity identity = BuildCurrentObjectIdentity();
+        Prop prop = CreatePropFromIdentity(identity, position, heading);
+
+        if (!Entity.Exists(prop))
+        {
+            return false;
+        }
+
+        RegisterPlacedObject(prop, identity, position, heading, true, _selectedAutoRespawn);
+        return true;
+    }
+
+    private ModelIdentity BuildCurrentModelIdentity()
+    {
+        ModelOption option = CurrentModelOption();
+
+        if (option.IsCustom)
+        {
+            return new ModelIdentity
+            {
+                IsCustom = true,
+                Name = _customModelName,
+                Hash = 0,
+                DisplayName = "Custom: " + _customModelName
+            };
+        }
+
+        return new ModelIdentity
+        {
+            IsCustom = false,
+            Name = option.DisplayName,
+            Hash = option.Hash,
+            DisplayName = option.DisplayName
+        };
+    }
+
+    private VehicleIdentity BuildCurrentVehicleIdentity()
+    {
+        VehicleOption option = CurrentVehicleOption();
+
+        return new VehicleIdentity
+        {
+            Name = option.DisplayName,
+            Hash = EnumToIntHash(option.Hash),
+            DisplayName = option.DisplayName
+        };
+    }
+
+    private ObjectIdentity BuildCurrentObjectIdentity()
+    {
+        ObjectOption option = CurrentObjectOption();
+
+        return new ObjectIdentity
+        {
+            ModelName = option.ModelName,
+            DisplayName = option.DisplayName
+        };
+    }
+
+    private Ped CreatePedFromModelIdentity(ModelIdentity identity, Vector3 position, float heading)
+    {
+        if (identity == null)
+        {
+            ShowStatus("Spawn annule: modele manquant.", 3000);
+            return null;
+        }
+
+        Model model = identity.ToModel();
+
+        if (!model.IsValid || !model.IsInCdImage || !model.IsPed)
+        {
+            ShowStatus("Modele invalide ou non monte: " + identity.DisplayName, 5000);
+            return null;
+        }
+
+        if (!model.Request(2500))
+        {
+            ShowStatus("Chargement modele impossible: " + identity.DisplayName, 5000);
+            return null;
+        }
+
+        Ped ped = World.CreatePed(model, position, NormalizeHeading(heading));
+        model.MarkAsNoLongerNeeded();
+
+        if (!Entity.Exists(ped))
+        {
+            ShowStatus("Echec creation NPC: " + identity.DisplayName, 5000);
+            return null;
+        }
+
+        return ped;
+    }
+
+    private Vehicle CreateVehicleFromIdentity(VehicleIdentity identity, Vector3 position, float heading)
+    {
+        if (identity == null)
+        {
+            ShowStatus("Vehicule annule: modele manquant.", 3000);
+            return null;
+        }
+
+        Model model = identity.ToModel();
+
+        if (!model.IsValid || !model.IsInCdImage || !model.IsVehicle)
+        {
+            ShowStatus("Vehicule invalide ou non monte: " + identity.DisplayName, 5000);
+            return null;
+        }
+
+        if (!model.Request(2500))
+        {
+            ShowStatus("Chargement vehicule impossible: " + identity.DisplayName, 5000);
+            return null;
+        }
+
+        Vehicle vehicle = World.CreateVehicle(model, position, NormalizeHeading(heading));
+        model.MarkAsNoLongerNeeded();
+
+        if (!Entity.Exists(vehicle))
+        {
+            ShowStatus("Echec creation vehicule: " + identity.DisplayName, 5000);
+            return null;
+        }
+
+        return vehicle;
+    }
+
+    private Prop CreatePropFromIdentity(ObjectIdentity identity, Vector3 position, float heading)
+    {
+        if (identity == null || string.IsNullOrWhiteSpace(identity.ModelName))
+        {
+            ShowStatus("Objet annule: modele manquant.", 3000);
+            return null;
+        }
+
+        Model model = identity.ToModel();
+
+        if (!model.IsValid || !model.IsInCdImage)
+        {
+            ShowStatus("Objet invalide ou non monte: " + identity.DisplayName, 5000);
+            return null;
+        }
+
+        if (!model.Request(2500))
+        {
+            ShowStatus("Chargement objet impossible: " + identity.DisplayName, 5000);
+            return null;
+        }
+
+        Prop prop = World.CreateProp(model, position, false, false);
+        model.MarkAsNoLongerNeeded();
+
+        if (!Entity.Exists(prop))
+        {
+            ShowStatus("Echec creation objet: " + identity.DisplayName, 5000);
+            return null;
+        }
+
+        prop.Heading = NormalizeHeading(heading);
+        return prop;
+    }
+
+    private SpawnedNpc RegisterSpawnedNpc(
+        Ped ped,
+        NpcBehavior behavior,
+        bool precisePlacement,
+        bool showStatus,
+        ModelIdentity modelIdentity,
+        WeaponLoadout loadout,
+        int health,
+        int armor,
+        Vector3 homePosition,
+        float homeHeading,
+        float patrolRadius,
+        bool autoRespawn = false)
+    {
+        if (!Entity.Exists(ped))
+        {
+            return null;
+        }
+
+        EnsureRelationshipGroups();
+
+        ConfigureSpawnedPed(ped, behavior, health, armor, loadout);
+
+        if (!precisePlacement)
+        {
+            Function.Call((Hash)PlaceEntityOnGroundProperlyNative, ped.Handle);
+            homePosition = ped.Position;
+        }
+
+        SpawnedNpc spawned = new SpawnedNpc
+        {
+            Ped = ped,
+            Behavior = behavior,
+            BaseBehavior = behavior,
+            Activated = behavior == NpcBehavior.Attacker || behavior == NpcBehavior.HostilePatrol,
+            DeathAlerted = false,
+            NextThinkAt = GetInitialNpcThinkTime(),
+            NextPassiveTaskAt = GetInitialPassiveTaskTime(),
+            NextBlipRefreshAt = GetInitialNpcBlipRefreshTime(),
+            HomePosition = homePosition,
+            HomeHeading = NormalizeHeading(homeHeading),
+            LastCombatActivityAt = Game.GameTime,
+            IsReturningHome = false,
+            NextReturnTaskAt = 0,
+            PatrolCenter = homePosition,
+            PatrolRadius = ClampFloat(patrolRadius, MinPatrolRadius, MaxPatrolRadius),
+            PatrolTarget = Vector3.Zero,
+            NextPatrolTaskAt = 0,
+            NextBodyguardTaskAt = 0,
+            BodyguardAssignedVehicleHandle = 0,
+            BodyguardAssignedSeat = 999,
+            BodyguardIsDriver = false,
+            ModelIdentity = modelIdentity,
+            Loadout = loadout.Clone(),
+            SavedMaxHealth = health,
+            SavedArmor = armor,
+            AutoRespawn = autoRespawn,
+            RespawnPending = false,
+            RespawnEligibleAt = 0,
+            NextRespawnCheckAt = 0
+        };
+
+        _spawnedNpcs.Add(spawned);
+        CreateOrUpdateNpcBlip(spawned);
+
+        StartNpcRuntimeBehavior(spawned);
+
+        if (showStatus)
+        {
+            ShowStatus(
+                "NPC spawn: " + modelIdentity.DisplayName +
+                " | " + CurrentWeaponDisplayName() +
+                " | " + NpcBehaviorDisplayName(behavior) +
+                " | respawn " + BoolText(autoRespawn),
+                3500);
+        }
+
+        return spawned;
+    }
+
+    private PlacedVehicle RegisterPlacedVehicle(Vehicle vehicle, VehicleIdentity identity, Vector3 position, float heading, bool showStatus, bool autoRespawn = false)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return null;
+        }
+
+        ConfigurePlacedVehicleEntity(vehicle, heading);
+
+        PlacedVehicle placed = new PlacedVehicle
+        {
+            Vehicle = vehicle,
+            Identity = identity,
+            Position = vehicle.Position,
+            Heading = NormalizeHeading(vehicle.Heading),
+            RespawnPosition = position,
+            RespawnHeading = NormalizeHeading(heading),
+            AutoRespawn = autoRespawn,
+            RespawnPending = false,
+            RespawnEligibleAt = 0,
+            NextRespawnCheckAt = 0
+        };
+
+        _placedVehicles.Add(placed);
+        CreateOrUpdatePlacedVehicleBlip(placed);
+
+        if (showStatus)
+        {
+            ShowStatus("Vehicule place: " + identity.DisplayName + " | respawn " + BoolText(autoRespawn), 3500);
+        }
+
+        return placed;
+    }
+
+    private PlacedObject RegisterPlacedObject(Prop prop, ObjectIdentity identity, Vector3 position, float heading, bool showStatus, bool autoRespawn = false)
+    {
+        if (!Entity.Exists(prop))
+        {
+            return null;
+        }
+
+        ConfigurePlacedObjectEntity(prop, position, heading);
+
+        PlacedObject placed = new PlacedObject
+        {
+            Prop = prop,
+            Identity = identity,
+            Position = prop.Position,
+            Heading = NormalizeHeading(prop.Heading),
+            RespawnPosition = position,
+            RespawnHeading = NormalizeHeading(heading),
+            AutoRespawn = autoRespawn,
+            RespawnPending = false,
+            RespawnEligibleAt = 0,
+            NextRespawnCheckAt = 0
+        };
+
+        _placedObjects.Add(placed);
+
+        if (showStatus)
+        {
+            ShowStatus("Objet place: " + identity.DisplayName + " | respawn " + BoolText(autoRespawn), 3500);
+        }
+
+        return placed;
+    }
+
+    private void StartNpcRuntimeBehavior(SpawnedNpc spawned)
+    {
+        if (spawned == null || !Entity.Exists(spawned.Ped))
+        {
+            return;
+        }
+
+        switch (spawned.BaseBehavior)
+        {
+            case NpcBehavior.Attacker:
+                ActivateCombatAgainstBestTarget(spawned, false);
+                break;
+
+            case NpcBehavior.HostilePatrol:
+            case NpcBehavior.NeutralPatrol:
+            case NpcBehavior.AllyPatrol:
+                StartOrContinuePatrol(spawned, true);
+                break;
+
+            case NpcBehavior.Static:
+                HoldStaticPosition(spawned.Ped);
+                break;
+
+            case NpcBehavior.Neutral:
+                HoldGuardPosition(spawned.Ped);
+                break;
+
+            case NpcBehavior.Ally:
+                HoldAllyPosition(spawned.Ped);
+                break;
+
+            case NpcBehavior.Bodyguard:
+                UpdateBodyguard(spawned, Game.Player.Character);
+                break;
+        }
+    }
+
+    private void ConfigurePlacedVehicleEntity(Vehicle vehicle, float heading)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return;
+        }
+
+        vehicle.IsPersistent = true;
+        vehicle.Heading = NormalizeHeading(heading);
+
+        try
+        {
+            vehicle.Repair();
+            vehicle.EngineHealth = 1000.0f;
+            vehicle.BodyHealth = 1000.0f;
+            vehicle.PetrolTankHealth = 1000.0f;
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            Function.Call((Hash)PlaceEntityOnGroundProperlyNative, vehicle.Handle);
+            Function.Call(Hash.SET_ENTITY_AS_MISSION_ENTITY, vehicle.Handle, true, true);
+            Function.Call(Hash.SET_VEHICLE_DOORS_LOCKED, vehicle.Handle, 1);
+            Function.Call(Hash.SET_VEHICLE_ENGINE_ON, vehicle.Handle, false, true, false);
+            Function.Call(Hash.SET_VEHICLE_ON_GROUND_PROPERLY, vehicle.Handle);
+        }
+        catch
+        {
+        }
+    }
+
+    private void ConfigurePlacedObjectEntity(Prop prop, Vector3 position, float heading)
+    {
+        if (!Entity.Exists(prop))
+        {
+            return;
+        }
+
+        prop.IsPersistent = true;
+        prop.Position = position;
+        prop.Heading = NormalizeHeading(heading);
+
+        try
+        {
+            Function.Call(Hash.SET_ENTITY_AS_MISSION_ENTITY, prop.Handle, true, true);
+            Function.Call(Hash.SET_ENTITY_COLLISION, prop.Handle, true, true);
+            Function.Call(Hash.FREEZE_ENTITY_POSITION, prop.Handle, true);
+            Function.Call(Hash.SET_ENTITY_VISIBLE, prop.Handle, true, false);
+        }
+        catch
+        {
+        }
+    }
+
+    private void ConfigureSpawnedPed(Ped ped, NpcBehavior behavior, int health, int armor, WeaponLoadout loadout)
+    {
+        ped.IsPersistent = true;
+        ped.AlwaysKeepTask = true;
+
+        ped.BlockPermanentEvents =
+            behavior == NpcBehavior.Static ||
+            behavior == NpcBehavior.Neutral ||
+            behavior == NpcBehavior.NeutralPatrol;
+
+        ped.FreezePosition = false;
+        ped.IsInvincible = false;
+        ped.CanBeTargetted = true;
+
+        ped.MaxHealth = Clamp(health, MinHealth, MaxHealth);
+        ped.Health = Clamp(health, MinHealth, MaxHealth);
+        ped.Armor = Clamp(armor, MinArmor, MaxArmor);
+
+        ped.Accuracy = 50;
+        ped.ShootRate = 750;
+        ped.CanSwitchWeapons = true;
+        ped.CanRagdoll = true;
+        ped.IsEnemy = IsHostileBehavior(behavior);
+
+        Function.Call(Hash.RESET_ENTITY_ALPHA, ped.Handle);
+        Function.Call(Hash.SET_ENTITY_ALPHA, ped.Handle, 255, false);
+        Function.Call(Hash.SET_ENTITY_COLLISION, ped.Handle, true, true);
+        Function.Call(Hash.SET_ENTITY_INVINCIBLE, ped.Handle, false);
+        Function.Call(Hash.SET_PED_CAN_RAGDOLL, ped.Handle, true);
+        Function.Call(Hash.SET_ENTITY_VISIBLE, ped.Handle, true, false);
+
+        Function.Call(Hash.SET_PED_DROPS_WEAPONS_WHEN_DEAD, ped.Handle, false);
+        Function.Call(Hash.SET_PED_SUFFERS_CRITICAL_HITS, ped.Handle, true);
+
+        Function.Call(Hash.SET_PED_SEEING_RANGE, ped.Handle, 2500.0f);
+        Function.Call(Hash.SET_PED_HEARING_RANGE, ped.Handle, 2500.0f);
+        Function.Call(Hash.SET_PED_ALERTNESS, ped.Handle, 3);
+
+        Function.Call(Hash.SET_PED_FLEE_ATTRIBUTES, ped.Handle, 0, false);
+
+        Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped.Handle, 0, true);
+        Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped.Handle, 5, true);
+        Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped.Handle, 46, true);
+
+        Function.Call(Hash.SET_PED_COMBAT_ABILITY, ped.Handle, 2);
+        Function.Call(Hash.SET_PED_COMBAT_RANGE, ped.Handle, 2);
+        Function.Call(Hash.SET_PED_COMBAT_MOVEMENT, ped.Handle, behavior == NpcBehavior.Static ? 0 : 2);
+
+        Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, ped.Handle, GetRelationshipGroupForNpcBehavior(behavior));
+
+        GiveWeaponLoadout(ped, loadout, false);
+    }
+
+    private int GetRelationshipGroupForNpcBehavior(NpcBehavior behavior)
+    {
+        if (IsAllyBehavior(behavior))
+        {
+            return _allyGroupHash;
+        }
+
+        if (IsNeutralBehavior(behavior))
+        {
+            return _neutralGroupHash;
+        }
+
+        return _hostileGroupHash;
+    }
+
+    private Vector3 FindDistanceSpawnPosition(Ped player)
+    {
+        Vector3 forward = Normalize(player.ForwardVector);
+
+        if (forward.Length() < 0.001f)
+        {
+            forward = new Vector3(0.0f, 1.0f, 0.0f);
+        }
+
+        Vector3 desired = player.Position + forward * _selectedDistance;
+
+        Function.Call(Hash.REQUEST_COLLISION_AT_COORD, desired.X, desired.Y, desired.Z);
+
+        Vector3 safe = World.GetSafeCoordForPed(desired, false, 16);
+
+        if (!IsZeroVector(safe))
+        {
+            return safe;
+        }
+
+        Vector3 top = new Vector3(desired.X, desired.Y, desired.Z + 900.0f);
+        Vector3 bottom = new Vector3(desired.X, desired.Y, desired.Z - 250.0f);
+
+        RaycastResult ray = World.Raycast(top, bottom, IntersectOptions.Map, player);
+
+        if (ray.DitHitAnything)
+        {
+            return ray.HitCoords + new Vector3(0.0f, 0.0f, 1.0f);
+        }
+
+        float ground = World.GetGroundHeight(new Vector3(desired.X, desired.Y, desired.Z + 1000.0f));
+
+        if (Math.Abs(ground) > 0.001f)
+        {
+            desired.Z = ground + 1.0f;
+        }
+
+        return desired;
+    }
+
+    private Vector3 AdjustDistanceSpawnPosition(Vector3 requested)
+    {
+        Function.Call(Hash.REQUEST_COLLISION_AT_COORD, requested.X, requested.Y, requested.Z);
+
+        Vector3 safe = World.GetSafeCoordForPed(requested, false, 16);
+
+        if (!IsZeroVector(safe))
+        {
+            return safe;
+        }
+
+        return requested;
+    }
+
+    private Vector3 AdjustNpcSpawnPosition(Vector3 requested, Vector3 surfaceNormal)
+    {
+        Function.Call(Hash.REQUEST_COLLISION_AT_COORD, requested.X, requested.Y, requested.Z);
+
+        Vector3 normal = Normalize(surfaceNormal);
+
+        if (normal.Length() < 0.001f)
+        {
+            normal = new Vector3(0.0f, 0.0f, 1.0f);
+        }
+
+        if (normal.Z > 0.35f)
+        {
+            return requested + new Vector3(0.0f, 0.0f, 0.75f);
+        }
+
+        return requested + normal * 0.85f + new Vector3(0.0f, 0.0f, 0.35f);
+    }
+
+    private Vector3 AdjustVehicleSpawnPosition(Vector3 requested, Vector3 surfaceNormal)
+    {
+        Vector3 normal = Normalize(surfaceNormal);
+
+        if (normal.Length() < 0.001f)
+        {
+            normal = new Vector3(0.0f, 0.0f, 1.0f);
+        }
+
+        if (normal.Z > 0.35f)
+        {
+            return requested + new Vector3(0.0f, 0.0f, 0.35f);
+        }
+
+        return requested + normal * 0.85f + new Vector3(0.0f, 0.0f, 0.35f);
+    }
+
+    private Vector3 AdjustObjectSpawnPosition(Vector3 requested, Vector3 surfaceNormal)
+    {
+        Vector3 normal = Normalize(surfaceNormal);
+
+        if (normal.Length() < 0.001f)
+        {
+            normal = new Vector3(0.0f, 0.0f, 1.0f);
+        }
+
+        if (normal.Z > 0.35f)
+        {
+            return requested + new Vector3(0.0f, 0.0f, 0.05f);
+        }
+
+        return requested + normal * 0.25f;
+    }
+
+    private void CleanAllSpawnedNpcs()
+    {
+        int deleted = 0;
+
+        DeletePlacementPreview();
+
+        for (int i = _spawnedNpcs.Count - 1; i >= 0; i--)
+        {
+            SpawnedNpc spawned = _spawnedNpcs[i];
+
+            RemoveNpcBlip(spawned);
+
+            if (spawned != null && Entity.Exists(spawned.Ped))
+            {
+                try
+                {
+                    spawned.Ped.Delete();
+                    deleted++;
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        _spawnedNpcs.Clear();
+
+        ShowStatus("Nettoyage NPC: " + deleted.ToString(CultureInfo.InvariantCulture) + " supprime(s).", 4500);
+    }
+
+    private void CleanAllPlacedVehicles()
+    {
+        int deleted = 0;
+
+        DeletePlacementPreview();
+
+        for (int i = _placedVehicles.Count - 1; i >= 0; i--)
+        {
+            PlacedVehicle placed = _placedVehicles[i];
+
+            RemovePlacedVehicleBlip(placed);
+
+            if (placed != null && Entity.Exists(placed.Vehicle))
+            {
+                try
+                {
+                    placed.Vehicle.Delete();
+                    deleted++;
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        _placedVehicles.Clear();
+
+        ShowStatus("Nettoyage vehicules: " + deleted.ToString(CultureInfo.InvariantCulture) + " supprime(s).", 4500);
+    }
+
+    private void CleanAllPlacedObjects()
+    {
+        int deleted = 0;
+
+        DeletePlacementPreview();
+
+        for (int i = _placedObjects.Count - 1; i >= 0; i--)
+        {
+            PlacedObject placed = _placedObjects[i];
+
+            if (placed != null && Entity.Exists(placed.Prop))
+            {
+                try
+                {
+                    placed.Prop.Delete();
+                    deleted++;
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        _placedObjects.Clear();
+
+        ShowStatus("Nettoyage objets: " + deleted.ToString(CultureInfo.InvariantCulture) + " supprime(s).", 4500);
+    }
+
+    private void GiveWeaponLoadout(Ped ped, WeaponLoadout loadout, bool showErrors)
+    {
+        if (!Entity.Exists(ped) || loadout == null)
+        {
+            return;
+        }
+
+        try
+        {
+            ped.Weapons.RemoveAll();
+
+            if (loadout.Weapon == WeaponHash.Unarmed)
+            {
+                ped.Weapons.Select(WeaponHash.Unarmed);
+                return;
+            }
+
+            ped.Weapons.Give(loadout.Weapon, Math.Max(loadout.Ammo, 1), true, true);
+            ped.Weapons.Select(loadout.Weapon, true);
+
+            ApplyWeaponComponents(ped, loadout);
+            ApplyWeaponTint(ped, loadout);
+        }
+        catch (Exception ex)
+        {
+            ped.Weapons.Select(WeaponHash.Unarmed);
+
+            if (showErrors)
+            {
+                ShowStatus("Arme non compatible: " + ex.Message, 4000);
+            }
+        }
+    }
+
+    private void ApplyWeaponComponents(Ped ped, WeaponLoadout loadout)
+    {
+        if (!Entity.Exists(ped) || loadout == null || loadout.Weapon == WeaponHash.Unarmed)
+        {
+            return;
+        }
+
+        string weaponName = loadout.Weapon.ToString();
+
+        if (loadout.Mk2Ammo != WeaponMk2AmmoMode.Standard)
+        {
+            TryGiveFirstCompatibleComponent(ped, loadout.Weapon, Mk2AmmoComponentCandidates(weaponName, loadout.Mk2Ammo));
+        }
+        else if (loadout.ExtendedClip)
+        {
+            TryGiveFirstCompatibleComponent(ped, loadout.Weapon, ExtendedClipCandidates(weaponName));
+        }
+
+        if (loadout.Suppressor)
+        {
+            TryGiveFirstCompatibleComponent(ped, loadout.Weapon, new[]
+            {
+                "AtPiSupp", "AtPiSupp02", "AtSrSupp", "AtSrSupp03",
+                "AtArSupp", "AtArSupp02", "CeramicPistolSupp"
+            });
+        }
+
+        if (loadout.Flashlight)
+        {
+            TryGiveFirstCompatibleComponent(ped, loadout.Weapon, new[]
+            {
+                "AtPiFlsh", "AtPiFlsh02", "AtPiFlsh03", "AtArFlsh", "AtArFlshReh"
+            });
+        }
+
+        if (loadout.Grip)
+        {
+            TryGiveFirstCompatibleComponent(ped, loadout.Weapon, new[] { "AtArAfGrip", "AtArAfGrip02" });
+        }
+
+        if (loadout.Scope != WeaponScopeMode.None)
+        {
+            TryGiveFirstCompatibleComponent(ped, loadout.Weapon, ScopeCandidates(loadout.Scope));
+        }
+
+        if (loadout.Muzzle)
+        {
+            TryGiveFirstCompatibleComponent(ped, loadout.Weapon, new[]
+            {
+                "AtPiComp", "AtPiComp02", "AtPiComp03",
+                "AtMuzzle01", "AtMuzzle02", "AtMuzzle03", "AtMuzzle04", "AtMuzzle05",
+                "AtMuzzle06", "AtMuzzle07", "AtMuzzle08", "AtMuzzle09"
+            });
+        }
+
+        if (loadout.ImprovedBarrel)
+        {
+            TryGiveFirstCompatibleComponent(ped, loadout.Weapon, new[]
+            {
+                "AtArBarrel02", "AtBpBarrel02", "AtCrBarrel02", "AtMGBarrel02",
+                "AtMrFlBarrel02", "AtSbBarrel02", "AtScBarrel02", "AtSrBarrel02"
+            });
+        }
+    }
+
+    private void ApplyWeaponTint(Ped ped, WeaponLoadout loadout)
+    {
+        if (!Entity.Exists(ped) || loadout == null || loadout.Weapon == WeaponHash.Unarmed)
+        {
+            return;
+        }
+
+        int weaponHash = EnumToIntHash(loadout.Weapon);
+        int tintCount = 32;
+
+        try
+        {
+            tintCount = Function.Call<int>(Hash.GET_WEAPON_TINT_COUNT, weaponHash);
+        }
+        catch
+        {
+        }
+
+        int tint = Clamp(loadout.Tint, 0, Math.Max(0, tintCount - 1));
+
+        try
+        {
+            Function.Call(Hash.SET_PED_WEAPON_TINT_INDEX, ped.Handle, weaponHash, tint);
+        }
+        catch
+        {
+        }
+    }
+
+    private bool TryGiveFirstCompatibleComponent(Ped ped, WeaponHash weapon, IEnumerable<string> componentNames)
+    {
+        foreach (string componentName in componentNames)
+        {
+            if (TryGiveWeaponComponent(ped, weapon, componentName))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryGiveWeaponComponent(Ped ped, WeaponHash weapon, string componentEnumName)
+    {
+        if (!Entity.Exists(ped) || string.IsNullOrWhiteSpace(componentEnumName))
+        {
+            return false;
+        }
+
+        int componentHash;
+
+        if (!TryGetWeaponComponentHash(componentEnumName, out componentHash))
+        {
+            return false;
+        }
+
+        int weaponHash = EnumToIntHash(weapon);
+
+        try
+        {
+            bool compatible = Function.Call<bool>(
+                Hash.DOES_WEAPON_TAKE_WEAPON_COMPONENT,
+                weaponHash,
+                componentHash);
+
+            if (!compatible)
+            {
+                return false;
+            }
+
+            Function.Call(
+                Hash.GIVE_WEAPON_COMPONENT_TO_PED,
+                ped.Handle,
+                weaponHash,
+                componentHash);
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool TryGetWeaponComponentHash(string enumName, out int hash)
+    {
+        hash = 0;
+
+        try
+        {
+            Type type = GetWeaponComponentHashType();
+
+            if (type == null)
+            {
+                return false;
+            }
+
+            object value = Enum.Parse(type, enumName, false);
+            hash = EnumToIntHash((Enum)value);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static Type GetWeaponComponentHashType()
+    {
+        if (_weaponComponentHashType != null)
+        {
+            return _weaponComponentHashType;
+        }
+
+        Assembly gtaAssembly = typeof(WeaponHash).Assembly;
+        _weaponComponentHashType = gtaAssembly.GetType("GTA.WeaponComponentHash", false);
+
+        return _weaponComponentHashType;
+    }
+
+    private static IEnumerable<string> ExtendedClipCandidates(string weaponName)
+    {
+        return new[]
+        {
+            weaponName + "Clip03",
+            weaponName + "Clip02",
+            weaponName + "Clip01"
+        };
+    }
+
+    private static IEnumerable<string> Mk2AmmoComponentCandidates(string weaponName, WeaponMk2AmmoMode ammoMode)
+    {
+        string suffix;
+
+        switch (ammoMode)
+        {
+            case WeaponMk2AmmoMode.Tracer:
+                suffix = "ClipTracer";
+                break;
+
+            case WeaponMk2AmmoMode.Incendiary:
+                suffix = "ClipIncendiary";
+                break;
+
+            case WeaponMk2AmmoMode.ArmorPiercing:
+                suffix = "ClipArmorPiercing";
+                break;
+
+            case WeaponMk2AmmoMode.FMJ:
+                suffix = "ClipFMJ";
+                break;
+
+            case WeaponMk2AmmoMode.Explosive:
+                suffix = "ClipExplosive";
+                break;
+
+            default:
+                suffix = "Clip01";
+                break;
+        }
+
+        return new[]
+        {
+            weaponName + suffix,
+            weaponName + "Clip02",
+            weaponName + "Clip01"
+        };
+    }
+
+    private static IEnumerable<string> ScopeCandidates(WeaponScopeMode scope)
+    {
+        switch (scope)
+        {
+            case WeaponScopeMode.Small:
+                return new[]
+                {
+                    "AtSights", "AtSightsSMG",
+                    "AtScopeSmall", "AtScopeSmall02", "AtScopeSmallMk2", "AtScopeSmallSMGMk2",
+                    "AtScopeMacro", "AtScopeMacro02", "AtScopeMacroMk2", "AtScopeMacro02SMGMk2"
+                };
+
+            case WeaponScopeMode.Medium:
+                return new[]
+                {
+                    "AtScopeMedium", "AtScopeMediumMk2",
+                    "AtScopeSmall", "AtScopeSmall02", "AtScopeMacro", "AtScopeMacro02"
+                };
+
+            case WeaponScopeMode.Large:
+                return new[]
+                {
+                    "AtScopeLarge", "AtScopeLargeMk2", "AtScopeLargeFixedZoom",
+                    "AtScopeLargeFixedZoomMk2", "AtScopeMax", "AtScopeNV", "AtScopeThermal",
+                    "AtScopeMedium", "AtScopeMediumMk2"
+                };
+
+            default:
+                return new string[0];
+        }
+    }
+
+    private void InitializeRelationshipGroups()
+    {
+        _hostileGroupHash = World.AddRelationshipGroup("DONJ_ENEMY_HOSTILE");
+        _neutralGroupHash = World.AddRelationshipGroup("DONJ_ENEMY_NEUTRAL");
+        _allyGroupHash = World.AddRelationshipGroup("DONJ_PLAYER_ALLY");
+
+        _lastKnownPlayerGroupHash = GetPlayerRelationshipGroup();
+
+        ApplyRelationshipRules();
+    }
+
+    private void EnsureRelationshipGroups()
+    {
+        if (_hostileGroupHash == 0)
+        {
+            _hostileGroupHash = World.AddRelationshipGroup("DONJ_ENEMY_HOSTILE");
+        }
+
+        if (_neutralGroupHash == 0)
+        {
+            _neutralGroupHash = World.AddRelationshipGroup("DONJ_ENEMY_NEUTRAL");
+        }
+
+        if (_allyGroupHash == 0)
+        {
+            _allyGroupHash = World.AddRelationshipGroup("DONJ_PLAYER_ALLY");
+        }
+
+        int playerGroup = GetPlayerRelationshipGroup();
+
+        if (playerGroup != 0 && playerGroup != _lastKnownPlayerGroupHash)
+        {
+            _lastKnownPlayerGroupHash = playerGroup;
+        }
+
+        ApplyRelationshipRules();
+    }
+
+    private void RefreshPlayerRelationshipIfNeeded()
+    {
+        if (Game.GameTime < _nextRelationshipRefreshAt)
+        {
+            return;
+        }
+
+        _nextRelationshipRefreshAt = Game.GameTime + 3000;
+        EnsureRelationshipGroups();
+    }
+
+    private int GetPlayerRelationshipGroup()
+    {
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player))
+        {
+            return 0;
+        }
+
+        return Function.Call<int>(Hash.GET_PED_RELATIONSHIP_GROUP_HASH, player.Handle);
+    }
+
+    private int GetPedRelationshipGroup(Ped ped)
+    {
+        if (!Entity.Exists(ped))
+        {
+            return 0;
+        }
+
+        return Function.Call<int>(Hash.GET_PED_RELATIONSHIP_GROUP_HASH, ped.Handle);
+    }
+
+    private void ApplyRelationshipRules()
+    {
+        if (_hostileGroupHash == 0 || _neutralGroupHash == 0 || _allyGroupHash == 0 || _lastKnownPlayerGroupHash == 0)
+        {
+            return;
+        }
+
+        SetRelationshipBothWays((Relationship)RelationshipCompanion, _hostileGroupHash, _hostileGroupHash);
+        SetRelationshipBothWays((Relationship)RelationshipCompanion, _neutralGroupHash, _neutralGroupHash);
+        SetRelationshipBothWays((Relationship)RelationshipCompanion, _hostileGroupHash, _neutralGroupHash);
+
+        SetRelationshipBothWays((Relationship)RelationshipCompanion, _allyGroupHash, _allyGroupHash);
+        SetRelationshipBothWays((Relationship)RelationshipCompanion, _allyGroupHash, _lastKnownPlayerGroupHash);
+
+        SetRelationshipBothWays((Relationship)RelationshipHate, _hostileGroupHash, _lastKnownPlayerGroupHash);
+        SetRelationshipBothWays((Relationship)RelationshipHate, _hostileGroupHash, _allyGroupHash);
+
+        SetRelationshipBothWays((Relationship)RelationshipNeutral, _neutralGroupHash, _lastKnownPlayerGroupHash);
+        SetRelationshipBothWays((Relationship)RelationshipNeutral, _neutralGroupHash, _allyGroupHash);
+
+        /*
+         * Je neutralise defensivement les groupes ambiants proteges pour eviter
+         * qu'un ancien combat laisse une haine globale durable contre eux.
+         */
+        ResetAllyRelationsWithProtectedAmbientGroups();
+    }
+
+    private static void SetRelationshipBothWays(Relationship relationship, int groupA, int groupB)
+    {
+        World.SetRelationshipBetweenGroups(relationship, groupA, groupB);
+        World.SetRelationshipBetweenGroups(relationship, groupB, groupA);
+    }
+
+    private static HashSet<int> BuildProtectedAmbientRelationshipGroups()
+    {
+        HashSet<int> groups = new HashSet<int>();
+
+        string[] names = new[]
+        {
+            "CIVMALE",
+            "CIVFEMALE",
+            "FIREMAN",
+            "MEDIC",
+            "COP",
+            "SECURITY_GUARD",
+            "PRIVATE_SECURITY",
+            "ARMY",
+            "PLAYER",
+            "PLAYER_1",
+            "PLAYER_2",
+            "PLAYER_3",
+            "PLAYER_4",
+            "PLAYER_5",
+            "PLAYER_6",
+            "PLAYER_7",
+            "PLAYER_8",
+            "NO_RELATIONSHIP"
+        };
+
+        for (int i = 0; i < names.Length; i++)
+        {
+            AddRelationshipGroupHash(groups, names[i]);
+        }
+
+        return groups;
+    }
+
+    private static void AddRelationshipGroupHash(HashSet<int> groups, string name)
+    {
+        if (groups == null || string.IsNullOrEmpty(name))
+        {
+            return;
+        }
+
+        try
+        {
+            int hash = Game.GenerateHash(name);
+
+            if (hash != 0)
+            {
+                groups.Add(hash);
+            }
+        }
+        catch
+        {
+            /*
+             * Je ne laisse jamais un groupe manquant casser le mod.
+             */
+        }
+    }
+
+    private void ResetAllyRelationsWithProtectedAmbientGroups()
+    {
+        if (_allyGroupHash == 0 || ProtectedAmbientRelationshipGroups == null)
+        {
+            return;
+        }
+
+        foreach (int protectedGroup in ProtectedAmbientRelationshipGroups)
+        {
+            if (protectedGroup == 0 ||
+                protectedGroup == _allyGroupHash ||
+                protectedGroup == _hostileGroupHash ||
+                protectedGroup == _neutralGroupHash ||
+                protectedGroup == _lastKnownPlayerGroupHash)
+            {
+                continue;
+            }
+
+            try
+            {
+                SetRelationshipBothWays((Relationship)RelationshipNeutral, _allyGroupHash, protectedGroup);
+            }
+            catch
+            {
+                /*
+                 * Je garde cet echec sans impact parce qu'un groupe absent
+                 * ou non initialise ne doit jamais casser le mod.
+                 */
+            }
+        }
+    }
+
+    private bool IsProtectedAmbientRelationshipGroup(int group)
+    {
+        if (group == 0 || group == _allyGroupHash || group == _neutralGroupHash || group == _lastKnownPlayerGroupHash)
+        {
+            return true;
+        }
+
+        return ProtectedAmbientRelationshipGroups != null && ProtectedAmbientRelationshipGroups.Contains(group);
+    }
+
+    private bool ShouldUseGroupHostilityForThreat(Ped threat, int targetGroup)
+    {
+        if (!Entity.Exists(threat) || targetGroup == 0 || targetGroup == _allyGroupHash)
+        {
+            return false;
+        }
+
+        if (targetGroup == _hostileGroupHash)
+        {
+            return true;
+        }
+
+        if (IsProtectedAmbientRelationshipGroup(targetGroup))
+        {
+            return false;
+        }
+
+        return false;
+    }
+
+    private bool HasHostileRelationshipToProtectedPed(Ped candidate, Ped protectedPed)
+    {
+        if (!Entity.Exists(candidate) || !Entity.Exists(protectedPed))
+        {
+            return false;
+        }
+
+        try
+        {
+            int relationship = (int)candidate.GetRelationshipWithPed(protectedPed);
+            return relationship == RelationshipHate || relationship == RelationshipDislike;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool HasDefensiveDamageAgainstProtectedPed(Ped candidate, Ped protectedPed)
+    {
+        if (!Entity.Exists(candidate) || !Entity.Exists(protectedPed))
+        {
+            return false;
+        }
+
+        if (!protectedPed.HasBeenDamagedBy(candidate))
+        {
+            return false;
+        }
+
+        int group = GetPedRelationshipGroup(candidate);
+
+        if (!IsProtectedAmbientRelationshipGroup(group))
+        {
+            return true;
+        }
+
+        if (IsPedInCombatWith(candidate, protectedPed))
+        {
+            return true;
+        }
+
+        if (HasHostileRelationshipToProtectedPed(candidate, protectedPed))
+        {
+            return true;
+        }
+
+        return IsPedShooting(candidate) &&
+               candidate.Position.DistanceTo(protectedPed.Position) <= AllyShotThreatDistance;
+    }
+
+    private bool HasHostileRelationshipToAnyManagedAlly(Ped candidate)
+    {
+        if (!Entity.Exists(candidate))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            SpawnedNpc ally = _spawnedNpcs[i];
+
+            if (ally == null ||
+                !IsAllyBehavior(ally.BaseBehavior) ||
+                !Entity.Exists(ally.Ped) ||
+                ally.Ped.IsDead)
+            {
+                continue;
+            }
+
+            if (HasHostileRelationshipToProtectedPed(candidate, ally.Ped))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void UpdateNpcs()
+    {
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player))
+        {
+            return;
+        }
+
+        int now = Game.GameTime;
+        int brainsBudget = MaxNpcBrainsPerTick;
+        int blipBudget = MaxNpcBlipRefreshPerTick;
+
+        for (int i = _spawnedNpcs.Count - 1; i >= 0; i--)
+        {
+            SpawnedNpc npc = _spawnedNpcs[i];
+
+            if (npc == null)
+            {
+                _spawnedNpcs.RemoveAt(i);
+                continue;
+            }
+
+            if (npc.RespawnPending)
+            {
+                TryProcessNpcAutoRespawn(npc, player);
+                continue;
+            }
+
+            if (!Entity.Exists(npc.Ped))
+            {
+                RemoveNpcBlip(npc);
+
+                if (npc.AutoRespawn)
+                {
+                    MarkNpcForAutoRespawn(npc);
+                    TryProcessNpcAutoRespawn(npc, player);
+                }
+                else
+                {
+                    _spawnedNpcs.RemoveAt(i);
+                }
+
+                continue;
+            }
+
+            if (npc.Ped.IsDead)
+            {
+                HandleDeadNpc(npc, player);
+                RemoveNpcBlip(npc);
+
+                if (npc.AutoRespawn)
+                {
+                    MarkNpcForAutoRespawn(npc);
+                }
+
+                continue;
+            }
+
+            RefreshNpcBlipIfNeeded(npc, now, ref blipBudget);
+
+            if (now < npc.NextThinkAt)
+            {
+                continue;
+            }
+
+            if (brainsBudget <= 0)
+            {
+                /*
+                 * On ne repousse pas NextThinkAt : les PNJ restants seront
+                 * traites sur les frames suivantes. Cela etale la charge sans
+                 * rendre l'IA aveugle.
+                 */
+                continue;
+            }
+
+            brainsBudget--;
+            npc.NextThinkAt = GetNextNpcThinkTime();
+
+            switch (npc.Behavior)
+            {
+                case NpcBehavior.Attacker:
+                    UpdateAttacker(npc, player);
+                    break;
+
+                case NpcBehavior.Static:
+                    UpdateStatic(npc, player);
+                    break;
+
+                case NpcBehavior.Neutral:
+                    UpdateNeutral(npc, player);
+                    break;
+
+                case NpcBehavior.Ally:
+                    UpdateAlly(npc, player);
+                    break;
+
+                case NpcBehavior.Bodyguard:
+                    UpdateBodyguard(npc, player);
+                    break;
+
+                case NpcBehavior.NeutralPatrol:
+                    UpdateNeutralPatrol(npc, player);
+                    break;
+
+                case NpcBehavior.HostilePatrol:
+                    UpdateHostilePatrol(npc, player);
+                    break;
+
+                case NpcBehavior.AllyPatrol:
+                    UpdateAllyPatrol(npc, player);
+                    break;
+            }
+        }
+    }
+
+    private int GetInitialNpcThinkTime()
+    {
+        return Game.GameTime + _random.Next(80, ThinkIntervalMs + NpcThinkJitterMs + 1);
+    }
+
+    private int GetNextNpcThinkTime()
+    {
+        return Game.GameTime + ThinkIntervalMs + _random.Next(0, NpcThinkJitterMs + 1);
+    }
+
+    private int GetInitialPassiveTaskTime()
+    {
+        return Game.GameTime + _random.Next(0, PassiveHoldRefreshMs + PassiveHoldJitterMs + 1);
+    }
+
+    private int GetNextPassiveTaskTime()
+    {
+        return Game.GameTime + PassiveHoldRefreshMs + _random.Next(0, PassiveHoldJitterMs + 1);
+    }
+
+    private int GetInitialNpcBlipRefreshTime()
+    {
+        return Game.GameTime + _random.Next(0, NpcBlipRefreshIntervalMs + NpcBlipRefreshJitterMs + 1);
+    }
+
+    private int GetNextNpcBlipRefreshTime()
+    {
+        return Game.GameTime + NpcBlipRefreshIntervalMs + _random.Next(0, NpcBlipRefreshJitterMs + 1);
+    }
+
+    private void RefreshNpcBlipIfNeeded(SpawnedNpc npc, int now, ref int blipBudget)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+        {
+            RemoveNpcBlip(npc);
+            return;
+        }
+
+        bool missingBlip = npc.Blip == null || !npc.Blip.Exists();
+
+        if (!missingBlip && now < npc.NextBlipRefreshAt)
+        {
+            return;
+        }
+
+        if (!missingBlip && blipBudget <= 0)
+        {
+            return;
+        }
+
+        if (!missingBlip)
+        {
+            blipBudget--;
+        }
+
+        npc.NextBlipRefreshAt = GetNextNpcBlipRefreshTime();
+        CreateOrUpdateNpcBlip(npc);
+    }
+
+    private void MarkNpcForAutoRespawn(SpawnedNpc npc)
+    {
+        if (npc == null || !npc.AutoRespawn || npc.RespawnPending)
+        {
+            return;
+        }
+
+        npc.RespawnPending = true;
+        npc.RespawnEligibleAt = Game.GameTime + AutoRespawnMinDelayMs;
+        npc.NextRespawnCheckAt = Game.GameTime + _random.Next(0, AutoRespawnCheckIntervalMs + 1);
+        RemoveNpcBlip(npc);
+    }
+
+    private void MarkPlacedVehicleForAutoRespawn(PlacedVehicle placed)
+    {
+        if (placed == null || !placed.AutoRespawn || placed.RespawnPending)
+        {
+            return;
+        }
+
+        placed.RespawnPending = true;
+        placed.RespawnEligibleAt = Game.GameTime + AutoRespawnMinDelayMs;
+        placed.NextRespawnCheckAt = Game.GameTime + _random.Next(0, AutoRespawnCheckIntervalMs + 1);
+        RemovePlacedVehicleBlip(placed);
+    }
+
+    private void MarkPlacedObjectForAutoRespawn(PlacedObject placed)
+    {
+        if (placed == null || !placed.AutoRespawn || placed.RespawnPending)
+        {
+            return;
+        }
+
+        placed.RespawnPending = true;
+        placed.RespawnEligibleAt = Game.GameTime + AutoRespawnMinDelayMs;
+        placed.NextRespawnCheckAt = Game.GameTime + _random.Next(0, AutoRespawnCheckIntervalMs + 1);
+    }
+
+    private bool TryProcessNpcAutoRespawn(SpawnedNpc npc, Ped player)
+    {
+        if (npc == null || !npc.AutoRespawn || !npc.RespawnPending)
+        {
+            return false;
+        }
+
+        if (Game.GameTime < npc.NextRespawnCheckAt)
+        {
+            return false;
+        }
+
+        npc.NextRespawnCheckAt = Game.GameTime + AutoRespawnCheckIntervalMs;
+
+        if (!CanAutoRespawnAt(player, npc.HomePosition, npc.Ped, npc.RespawnEligibleAt))
+        {
+            return false;
+        }
+
+        DeleteEntitySafe(npc.Ped);
+        RemoveNpcBlip(npc);
+
+        Ped ped = CreatePedFromModelIdentity(npc.ModelIdentity, npc.HomePosition, npc.HomeHeading);
+
+        if (!Entity.Exists(ped))
+        {
+            npc.RespawnEligibleAt = Game.GameTime + AutoRespawnRetryDelayMs;
+            return false;
+        }
+
+        npc.Ped = ped;
+        ResetNpcRuntimeAfterAutoRespawn(npc);
+        CreateOrUpdateNpcBlip(npc);
+        StartNpcRuntimeBehavior(npc);
+        _autoRespawnsThisTick++;
+        return true;
+    }
+
+    private bool TryProcessPlacedVehicleAutoRespawn(PlacedVehicle placed, Ped player)
+    {
+        if (placed == null || !placed.AutoRespawn || !placed.RespawnPending)
+        {
+            return false;
+        }
+
+        if (Game.GameTime < placed.NextRespawnCheckAt)
+        {
+            return false;
+        }
+
+        placed.NextRespawnCheckAt = Game.GameTime + AutoRespawnCheckIntervalMs;
+
+        if (!CanAutoRespawnAt(player, placed.RespawnPosition, placed.Vehicle, placed.RespawnEligibleAt))
+        {
+            return false;
+        }
+
+        DeleteEntitySafe(placed.Vehicle);
+        RemovePlacedVehicleBlip(placed);
+
+        Vehicle vehicle = CreateVehicleFromIdentity(placed.Identity, placed.RespawnPosition, placed.RespawnHeading);
+
+        if (!Entity.Exists(vehicle))
+        {
+            placed.RespawnEligibleAt = Game.GameTime + AutoRespawnRetryDelayMs;
+            return false;
+        }
+
+        ConfigurePlacedVehicleEntity(vehicle, placed.RespawnHeading);
+
+        placed.Vehicle = vehicle;
+        placed.Position = vehicle.Position;
+        placed.Heading = NormalizeHeading(vehicle.Heading);
+        placed.RespawnPending = false;
+        placed.RespawnEligibleAt = 0;
+        placed.NextRespawnCheckAt = 0;
+
+        CreateOrUpdatePlacedVehicleBlip(placed);
+        _autoRespawnsThisTick++;
+        return true;
+    }
+
+    private bool TryProcessPlacedObjectAutoRespawn(PlacedObject placed, Ped player)
+    {
+        if (placed == null || !placed.AutoRespawn || !placed.RespawnPending)
+        {
+            return false;
+        }
+
+        if (Game.GameTime < placed.NextRespawnCheckAt)
+        {
+            return false;
+        }
+
+        placed.NextRespawnCheckAt = Game.GameTime + AutoRespawnCheckIntervalMs;
+
+        if (!CanAutoRespawnAt(player, placed.RespawnPosition, placed.Prop, placed.RespawnEligibleAt))
+        {
+            return false;
+        }
+
+        DeleteEntitySafe(placed.Prop);
+
+        Prop prop = CreatePropFromIdentity(placed.Identity, placed.RespawnPosition, placed.RespawnHeading);
+
+        if (!Entity.Exists(prop))
+        {
+            placed.RespawnEligibleAt = Game.GameTime + AutoRespawnRetryDelayMs;
+            return false;
+        }
+
+        ConfigurePlacedObjectEntity(prop, placed.RespawnPosition, placed.RespawnHeading);
+
+        placed.Prop = prop;
+        placed.Position = prop.Position;
+        placed.Heading = NormalizeHeading(prop.Heading);
+        placed.RespawnPending = false;
+        placed.RespawnEligibleAt = 0;
+        placed.NextRespawnCheckAt = 0;
+
+        _autoRespawnsThisTick++;
+        return true;
+    }
+
+    private void ResetNpcRuntimeAfterAutoRespawn(SpawnedNpc npc)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped))
+        {
+            return;
+        }
+
+        WeaponLoadout loadout = npc.Loadout ?? _selectedWeaponLoadout.Clone();
+
+        npc.Behavior = npc.BaseBehavior;
+        npc.Activated = npc.BaseBehavior == NpcBehavior.Attacker || npc.BaseBehavior == NpcBehavior.HostilePatrol;
+        npc.DeathAlerted = false;
+        npc.NextThinkAt = GetInitialNpcThinkTime();
+        npc.NextPassiveTaskAt = GetInitialPassiveTaskTime();
+        npc.NextBlipRefreshAt = GetInitialNpcBlipRefreshTime();
+        npc.LastCombatActivityAt = Game.GameTime;
+        npc.IsReturningHome = false;
+        npc.NextReturnTaskAt = 0;
+        npc.PatrolCenter = npc.HomePosition;
+        npc.PatrolTarget = Vector3.Zero;
+        npc.NextPatrolTaskAt = 0;
+        npc.NextBodyguardTaskAt = 0;
+        npc.BodyguardAssignedVehicleHandle = 0;
+        npc.BodyguardAssignedSeat = 999;
+        npc.BodyguardIsDriver = false;
+        npc.RespawnPending = false;
+        npc.RespawnEligibleAt = 0;
+        npc.NextRespawnCheckAt = 0;
+        npc.Loadout = loadout;
+
+        ConfigureSpawnedPed(npc.Ped, npc.BaseBehavior, npc.SavedMaxHealth, npc.SavedArmor, loadout);
+        npc.Ped.Position = npc.HomePosition;
+        npc.Ped.Heading = NormalizeHeading(npc.HomeHeading);
+    }
+
+    private bool CanAutoRespawnAt(Ped player, Vector3 spawnPosition, Entity oldEntity, int eligibleAt)
+    {
+        if (_autoRespawnsThisTick >= AutoRespawnMaxPerTick)
+        {
+            return false;
+        }
+
+        if (!Entity.Exists(player) || Game.GameTime < eligibleAt)
+        {
+            return false;
+        }
+
+        float distance = player.Position.DistanceTo(spawnPosition);
+
+        if (distance < AutoRespawnNearSafetyDistance || distance < AutoRespawnLeaveDistance)
+        {
+            return false;
+        }
+
+        if (Entity.Exists(oldEntity) && IsEntityLikelyVisibleToPlayer(oldEntity))
+        {
+            return false;
+        }
+
+        if (IsPointInPlayerView(player, spawnPosition) && distance < AutoRespawnLeaveDistance + 80.0f)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsPlacedVehicleDestroyed(PlacedVehicle placed)
+    {
+        if (placed == null || !Entity.Exists(placed.Vehicle))
+        {
+            return true;
+        }
+
+        try
+        {
+            if (placed.Vehicle.IsDead)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            if (!placed.Vehicle.IsDriveable)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            if (placed.Vehicle.EngineHealth <= -350.0f || placed.Vehicle.PetrolTankHealth <= -350.0f)
+            {
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        return false;
+    }
+
+    private static bool IsPlacedObjectDestroyed(PlacedObject placed)
+    {
+        if (placed == null || !Entity.Exists(placed.Prop))
+        {
+            return true;
+        }
+
+        try
+        {
+            return placed.Prop.IsDead;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void HandleDeadNpc(SpawnedNpc npc, Ped player)
+    {
+        if (npc.DeathAlerted)
+        {
+            return;
+        }
+
+        npc.DeathAlerted = true;
+
+        if (IsNeutralBehavior(npc.BaseBehavior) && npc.Ped.HasBeenDamagedBy(player))
+        {
+            AlertNearbyNeutralGuards(npc.Ped.Position, player, npc.Ped);
+            return;
+        }
+
+        if (IsAllyBehavior(npc.BaseBehavior))
+        {
+            Ped threat = FindDamagingPedForVictim(npc.Ped, npc.Ped.Position, RuntimeAllyDefenseRadius);
+
+            if (Entity.Exists(threat))
+            {
+                AlertAlliesToThreat(threat, npc.Ped.Position);
+            }
+        }
+    }
+
+    private void UpdateAttacker(SpawnedNpc npc, Ped player)
+    {
+        if (npc.IsReturningHome)
+        {
+            if (HasGuardCombatActivity(npc, player))
+            {
+                CancelReturnHome(npc);
+            }
+            else
+            {
+                UpdateReturnHome(npc);
+                return;
+            }
+        }
+
+        if (ShouldReturnToPostAfterCalm(npc, player))
+        {
+            BeginReturnHome(npc);
+            UpdateReturnHome(npc);
+            return;
+        }
+
+        Ped target = FindHostileTargetForEnemy(npc.Ped, player);
+
+        if (Entity.Exists(target))
+        {
+            if (HasCombatActivityWithTarget(npc.Ped, target, 160.0f))
+            {
+                MarkCombatActivity(npc);
+            }
+
+            ActivateCombatAgainstTarget(npc, target, false);
+        }
+        else if (IsPatrolBehavior(npc.BaseBehavior))
+        {
+            npc.Behavior = npc.BaseBehavior;
+            StartOrContinuePatrol(npc, false);
+        }
+    }
+
+    private void UpdateStatic(SpawnedNpc npc, Ped player)
+    {
+        if (CanPedSeeEntity(npc.Ped, player, StaticSightDistance))
+        {
+            MarkCombatActivity(npc);
+            ActivateCombatAgainstTarget(npc, player, true);
+            return;
+        }
+
+        if (!npc.Activated)
+        {
+            HoldStaticPositionThrottled(npc, player);
+        }
+    }
+
+    private void UpdateNeutral(SpawnedNpc npc, Ped player)
+    {
+        Vector3 eventPosition;
+        Entity witnessedEntity;
+
+        if (npc.IsReturningHome)
+        {
+            if (TryGetPlayerProvocationAgainstNeutralGuard(npc.Ped, player, out eventPosition, out witnessedEntity))
+            {
+                CancelReturnHome(npc);
+                ConvertNeutralToHostile(npc, player);
+                AlertNearbyNeutralGuards(eventPosition, player, witnessedEntity);
+                return;
+            }
+
+            UpdateReturnHome(npc);
+            return;
+        }
+
+        if (TryGetPlayerProvocationAgainstNeutralGuard(npc.Ped, player, out eventPosition, out witnessedEntity))
+        {
+            ConvertNeutralToHostile(npc, player);
+            AlertNearbyNeutralGuards(eventPosition, player, witnessedEntity);
+            return;
+        }
+
+        HoldGuardPositionThrottled(npc);
+    }
+
+    private void UpdateAlly(SpawnedNpc ally, Ped player)
+    {
+        if (ally.IsReturningHome)
+        {
+            Ped returningThreat = FindThreatForAlly(ally.Ped, player);
+
+            if (Entity.Exists(returningThreat))
+            {
+                CancelReturnHome(ally);
+                AlertAlliesToThreat(returningThreat, ally.Ped.Position);
+                return;
+            }
+
+            UpdateReturnHome(ally);
+            return;
+        }
+
+        Ped threat = FindThreatForAlly(ally.Ped, player);
+
+        if (Entity.Exists(threat))
+        {
+            MarkCombatActivity(ally);
+            AlertAlliesToThreat(threat, ally.Ped.Position);
+            return;
+        }
+
+        if (ally.Activated && Game.GameTime - ally.LastCombatActivityAt >= GuardReturnDelayMs)
+        {
+            BeginReturnHome(ally);
+            UpdateReturnHome(ally);
+            return;
+        }
+
+        HoldAllyPositionThrottled(ally);
+    }
+
+    private void UpdateNeutralPatrol(SpawnedNpc npc, Ped player)
+    {
+        Vector3 eventPosition;
+        Entity witnessedEntity;
+
+        if (npc.IsReturningHome)
+        {
+            if (TryGetPlayerProvocationAgainstNeutralGuard(npc.Ped, player, out eventPosition, out witnessedEntity))
+            {
+                CancelReturnHome(npc);
+                ConvertNeutralToHostile(npc, player);
+                AlertNearbyNeutralGuards(eventPosition, player, witnessedEntity);
+                return;
+            }
+
+            UpdateReturnHome(npc);
+            return;
+        }
+
+        if (TryGetPlayerProvocationAgainstNeutralGuard(npc.Ped, player, out eventPosition, out witnessedEntity))
+        {
+            ConvertNeutralToHostile(npc, player);
+            AlertNearbyNeutralGuards(eventPosition, player, witnessedEntity);
+            return;
+        }
+
+        StartOrContinuePatrol(npc, false);
+    }
+
+    private void UpdateHostilePatrol(SpawnedNpc npc, Ped player)
+    {
+        if (npc.IsReturningHome)
+        {
+            if (HasGuardCombatActivity(npc, player))
+            {
+                CancelReturnHome(npc);
+            }
+            else
+            {
+                UpdateReturnHome(npc);
+                return;
+            }
+        }
+
+        Ped target = FindHostileTargetForEnemy(npc.Ped, player);
+
+        if (Entity.Exists(target) && CanPedSeeEntity(npc.Ped, target, StaticSightDistance))
+        {
+            MarkCombatActivity(npc);
+            ActivateCombatAgainstTarget(npc, target, false);
+            return;
+        }
+
+        if (npc.Activated && Game.GameTime - npc.LastCombatActivityAt >= GuardReturnDelayMs)
+        {
+            BeginReturnHome(npc);
+            UpdateReturnHome(npc);
+            return;
+        }
+
+        StartOrContinuePatrol(npc, false);
+    }
+
+    private void UpdateAllyPatrol(SpawnedNpc ally, Ped player)
+    {
+        if (ally.IsReturningHome)
+        {
+            Ped returningThreat = FindThreatForAlly(ally.Ped, player);
+
+            if (Entity.Exists(returningThreat))
+            {
+                CancelReturnHome(ally);
+                AlertAlliesToThreat(returningThreat, ally.Ped.Position);
+                return;
+            }
+
+            UpdateReturnHome(ally);
+            return;
+        }
+
+        Ped threat = FindThreatForAlly(ally.Ped, player);
+
+        if (Entity.Exists(threat))
+        {
+            MarkCombatActivity(ally);
+            AlertAlliesToThreat(threat, ally.Ped.Position);
+            return;
+        }
+
+        if (ally.Activated && Game.GameTime - ally.LastCombatActivityAt >= GuardReturnDelayMs)
+        {
+            BeginReturnHome(ally);
+            UpdateReturnHome(ally);
+            return;
+        }
+
+        StartOrContinuePatrol(ally, false);
+    }
+
+    private void UpdateBodyguard(SpawnedNpc bodyguard, Ped player)
+    {
+        if (bodyguard == null || !Entity.Exists(bodyguard.Ped) || !Entity.Exists(player))
+        {
+            return;
+        }
+
+        /*
+         * Les gardes Cartel ont une couche IA dédiée plus bas dans le fichier
+         * (UpdateCartelConvoyState / MaintainCartelTeamWeaponsAndDrivers).
+         *
+         * Important perf : avant, chaque garde Cartel passait aussi par
+         * FindThreatForAlly(), qui lance des scans World.GetNearbyPeds autour
+         * du joueur et autour du garde. Avec 11 gardes, cela créait une salve
+         * de scans synchronisés toutes les ~700 ms, visible comme une micro
+         * coupure régulière dès que l'équipe Cartel était présente.
+         *
+         * On court-circuite donc uniquement les gardes Cartel actifs ici :
+         * ils restent entretenus légèrement, mais la détection de menace et les
+         * ordres de convoi restent centralisés dans la couche Cartel optimisée.
+         */
+        if (_cartelNpcHandles.Contains(bodyguard.Ped.Handle))
+        {
+            UpdateCartelBodyguardFromGenericPass(bodyguard);
+            return;
+        }
+
+        Ped threat = FindThreatForAlly(bodyguard.Ped, player);
+
+        if (Entity.Exists(threat))
+        {
+            MarkCombatActivity(bodyguard);
+            AlertAlliesToThreat(threat, bodyguard.Ped.Position);
+            return;
+        }
+
+        /*
+         * Je garde le bodyguard sous controle script quand il n'y a pas de
+         * menace reelle, pour eviter qu'il parte regler des evenements ambiants.
+         */
+        bodyguard.Ped.IsEnemy = false;
+        bodyguard.Ped.BlockPermanentEvents = true;
+        Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, bodyguard.Ped.Handle, _allyGroupHash);
+
+        if (Game.GameTime < bodyguard.NextBodyguardTaskAt)
+        {
+            return;
+        }
+
+        bodyguard.NextBodyguardTaskAt = Game.GameTime + BodyguardRetaskMs;
+
+        if (player.IsInVehicle())
+        {
+            ManageBodyguardVehicleFollow(bodyguard, player);
+        }
+        else
+        {
+            ManageBodyguardFootFollow(bodyguard, player);
+        }
+    }
+
+    private void UpdateCartelBodyguardFromGenericPass(SpawnedNpc bodyguard)
+    {
+        if (bodyguard == null || !Entity.Exists(bodyguard.Ped) || bodyguard.Ped.IsDead)
+        {
+            return;
+        }
+
+        /*
+         * Cette méthode est volontairement légère : elle ne scanne pas le monde,
+         * ne cherche pas de véhicule, et ne renvoie pas d'ordre de conduite.
+         * Le Cartel possède déjà sa propre boucle centralisée pour ça.
+         */
+        bodyguard.BaseBehavior = NpcBehavior.Bodyguard;
+        bodyguard.Behavior = NpcBehavior.Bodyguard;
+        bodyguard.Activated = false;
+        bodyguard.IsReturningHome = false;
+
+        if (!ShouldRunCartelGuardPassiveMaintenance(bodyguard.Ped, false))
+        {
+            return;
+        }
+
+        MaintainCartelGuardPassiveState(bodyguard, false);
+    }
+
+    private void UpdatePlayerHostilityMemory(Ped player)
+    {
+        if (!Entity.Exists(player) || player.IsDead || _placementMode)
+        {
+            return;
+        }
+
+        int now = Game.GameTime;
+
+        /*
+         * Le tir est volontairement teste a chaque tick: avec un intervalle de
+         * reflexion NPC de 700 ms, un coup de feu unique peut sinon etre rate.
+         */
+        if (IsPedShooting(player))
+        {
+            _lastPlayerGunfireAt = now;
+            _lastPlayerGunfirePosition = player.Position;
+
+            Vector3 impactPosition;
+
+            if (TryGetLastWeaponImpactPosition(player, out impactPosition))
+            {
+                _lastPlayerGunfireImpactAt = now;
+                _lastPlayerGunfireImpactPosition = impactPosition;
+            }
+        }
+
+        if (now < _nextPlayerHostilityScanAt)
+        {
+            return;
+        }
+
+        _nextPlayerHostilityScanAt = now + PlayerHostilityScanIntervalMs;
+
+        if (IsPedInMeleeCombatSafe(player))
+        {
+            _lastPlayerMeleeHostilityAt = now;
+            _lastPlayerMeleeHostilityPosition = player.Position;
+        }
+    }
+
+    private bool TryGetPlayerProvocationAgainstNeutralGuard(Ped guard, Ped player, out Vector3 eventPosition, out Entity witnessedEntity)
+    {
+        eventPosition = Entity.Exists(guard) ? guard.Position : Vector3.Zero;
+        witnessedEntity = guard;
+
+        if (!Entity.Exists(guard) || !Entity.Exists(player))
+        {
+            return false;
+        }
+
+        if (guard.HasBeenDamagedBy(player) || HasEntityBeenDamagedByEntitySafe(guard, player))
+        {
+            eventPosition = guard.Position;
+            witnessedEntity = guard;
+            return true;
+        }
+
+        if (HasRecentPlayerGunfireNearGuard(guard, player, out eventPosition))
+        {
+            witnessedEntity = player;
+            return true;
+        }
+
+        if (DidPlayerAttackSomeoneOrSomethingNearGuard(guard, player, out eventPosition, out witnessedEntity))
+        {
+            return true;
+        }
+
+        if (HasRecentPlayerMeleeNearGuard(guard, player, out eventPosition))
+        {
+            witnessedEntity = player;
+            return true;
+        }
+
+        bool freeAiming = Function.Call<bool>(
+            Hash.IS_PLAYER_FREE_AIMING_AT_ENTITY,
+            Game.Player.Handle,
+            guard.Handle);
+
+        if (freeAiming)
+        {
+            eventPosition = guard.Position;
+            witnessedEntity = guard;
+            return true;
+        }
+
+        bool targeting = Function.Call<bool>(
+            Hash.IS_PLAYER_TARGETTING_ENTITY,
+            Game.Player.Handle,
+            guard.Handle);
+
+        if (targeting)
+        {
+            eventPosition = guard.Position;
+            witnessedEntity = guard;
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool HasPlayerProvokedNeutralGuard(Ped guard, Ped player)
+    {
+        Vector3 eventPosition;
+        Entity witnessedEntity;
+
+        return TryGetPlayerProvocationAgainstNeutralGuard(guard, player, out eventPosition, out witnessedEntity);
+    }
+
+    private bool HasRecentPlayerGunfireNearGuard(Ped guard, Ped player, out Vector3 eventPosition)
+    {
+        eventPosition = Entity.Exists(guard) ? guard.Position : Vector3.Zero;
+
+        if (!Entity.Exists(guard) || !Entity.Exists(player))
+        {
+            return false;
+        }
+
+        if (IsPlayerBulletCurrentlyNearPed(guard, NeutralBulletWhizReactionDistance))
+        {
+            eventPosition = guard.Position;
+            return true;
+        }
+
+        if (!HasRecentGameTime(_lastPlayerGunfireAt, PlayerHostilityMemoryMs))
+        {
+            return false;
+        }
+
+        if (!IsZeroVector(_lastPlayerGunfirePosition) &&
+            guard.Position.DistanceTo(_lastPlayerGunfirePosition) <= NeutralShotReactionDistance)
+        {
+            eventPosition = _lastPlayerGunfirePosition;
+            return true;
+        }
+
+        if (HasRecentGameTime(_lastPlayerGunfireImpactAt, PlayerHostilityMemoryMs) &&
+            !IsZeroVector(_lastPlayerGunfireImpactPosition) &&
+            guard.Position.DistanceTo(_lastPlayerGunfireImpactPosition) <= NeutralBulletImpactReactionDistance)
+        {
+            eventPosition = _lastPlayerGunfireImpactPosition;
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool HasRecentPlayerMeleeNearGuard(Ped guard, Ped player, out Vector3 eventPosition)
+    {
+        eventPosition = Entity.Exists(player) ? player.Position : Vector3.Zero;
+
+        if (!Entity.Exists(guard) || !Entity.Exists(player))
+        {
+            return false;
+        }
+
+        if (!HasRecentGameTime(_lastPlayerMeleeHostilityAt, PlayerHostilityMemoryMs))
+        {
+            return false;
+        }
+
+        Vector3 hostilityPosition = IsZeroVector(_lastPlayerMeleeHostilityPosition)
+            ? player.Position
+            : _lastPlayerMeleeHostilityPosition;
+
+        if (guard.Position.DistanceTo(hostilityPosition) > NeutralMeleeReactionDistance)
+        {
+            return false;
+        }
+
+        if (guard.Position.DistanceTo(player.Position) <= 16.0f ||
+            CanPedSeeEntity(guard, player, NeutralWitnessDistance))
+        {
+            eventPosition = hostilityPosition;
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool DidPlayerAttackSomeoneOrSomethingNearGuard(Ped guard, Ped player)
+    {
+        Vector3 eventPosition;
+        Entity witnessedEntity;
+
+        return DidPlayerAttackSomeoneOrSomethingNearGuard(guard, player, out eventPosition, out witnessedEntity);
+    }
+
+    private bool DidPlayerAttackSomeoneOrSomethingNearGuard(Ped guard, Ped player, out Vector3 eventPosition, out Entity witnessedEntity)
+    {
+        eventPosition = Entity.Exists(guard) ? guard.Position : Vector3.Zero;
+        witnessedEntity = null;
+
+        if (!Entity.Exists(guard) || !Entity.Exists(player))
+        {
+            return false;
+        }
+
+        bool recentGunOrMelee =
+            HasRecentGameTime(_lastPlayerGunfireAt, PlayerHostilityMemoryMs) ||
+            HasRecentGameTime(_lastPlayerMeleeHostilityAt, PlayerHostilityMemoryMs);
+
+        Ped[] nearbyPeds = GetNearbyPedsSafe(guard, NeutralNearbyAttackReactionDistance);
+
+        for (int i = 0; i < nearbyPeds.Length; i++)
+        {
+            Ped candidate = nearbyPeds[i];
+
+            if (!Entity.Exists(candidate) || candidate.IsDead)
+            {
+                continue;
+            }
+
+            if (candidate.Handle == guard.Handle || candidate.Handle == player.Handle)
+            {
+                continue;
+            }
+
+            if (Entity.Exists(_placementPreviewPed) && candidate.Handle == _placementPreviewPed.Handle)
+            {
+                continue;
+            }
+
+            bool damagedByPlayer = recentGunOrMelee &&
+                                   (candidate.HasBeenDamagedBy(player) || HasEntityBeenDamagedByEntitySafe(candidate, player));
+            bool hitByPlayerVehicle = IsPlayerVehicleAggressionAgainstEntity(player, candidate);
+
+            if (!damagedByPlayer && !hitByPlayerVehicle)
+            {
+                continue;
+            }
+
+            if (!CanGuardWitnessAttackOnEntity(guard, candidate, player))
+            {
+                continue;
+            }
+
+            eventPosition = candidate.Position;
+            witnessedEntity = candidate;
+            return true;
+        }
+
+        Vehicle currentPlayerVehicle = player.IsInVehicle() ? player.CurrentVehicle : null;
+        Vehicle[] nearbyVehicles = GetNearbyVehiclesSafe(guard, NeutralNearbyVehicleAttackReactionDistance);
+
+        for (int i = 0; i < nearbyVehicles.Length; i++)
+        {
+            Vehicle vehicle = nearbyVehicles[i];
+
+            if (!Entity.Exists(vehicle))
+            {
+                continue;
+            }
+
+            if (Entity.Exists(currentPlayerVehicle) && vehicle.Handle == currentPlayerVehicle.Handle)
+            {
+                continue;
+            }
+
+            bool damagedByPlayer = recentGunOrMelee && HasEntityBeenDamagedByEntitySafe(vehicle, player);
+            bool hitByPlayerVehicle = IsPlayerVehicleAggressionAgainstEntity(player, vehicle);
+
+            if (!damagedByPlayer && !hitByPlayerVehicle)
+            {
+                continue;
+            }
+
+            if (!CanGuardWitnessAttackOnEntity(guard, vehicle, player))
+            {
+                continue;
+            }
+
+            eventPosition = vehicle.Position;
+            witnessedEntity = vehicle;
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool CanGuardWitnessAttackOnEntity(Ped guard, Entity witnessedEntity, Ped player)
+    {
+        if (!Entity.Exists(guard) || !Entity.Exists(witnessedEntity))
+        {
+            return false;
+        }
+
+        float distanceToVictim = guard.Position.DistanceTo(witnessedEntity.Position);
+
+        if (distanceToVictim <= 20.0f)
+        {
+            return true;
+        }
+
+        if (CanPedSeeEntity(guard, witnessedEntity, NeutralWitnessDistance))
+        {
+            return true;
+        }
+
+        return Entity.Exists(player) &&
+               distanceToVictim <= 35.0f &&
+               CanPedSeeEntity(guard, player, NeutralWitnessDistance);
+    }
+
+    private bool IsPlayerBulletCurrentlyNearPed(Ped ped, float radius)
+    {
+        if (!Entity.Exists(ped))
+        {
+            return false;
+        }
+
+        try
+        {
+            return Function.Call<bool>(
+                Hash.IS_BULLET_IN_AREA,
+                ped.Position.X,
+                ped.Position.Y,
+                ped.Position.Z,
+                radius,
+                true);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool TryGetLastWeaponImpactPosition(Ped ped, out Vector3 impactPosition)
+    {
+        impactPosition = Vector3.Zero;
+
+        if (!Entity.Exists(ped))
+        {
+            return false;
+        }
+
+        try
+        {
+            OutputArgument outPosition = new OutputArgument();
+
+            bool found = Function.Call<bool>(
+                Hash.GET_PED_LAST_WEAPON_IMPACT_COORD,
+                ped.Handle,
+                outPosition);
+
+            if (!found)
+            {
+                return false;
+            }
+
+            impactPosition = outPosition.GetResult<Vector3>();
+            return !IsZeroVector(impactPosition);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsPedInMeleeCombatSafe(Ped ped)
+    {
+        if (!Entity.Exists(ped))
+        {
+            return false;
+        }
+
+        try
+        {
+            return Function.Call<bool>(Hash.IS_PED_IN_MELEE_COMBAT, ped.Handle);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool HasEntityBeenDamagedByEntitySafe(Entity victim, Entity attacker)
+    {
+        if (!Entity.Exists(victim) || !Entity.Exists(attacker))
+        {
+            return false;
+        }
+
+        try
+        {
+            return Function.Call<bool>(
+                Hash.HAS_ENTITY_BEEN_DAMAGED_BY_ENTITY,
+                victim.Handle,
+                attacker.Handle,
+                true);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool IsPlayerVehicleAggressionAgainstEntity(Ped player, Entity victim)
+    {
+        if (!Entity.Exists(player) || !Entity.Exists(victim) || !player.IsInVehicle())
+        {
+            return false;
+        }
+
+        Vehicle playerVehicle = player.CurrentVehicle;
+
+        if (!Entity.Exists(playerVehicle) || playerVehicle.Handle == victim.Handle)
+        {
+            return false;
+        }
+
+        if (playerVehicle.Speed < PlayerVehicleHostilityMinSpeed)
+        {
+            return false;
+        }
+
+        if (!HasEntityBeenDamagedByEntitySafe(victim, playerVehicle))
+        {
+            return false;
+        }
+
+        return playerVehicle.Position.DistanceTo(victim.Position) <= 12.0f ||
+               AreEntitiesTouching(playerVehicle, victim);
+    }
+
+    private static bool AreEntitiesTouching(Entity first, Entity second)
+    {
+        if (!Entity.Exists(first) || !Entity.Exists(second))
+        {
+            return false;
+        }
+
+        try
+        {
+            return Function.Call<bool>(Hash.IS_ENTITY_TOUCHING_ENTITY, first.Handle, second.Handle);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool HasRecentGameTime(int timestamp, int memoryMs)
+    {
+        return timestamp > 0 && Game.GameTime - timestamp <= memoryMs;
+    }
+
+    private void AlertNearbyNeutralGuards(Vector3 eventPosition, Ped player, Entity witnessedEntity)
+    {
+        int converted = 0;
+
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            SpawnedNpc candidate = _spawnedNpcs[i];
+
+            if (candidate == null ||
+                !IsNeutralBehavior(candidate.BaseBehavior) ||
+                !Entity.Exists(candidate.Ped) ||
+                candidate.Ped.IsDead)
+            {
+                continue;
+            }
+
+            if (!IsNeutralBehavior(candidate.Behavior) && candidate.Behavior != NpcBehavior.Attacker)
+            {
+                continue;
+            }
+
+            float distanceToEvent = candidate.Ped.Position.DistanceTo(eventPosition);
+
+            if (distanceToEvent > RuntimeNeutralAssistRadius)
+            {
+                continue;
+            }
+
+            bool isDirectVictim =
+                Entity.Exists(witnessedEntity) &&
+                candidate.Ped.Handle == witnessedEntity.Handle;
+
+            Vector3 heardShotPosition;
+            bool heardShots =
+                Entity.Exists(player) &&
+                HasRecentPlayerGunfireNearGuard(candidate.Ped, player, out heardShotPosition);
+
+            bool sawPlayer = CanPedSeeEntity(candidate.Ped, player, NeutralWitnessDistance);
+            bool sawVictim = Entity.Exists(witnessedEntity) &&
+                             CanPedSeeEntity(candidate.Ped, witnessedEntity, NeutralWitnessDistance);
+
+            if (!isDirectVictim && !heardShots && !sawPlayer && !sawVictim)
+            {
+                continue;
+            }
+
+            ConvertNeutralToHostile(candidate, player);
+            converted++;
+        }
+
+        if (converted > 1)
+        {
+            ShowStatus(converted.ToString(CultureInfo.InvariantCulture) + " gardes neutres passent hostiles.", 3500);
+        }
+    }
+
+    private void ConvertNeutralToHostile(SpawnedNpc npc, Ped player)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+        {
+            return;
+        }
+
+        npc.Behavior = NpcBehavior.Attacker;
+        npc.Activated = true;
+        npc.IsReturningHome = false;
+        npc.LastCombatActivityAt = Game.GameTime;
+
+        npc.Ped.BlockPermanentEvents = false;
+        npc.Ped.IsEnemy = true;
+
+        Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, npc.Ped.Handle, _hostileGroupHash);
+
+        CreateOrUpdateNpcBlip(npc);
+        ActivateCombatAgainstBestTarget(npc, false);
+    }
+
+    private Ped FindThreatForAlly(Ped allyPed, Ped player)
+    {
+        if (!Entity.Exists(allyPed) || !Entity.Exists(player))
+        {
+            return null;
+        }
+
+        /*
+         * Les menaces creees par notre mod sont peu couteuses a verifier et
+         * doivent rester reactives. Cette partie ne lance pas de scan monde.
+         */
+        Ped managedThreat = FindManagedHostileThreatForAlly(allyPed, player);
+
+        if (Entity.Exists(managedThreat))
+        {
+            CacheAllyThreat(managedThreat);
+            return managedThreat;
+        }
+
+        Ped cachedThreat = GetUsableCachedAllyThreat(allyPed, player);
+
+        if (Entity.Exists(cachedThreat))
+        {
+            return cachedThreat;
+        }
+
+        int now = Game.GameTime;
+
+        if (now < _nextAllyThreatScanAt)
+        {
+            return null;
+        }
+
+        _nextAllyThreatScanAt = now + AllyThreatScanIntervalMs;
+
+        Ped ambientThreat = FindBestAmbientThreatForAllies(player);
+
+        if (Entity.Exists(ambientThreat))
+        {
+            CacheAllyThreat(ambientThreat);
+
+            if (IsAllyThreatUsableFor(ambientThreat, allyPed, player))
+            {
+                return ambientThreat;
+            }
+        }
+
+        return null;
+    }
+
+    private void CacheAllyThreat(Ped threat)
+    {
+        if (!Entity.Exists(threat) || threat.IsDead)
+        {
+            _allyCachedThreatPed = null;
+            _allyCachedThreatUntil = 0;
+            return;
+        }
+
+        _allyCachedThreatPed = threat;
+        _allyCachedThreatUntil = Game.GameTime + AllyThreatCacheLifetimeMs;
+    }
+
+    private Ped GetUsableCachedAllyThreat(Ped allyPed, Ped player)
+    {
+        if (Game.GameTime > _allyCachedThreatUntil)
+        {
+            _allyCachedThreatPed = null;
+            _allyCachedThreatUntil = 0;
+            return null;
+        }
+
+        if (!IsAllyThreatUsableFor(_allyCachedThreatPed, allyPed, player))
+        {
+            return null;
+        }
+
+        return _allyCachedThreatPed;
+    }
+
+    private bool IsAllyThreatUsableFor(Ped threat, Ped allyPed, Ped player)
+    {
+        if (!IsValidThreatCandidateForAlly(threat, player))
+        {
+            return false;
+        }
+
+        if (Entity.Exists(player) && threat.Position.DistanceTo(player.Position) <= RuntimeAllyDefenseRadius)
+        {
+            return true;
+        }
+
+        return Entity.Exists(allyPed) && threat.Position.DistanceTo(allyPed.Position) <= RuntimeAllyDefenseRadius;
+    }
+
+    private Ped FindBestAmbientThreatForAllies(Ped player)
+    {
+        if (!Entity.Exists(player) || player.IsDead)
+        {
+            return null;
+        }
+
+        Ped best = null;
+        float bestScore = float.MaxValue;
+
+        Ped[] nearPlayer = GetNearbyPedsSafe(player, RuntimeAllyDefenseRadius);
+
+        for (int i = 0; i < nearPlayer.Length; i++)
+        {
+            TryPromoteAllyThreatCandidate(nearPlayer[i], player, player, player, ref best, ref bestScore);
+        }
+
+        List<SpawnedNpc> allies = CollectAlliesForThreatScan();
+
+        if (allies.Count > 0)
+        {
+            int scansThisPass = Math.Min(AllyThreatGuardScansPerPass, allies.Count);
+
+            for (int scan = 0; scan < scansThisPass; scan++)
+            {
+                int index = Wrap(_allyThreatScanCursor + scan, allies.Count);
+                SpawnedNpc ally = allies[index];
+
+                if (ally == null || !Entity.Exists(ally.Ped) || ally.Ped.IsDead)
+                {
+                    continue;
+                }
+
+                Ped[] nearAlly = GetNearbyPedsSafe(ally.Ped, RuntimeAllyDefenseRadius);
+
+                for (int j = 0; j < nearAlly.Length; j++)
+                {
+                    TryPromoteAllyThreatCandidate(nearAlly[j], ally.Ped, player, ally.Ped, ref best, ref bestScore);
+                }
+            }
+
+            _allyThreatScanCursor = Wrap(_allyThreatScanCursor + scansThisPass, allies.Count);
+        }
+
+        return best;
+    }
+
+    private List<SpawnedNpc> CollectAlliesForThreatScan()
+    {
+        List<SpawnedNpc> allies = new List<SpawnedNpc>();
+
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            SpawnedNpc npc = _spawnedNpcs[i];
+
+            if (npc == null ||
+                !IsAllyBehavior(npc.BaseBehavior) ||
+                !Entity.Exists(npc.Ped) ||
+                npc.Ped.IsDead)
+            {
+                continue;
+            }
+
+            allies.Add(npc);
+        }
+
+        return allies;
+    }
+
+    private void TryPromoteAllyThreatCandidate(Ped candidate, Ped protectedPed, Ped player, Ped witness, ref Ped best, ref float bestScore)
+    {
+        if (!IsValidThreatCandidateForAlly(candidate, player) || !Entity.Exists(protectedPed))
+        {
+            return;
+        }
+
+        bool evidence =
+            HasDefensiveDamageAgainstProtectedPed(candidate, protectedPed) ||
+            IsPedInCombatWith(candidate, protectedPed);
+
+        if (!evidence && IsPedShooting(candidate))
+        {
+            bool closeToProtectedPed = candidate.Position.DistanceTo(protectedPed.Position) <= AllyShotThreatDistance;
+            bool hostileRelation =
+                HasHostileRelationshipToProtectedPed(candidate, protectedPed) ||
+                (Entity.Exists(player) && HasHostileRelationshipToProtectedPed(candidate, player));
+
+            evidence = closeToProtectedPed && hostileRelation;
+        }
+
+        if (!evidence)
+        {
+            return;
+        }
+
+        if (Entity.Exists(witness) &&
+            candidate.Position.DistanceTo(witness.Position) > 45.0f &&
+            !CanPedSeeEntity(witness, candidate, RuntimeAllySightDistance))
+        {
+            return;
+        }
+
+        float score = candidate.Position.DistanceTo(protectedPed.Position);
+
+        if (Entity.Exists(player))
+        {
+            score = Math.Min(score, candidate.Position.DistanceTo(player.Position));
+        }
+
+        if (score < bestScore)
+        {
+            bestScore = score;
+            best = candidate;
+        }
+    }
+
+    private Ped FindManagedHostileThreatForAlly(Ped allyPed, Ped player)
+    {
+        Ped best = null;
+        float bestDistance = float.MaxValue;
+
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            SpawnedNpc candidate = _spawnedNpcs[i];
+
+            if (candidate == null ||
+                !Entity.Exists(candidate.Ped) ||
+                candidate.Ped.IsDead ||
+                IsAllyBehavior(candidate.Behavior) ||
+                IsNeutralBehavior(candidate.Behavior))
+            {
+                continue;
+            }
+
+            if (candidate.Behavior == NpcBehavior.Static && !candidate.Activated)
+            {
+                continue;
+            }
+
+            float distanceToAlly = candidate.Ped.Position.DistanceTo(allyPed.Position);
+            float distanceToPlayer = candidate.Ped.Position.DistanceTo(player.Position);
+            float distance = Math.Min(distanceToAlly, distanceToPlayer);
+
+            if (distance > RuntimeAllyDefenseRadius)
+            {
+                continue;
+            }
+
+            if (distanceToAlly > 45.0f && !CanPedSeeEntity(allyPed, candidate.Ped, RuntimeAllySightDistance))
+            {
+                continue;
+            }
+
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = candidate.Ped;
+            }
+        }
+
+        return best;
+    }
+
+    private void AlertAlliesToThreat(Ped threat, Vector3 origin)
+    {
+        if (!Entity.Exists(threat) || threat.IsDead)
+        {
+            return;
+        }
+
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            SpawnedNpc ally = _spawnedNpcs[i];
+
+            if (ally == null ||
+                !IsAllyBehavior(ally.BaseBehavior) ||
+                !Entity.Exists(ally.Ped) ||
+                ally.Ped.IsDead)
+            {
+                continue;
+            }
+
+            float distanceToThreat = ally.Ped.Position.DistanceTo(threat.Position);
+            float distanceToOrigin = ally.Ped.Position.DistanceTo(origin);
+
+            if (distanceToThreat > RuntimeAllyDefenseRadius && distanceToOrigin > RuntimeAllyDefenseRadius)
+            {
+                continue;
+            }
+
+            if (distanceToThreat > 45.0f && !CanPedSeeEntity(ally.Ped, threat, RuntimeAllySightDistance))
+            {
+                continue;
+            }
+
+            ActivateAllyCombat(ally, threat);
+        }
+    }
+
+    private void ActivateAllyCombat(SpawnedNpc ally, Ped target)
+    {
+        if (ally == null || !Entity.Exists(ally.Ped) || !Entity.Exists(target) || target.IsDead)
+        {
+            return;
+        }
+
+        MarkCombatActivity(ally);
+
+        ally.Activated = true;
+        ally.IsReturningHome = false;
+
+        ally.Ped.AlwaysKeepTask = true;
+        ally.Ped.BlockPermanentEvents = false;
+        ally.Ped.IsEnemy = false;
+
+        try
+        {
+            Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, ally.Ped.Handle, _allyGroupHash);
+
+            int targetGroup = GetPedRelationshipGroup(target);
+
+            if (targetGroup != 0 &&
+                targetGroup != _allyGroupHash &&
+                ShouldUseGroupHostilityForThreat(target, targetGroup))
+            {
+                World.SetRelationshipBetweenGroups((Relationship)RelationshipHate, _allyGroupHash, targetGroup);
+                World.SetRelationshipBetweenGroups((Relationship)RelationshipHate, targetGroup, _allyGroupHash);
+            }
+
+            Function.Call(Hash.SET_PED_COMBAT_ABILITY, ally.Ped.Handle, 2);
+            Function.Call(Hash.SET_PED_COMBAT_MOVEMENT, ally.Ped.Handle, 2);
+            Function.Call(Hash.SET_PED_COMBAT_RANGE, ally.Ped.Handle, 2);
+            Function.Call(Hash.SET_PED_FLEE_ATTRIBUTES, ally.Ped.Handle, 0, false);
+
+            Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ally.Ped.Handle, 0, true);
+            Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ally.Ped.Handle, 5, true);
+            Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ally.Ped.Handle, 46, true);
+        }
+        catch
+        {
+        }
+
+        /*
+         * Cas special : si cet allie est un garde Cartel actif,
+         * on utilise la couche Cartel dediee qui gere le tir en vehicule.
+         */
+        if (_cartelNpcHandles.Contains(ally.Ped.Handle))
+        {
+            Ped player = Game.Player.Character;
+
+            if (Entity.Exists(player))
+            {
+                EngageCartelGuardThreat(ally, target, player, false);
+                return;
+            }
+        }
+
+        ActivateCombatAgainstTarget(ally, target, false);
+    }
+
+    private void ActivateCombatAgainstBestTarget(SpawnedNpc npc, bool stationary)
+    {
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player))
+        {
+            return;
+        }
+
+        Ped target = FindHostileTargetForEnemy(npc.Ped, player);
+
+        if (Entity.Exists(target))
+        {
+            ActivateCombatAgainstTarget(npc, target, stationary);
+        }
+    }
+
+    private Ped FindHostileTargetForEnemy(Ped enemyPed, Ped player)
+    {
+        if (!Entity.Exists(enemyPed) || !Entity.Exists(player))
+        {
+            return null;
+        }
+
+        Ped best = player;
+        float bestDistance = enemyPed.Position.DistanceTo(player.Position);
+
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            SpawnedNpc candidate = _spawnedNpcs[i];
+
+            if (candidate == null ||
+                !IsAllyBehavior(candidate.BaseBehavior) ||
+                !Entity.Exists(candidate.Ped) ||
+                candidate.Ped.IsDead)
+            {
+                continue;
+            }
+
+            float distance = enemyPed.Position.DistanceTo(candidate.Ped.Position);
+
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = candidate.Ped;
+            }
+        }
+
+        return best;
+    }
+
+    private void ActivateCombatAgainstTarget(SpawnedNpc npc, Ped target, bool stationary)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || !Entity.Exists(target) || target.IsDead)
+        {
+            return;
+        }
+
+        npc.Activated = true;
+        npc.IsReturningHome = false;
+
+        npc.Ped.AlwaysKeepTask = true;
+        npc.Ped.BlockPermanentEvents = false;
+        npc.Ped.IsEnemy = !IsAllyBehavior(npc.BaseBehavior);
+
+        Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, npc.Ped.Handle, IsAllyBehavior(npc.BaseBehavior) ? _allyGroupHash : _hostileGroupHash);
+        Function.Call(Hash.SET_PED_COMBAT_MOVEMENT, npc.Ped.Handle, stationary ? 0 : 2);
+        Function.Call(Hash.SET_PED_COMBAT_RANGE, npc.Ped.Handle, 2);
+
+        if (!stationary && ShouldApproachBeforeShooting(npc, target))
+        {
+            float stopDistance = DesiredApproachDistanceForWeapon(npc.Loadout != null ? npc.Loadout.Weapon : WeaponHash.Unarmed);
+
+            Function.Call(
+                Hash.TASK_GO_TO_ENTITY,
+                npc.Ped.Handle,
+                target.Handle,
+                -1,
+                stopDistance,
+                2.0f,
+                1073741824,
+                0);
+
+            return;
+        }
+
+        Function.Call(
+            Hash.TASK_COMBAT_PED,
+            npc.Ped.Handle,
+            target.Handle,
+            0,
+            16);
+    }
+
+    private bool ShouldApproachBeforeShooting(SpawnedNpc npc, Ped target)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || !Entity.Exists(target) || npc.Loadout == null)
+        {
+            return false;
+        }
+
+        float desired = DesiredApproachDistanceForWeapon(npc.Loadout.Weapon);
+
+        if (desired <= 0.0f)
+        {
+            return false;
+        }
+
+        float distance = npc.Ped.Position.DistanceTo(target.Position);
+        return distance > desired + 8.0f;
+    }
+
+    private static float DesiredApproachDistanceForWeapon(WeaponHash weapon)
+    {
+        string name = weapon.ToString();
+
+        if (IsPistolLikeWeaponName(name))
+        {
+            return 24.0f;
+        }
+
+        if (name.IndexOf("Shotgun", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return 20.0f;
+        }
+
+        if (name.IndexOf("SMG", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            name.IndexOf("MachinePistol", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            name.IndexOf("CombatPDW", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return 34.0f;
+        }
+
+        return -1.0f;
+    }
+
+    private void StartOrContinuePatrol(SpawnedNpc npc, bool forceNewTarget)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead || !IsPatrolBehavior(npc.BaseBehavior))
+        {
+            return;
+        }
+
+        if (npc.PatrolRadius <= 0.1f)
+        {
+            npc.PatrolRadius = _selectedPatrolRadius;
+        }
+
+        float distanceToCenter = npc.Ped.Position.DistanceTo(npc.PatrolCenter);
+        bool outsidePatrol = distanceToCenter > npc.PatrolRadius + 7.5f;
+        bool arrived = !IsZeroVector(npc.PatrolTarget) && npc.Ped.Position.DistanceTo(npc.PatrolTarget) <= PatrolArriveDistance + 0.75f;
+
+        if (forceNewTarget || outsidePatrol || arrived || IsZeroVector(npc.PatrolTarget) || Game.GameTime >= npc.NextPatrolTaskAt)
+        {
+            npc.PatrolTarget = outsidePatrol
+                ? FindSafePatrolPoint(npc.PatrolCenter, Math.Max(3.0f, npc.PatrolRadius * 0.45f))
+                : FindSafePatrolPoint(npc.PatrolCenter, npc.PatrolRadius);
+
+            npc.NextPatrolTaskAt = Game.GameTime + PatrolRetaskMs + _random.Next(0, 4500);
+
+            Function.Call(
+                Hash.TASK_FOLLOW_NAV_MESH_TO_COORD,
+                npc.Ped.Handle,
+                npc.PatrolTarget.X,
+                npc.PatrolTarget.Y,
+                npc.PatrolTarget.Z,
+                PatrolWalkSpeed,
+                -1,
+                PatrolArriveDistance,
+                true,
+                npc.HomeHeading);
+        }
+    }
+
+    private Vector3 FindSafePatrolPoint(Vector3 center, float radius)
+    {
+        radius = ClampFloat(radius, MinPatrolRadius, MaxPatrolRadius);
+
+        for (int i = 0; i < 12; i++)
+        {
+            double angle = _random.NextDouble() * Math.PI * 2.0;
+            double distance = Math.Sqrt(_random.NextDouble()) * radius;
+
+            Vector3 desired = new Vector3(
+                center.X + (float)(Math.Cos(angle) * distance),
+                center.Y + (float)(Math.Sin(angle) * distance),
+                center.Z);
+
+            Vector3 safe = World.GetSafeCoordForPed(desired, false, 16);
+
+            if (!IsZeroVector(safe) && safe.DistanceTo(center) <= radius + 3.0f)
+            {
+                return safe;
+            }
+
+            float ground = World.GetGroundHeight(new Vector3(desired.X, desired.Y, desired.Z + 1000.0f));
+
+            if (Math.Abs(ground) > 0.001f)
+            {
+                desired.Z = ground + 0.35f;
+                return desired;
+            }
+        }
+
+        return center;
+    }
+
+    private void ManageBodyguardFootFollow(SpawnedNpc bodyguard, Ped player)
+    {
+        if (!Entity.Exists(bodyguard.Ped) || !Entity.Exists(player))
+        {
+            return;
+        }
+
+        Vehicle currentVehicle = bodyguard.Ped.CurrentVehicle;
+
+        if (Entity.Exists(currentVehicle))
+        {
+            if (bodyguard.Ped.Position.DistanceTo(player.Position) <= 18.0f)
+            {
+                Function.Call(Hash.TASK_LEAVE_VEHICLE, bodyguard.Ped.Handle, currentVehicle.Handle, 0);
+            }
+            else
+            {
+                DriveBodyguardVehicleToPlayer(bodyguard, currentVehicle, player);
+            }
+
+            return;
+        }
+
+        float distance = bodyguard.Ped.Position.DistanceTo(player.Position);
+
+        if (distance > 2.0f)
+        {
+            float offsetSide = ((bodyguard.Ped.Handle % 5) - 2) * 0.85f;
+            float offsetBack = -BodyguardFootFollowDistance - ((bodyguard.Ped.Handle % 3) * 0.75f);
+
+            Function.Call(
+                Hash.TASK_FOLLOW_TO_OFFSET_OF_ENTITY,
+                bodyguard.Ped.Handle,
+                player.Handle,
+                offsetSide,
+                offsetBack,
+                0.0f,
+                2.0f,
+                -1,
+                1.5f,
+                true);
+        }
+        else
+        {
+            Function.Call(Hash.TASK_STAND_STILL, bodyguard.Ped.Handle, 1200);
+        }
+    }
+
+    private void ManageBodyguardVehicleFollow(SpawnedNpc bodyguard, Ped player)
+    {
+        if (!Entity.Exists(bodyguard.Ped) || !Entity.Exists(player) || !player.IsInVehicle())
+        {
+            return;
+        }
+
+        Vehicle playerVehicle = player.CurrentVehicle;
+
+        if (!Entity.Exists(playerVehicle))
+        {
+            return;
+        }
+
+        if (bodyguard.Ped.IsInVehicle(playerVehicle))
+        {
+            bodyguard.BodyguardAssignedVehicleHandle = playerVehicle.Handle;
+            bodyguard.BodyguardAssignedSeat = (int)bodyguard.Ped.SeatIndex;
+            bodyguard.BodyguardIsDriver = false;
+            return;
+        }
+
+        if (!Entity.Exists(bodyguard.Ped.CurrentVehicle))
+        {
+            int playerSeat = FindFreePassengerSeatForBodyguard(playerVehicle, bodyguard);
+
+            if (playerSeat != 999)
+            {
+                AssignBodyguardToVehicleSeat(bodyguard, playerVehicle, playerSeat, false);
+                return;
+            }
+        }
+
+        Vehicle convoyVehicle = Entity.Exists(bodyguard.Ped.CurrentVehicle)
+            ? bodyguard.Ped.CurrentVehicle
+            : FindOrAssignConvoyVehicle(bodyguard, player, playerVehicle);
+
+        if (!Entity.Exists(convoyVehicle))
+        {
+            ManageBodyguardFootFollow(bodyguard, player);
+            return;
+        }
+
+        if (!bodyguard.Ped.IsInVehicle(convoyVehicle))
+        {
+            int seat = bodyguard.BodyguardAssignedSeat;
+
+            if (seat == 999 || !IsVehicleSeatUsableForBodyguard(convoyVehicle, seat, bodyguard))
+            {
+                seat = FindFreeSeatForConvoyVehicle(convoyVehicle, bodyguard);
+            }
+
+            if (seat == 999)
+            {
+                ManageBodyguardFootFollow(bodyguard, player);
+                return;
+            }
+
+            AssignBodyguardToVehicleSeat(bodyguard, convoyVehicle, seat, seat == -1);
+            return;
+        }
+
+        if (IsPedDriverOfVehicle(bodyguard.Ped, convoyVehicle))
+        {
+            DriveBodyguardConvoyVehicle(bodyguard, convoyVehicle, playerVehicle);
+        }
+    }
+
+    private Vehicle FindOrAssignConvoyVehicle(SpawnedNpc bodyguard, Ped player, Vehicle playerVehicle)
+    {
+        Vehicle assigned = FindVehicleByHandle(bodyguard.BodyguardAssignedVehicleHandle);
+
+        if (Entity.Exists(assigned) &&
+            assigned.Handle != playerVehicle.Handle &&
+            IsVehicleDriveable(assigned))
+        {
+            return assigned;
+        }
+
+        Vehicle[] nearby = GetNearbyVehiclesSafe(player, BodyguardVehicleSearchRadius);
+        Vehicle best = null;
+        float bestDistance = float.MaxValue;
+
+        for (int i = 0; i < nearby.Length; i++)
+        {
+            Vehicle vehicle = nearby[i];
+
+            if (!Entity.Exists(vehicle) ||
+                vehicle.Handle == playerVehicle.Handle ||
+                !IsVehicleDriveable(vehicle))
+            {
+                continue;
+            }
+
+            int freeSeat = FindFreeSeatForConvoyVehicle(vehicle, bodyguard);
+
+            if (freeSeat == 999)
+            {
+                continue;
+            }
+
+            float distance = vehicle.Position.DistanceTo(bodyguard.Ped.Position);
+
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = vehicle;
+            }
+        }
+
+        if (Entity.Exists(best))
+        {
+            int seat = FindFreeSeatForConvoyVehicle(best, bodyguard);
+
+            if (seat != 999)
+            {
+                bodyguard.BodyguardAssignedVehicleHandle = best.Handle;
+                bodyguard.BodyguardAssignedSeat = seat;
+                bodyguard.BodyguardIsDriver = seat == -1;
+            }
+        }
+
+        return best;
+    }
+
+    private void AssignBodyguardToVehicleSeat(SpawnedNpc bodyguard, Vehicle vehicle, int seat, bool driver)
+    {
+        if (bodyguard == null || !Entity.Exists(bodyguard.Ped) || !Entity.Exists(vehicle))
+        {
+            return;
+        }
+
+        bodyguard.BodyguardAssignedVehicleHandle = vehicle.Handle;
+        bodyguard.BodyguardAssignedSeat = seat;
+        bodyguard.BodyguardIsDriver = driver;
+
+        Function.Call(
+            Hash.TASK_ENTER_VEHICLE,
+            bodyguard.Ped.Handle,
+            vehicle.Handle,
+            5000,
+            seat,
+            2.0f,
+            1,
+            0);
+    }
+
+    private void DriveBodyguardConvoyVehicle(SpawnedNpc bodyguard, Vehicle convoyVehicle, Vehicle playerVehicle)
+    {
+        if (bodyguard == null || !Entity.Exists(bodyguard.Ped) || !Entity.Exists(convoyVehicle) || !Entity.Exists(playerVehicle))
+        {
+            return;
+        }
+
+        float playerSpeed = Math.Max(8.0f, playerVehicle.Speed * 1.25f + 8.0f);
+        float cruiseSpeed = ClampFloat(playerSpeed, 10.0f, 85.0f);
+
+        Function.Call(Hash.SET_DRIVER_ABILITY, bodyguard.Ped.Handle, 1.0f);
+        Function.Call(Hash.SET_DRIVER_AGGRESSIVENESS, bodyguard.Ped.Handle, 0.45f);
+        Function.Call(Hash.SET_DRIVE_TASK_DRIVING_STYLE, bodyguard.Ped.Handle, ProfessionalDrivingStyle);
+        Function.Call(Hash.SET_DRIVE_TASK_CRUISE_SPEED, bodyguard.Ped.Handle, cruiseSpeed);
+
+        Function.Call(
+            Hash.TASK_VEHICLE_ESCORT,
+            bodyguard.Ped.Handle,
+            convoyVehicle.Handle,
+            playerVehicle.Handle,
+            -1,
+            cruiseSpeed,
+            ProfessionalDrivingStyle,
+            8.0f,
+            0,
+            18.0f);
+    }
+
+    private void DriveBodyguardVehicleToPlayer(SpawnedNpc bodyguard, Vehicle vehicle, Ped player)
+    {
+        if (bodyguard == null || !Entity.Exists(bodyguard.Ped) || !Entity.Exists(vehicle) || !Entity.Exists(player))
+        {
+            return;
+        }
+
+        if (!IsPedDriverOfVehicle(bodyguard.Ped, vehicle))
+        {
+            if (IsVehicleSeatUsableForBodyguard(vehicle, -1, bodyguard))
+            {
+                AssignBodyguardToVehicleSeat(bodyguard, vehicle, -1, true);
+            }
+
+            return;
+        }
+
+        Function.Call(Hash.SET_DRIVER_ABILITY, bodyguard.Ped.Handle, 1.0f);
+        Function.Call(Hash.SET_DRIVER_AGGRESSIVENESS, bodyguard.Ped.Handle, 0.25f);
+        Function.Call(Hash.SET_DRIVE_TASK_DRIVING_STYLE, bodyguard.Ped.Handle, ProfessionalDrivingStyle);
+
+        Function.Call(
+            Hash.TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE,
+            bodyguard.Ped.Handle,
+            vehicle.Handle,
+            player.Position.X,
+            player.Position.Y,
+            player.Position.Z,
+            25.0f,
+            ProfessionalDrivingStyle,
+            8.0f);
+    }
+
+    private int FindFreePassengerSeatForBodyguard(Vehicle vehicle, SpawnedNpc bodyguard)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return 999;
+        }
+
+        int maxPassengers = Math.Max(0, Function.Call<int>(Hash.GET_VEHICLE_MAX_NUMBER_OF_PASSENGERS, vehicle.Handle));
+
+        for (int seat = 0; seat < maxPassengers; seat++)
+        {
+            if (IsVehicleSeatUsableForBodyguard(vehicle, seat, bodyguard))
+            {
+                return seat;
+            }
+        }
+
+        return 999;
+    }
+
+    private int FindFreeSeatForConvoyVehicle(Vehicle vehicle, SpawnedNpc bodyguard)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return 999;
+        }
+
+        if (IsVehicleSeatUsableForBodyguard(vehicle, -1, bodyguard))
+        {
+            return -1;
+        }
+
+        return FindFreePassengerSeatForBodyguard(vehicle, bodyguard);
+    }
+
+    private bool IsVehicleSeatUsableForBodyguard(Vehicle vehicle, int seat, SpawnedNpc bodyguard)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return false;
+        }
+
+        if (!Function.Call<bool>(Hash.IS_VEHICLE_SEAT_FREE, vehicle.Handle, seat, false))
+        {
+            return false;
+        }
+
+        if (IsSeatReservedByAnotherBodyguard(vehicle.Handle, seat, bodyguard))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool IsSeatReservedByAnotherBodyguard(int vehicleHandle, int seat, SpawnedNpc current)
+    {
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            SpawnedNpc other = _spawnedNpcs[i];
+
+            if (other == null ||
+                other == current ||
+                other.BaseBehavior != NpcBehavior.Bodyguard ||
+                !Entity.Exists(other.Ped) ||
+                other.Ped.IsDead)
+            {
+                continue;
+            }
+
+            if (other.BodyguardAssignedVehicleHandle == vehicleHandle &&
+                other.BodyguardAssignedSeat == seat)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool DoesVehicleHandleExist(int handle)
+    {
+        if (handle == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            return Function.Call<bool>(Hash.DOES_ENTITY_EXIST, handle) &&
+                   Function.Call<bool>(Hash.IS_ENTITY_A_VEHICLE, handle);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private Vehicle FindVehicleByHandle(int handle)
+    {
+        if (handle == 0)
+        {
+            return null;
+        }
+
+        /*
+         * Les véhicules Cartel sont enregistrés dans _placedVehicles. Cette voie
+         * évite un World.GetAllVehicles() à chaque vérification de handle.
+         */
+        PlacedVehicle placedVehicle = FindPlacedVehicleByHandle(handle);
+
+        if (placedVehicle != null && Entity.Exists(placedVehicle.Vehicle))
+        {
+            return placedVehicle.Vehicle;
+        }
+
+        Vehicle[] vehicles = World.GetAllVehicles();
+
+        for (int i = 0; i < vehicles.Length; i++)
+        {
+            if (Entity.Exists(vehicles[i]) && vehicles[i].Handle == handle)
+            {
+                return vehicles[i];
+            }
+        }
+
+        return null;
+    }
+
+    private Vehicle[] GetNearbyVehiclesSafe(Ped center, float radius)
+    {
+        if (!Entity.Exists(center))
+        {
+            return new Vehicle[0];
+        }
+
+        try
+        {
+            return World.GetNearbyVehicles(center, radius) ?? new Vehicle[0];
+        }
+        catch
+        {
+            return new Vehicle[0];
+        }
+    }
+
+    private static bool IsVehicleDriveable(Vehicle vehicle)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return false;
+        }
+
+        try
+        {
+            return Function.Call<bool>(Hash.IS_VEHICLE_DRIVEABLE, vehicle.Handle, false);
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private static bool IsPedDriverOfVehicle(Ped ped, Vehicle vehicle)
+    {
+        if (!Entity.Exists(ped) || !Entity.Exists(vehicle))
+        {
+            return false;
+        }
+
+        try
+        {
+            return Function.Call<int>(Hash.GET_PED_IN_VEHICLE_SEAT, vehicle.Handle, -1, false) == ped.Handle;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool HasGuardCombatActivity(SpawnedNpc npc, Ped player)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || !Entity.Exists(player))
+        {
+            return false;
+        }
+
+        if (npc.Ped.HasBeenDamagedBy(player))
+        {
+            return true;
+        }
+
+        Ped target = FindHostileTargetForEnemy(npc.Ped, player);
+
+        return HasCombatActivityWithTarget(npc.Ped, target, 160.0f);
+    }
+
+    private bool HasCombatActivityWithTarget(Ped ped, Ped target, float sightDistance)
+    {
+        if (!Entity.Exists(ped) || !Entity.Exists(target))
+        {
+            return false;
+        }
+
+        if (IsPedShooting(ped) || IsPedShooting(target))
+        {
+            if (ped.Position.DistanceTo(target.Position) <= sightDistance)
+            {
+                return true;
+            }
+        }
+
+        if (ped.Position.DistanceTo(target.Position) <= 40.0f)
+        {
+            return true;
+        }
+
+        if (IsPedInCombatWith(ped, target) || IsPedInCombatWith(target, ped))
+        {
+            return true;
+        }
+
+        return CanPedSeeEntity(ped, target, sightDistance);
+    }
+
+    private void MarkCombatActivity(SpawnedNpc npc)
+    {
+        if (npc == null)
+        {
+            return;
+        }
+
+        npc.LastCombatActivityAt = Game.GameTime;
+        npc.IsReturningHome = false;
+    }
+
+    private bool ShouldReturnToPostAfterCalm(SpawnedNpc npc, Ped player)
+    {
+        if (npc == null ||
+            npc.BaseBehavior == NpcBehavior.Bodyguard ||
+            npc.BaseBehavior == NpcBehavior.Attacker ||
+            npc.BaseBehavior == NpcBehavior.Static)
+        {
+            return false;
+        }
+
+        if (HasGuardCombatActivity(npc, player))
+        {
+            return false;
+        }
+
+        return Game.GameTime - npc.LastCombatActivityAt >= GuardReturnDelayMs;
+    }
+
+    private void BeginReturnHome(SpawnedNpc npc)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead || npc.BaseBehavior == NpcBehavior.Bodyguard)
+        {
+            return;
+        }
+
+        npc.IsReturningHome = true;
+        npc.Activated = false;
+        npc.NextReturnTaskAt = 0;
+        npc.PatrolTarget = Vector3.Zero;
+
+        Function.Call(Hash.CLEAR_PED_TASKS, npc.Ped.Handle);
+
+        if (IsNeutralBehavior(npc.BaseBehavior))
+        {
+            npc.Behavior = npc.BaseBehavior;
+            npc.Ped.IsEnemy = false;
+            npc.Ped.BlockPermanentEvents = true;
+            Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, npc.Ped.Handle, _neutralGroupHash);
+        }
+        else if (IsAllyBehavior(npc.BaseBehavior))
+        {
+            npc.Behavior = npc.BaseBehavior;
+            npc.Ped.IsEnemy = false;
+            npc.Ped.BlockPermanentEvents = false;
+            Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, npc.Ped.Handle, _allyGroupHash);
+        }
+        else if (IsHostileBehavior(npc.BaseBehavior))
+        {
+            npc.Behavior = npc.BaseBehavior;
+            npc.Ped.IsEnemy = true;
+            npc.Ped.BlockPermanentEvents = false;
+            Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, npc.Ped.Handle, _hostileGroupHash);
+        }
+
+        CreateOrUpdateNpcBlip(npc);
+    }
+
+    private void CancelReturnHome(SpawnedNpc npc)
+    {
+        if (npc == null)
+        {
+            return;
+        }
+
+        npc.IsReturningHome = false;
+        npc.NextReturnTaskAt = 0;
+        npc.LastCombatActivityAt = Game.GameTime;
+    }
+
+    private void UpdateReturnHome(SpawnedNpc npc)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+        {
+            return;
+        }
+
+        float distance = npc.Ped.Position.DistanceTo(npc.HomePosition);
+
+        if (distance <= GuardReturnArriveDistance)
+        {
+            FinishReturnHome(npc);
+            return;
+        }
+
+        if (Game.GameTime >= npc.NextReturnTaskAt)
+        {
+            npc.NextReturnTaskAt = Game.GameTime + GuardReturnRetaskMs;
+
+            Function.Call(
+                Hash.TASK_FOLLOW_NAV_MESH_TO_COORD,
+                npc.Ped.Handle,
+                npc.HomePosition.X,
+                npc.HomePosition.Y,
+                npc.HomePosition.Z,
+                GuardWalkSpeed,
+                -1,
+                GuardReturnArriveDistance,
+                true,
+                npc.HomeHeading);
+        }
+    }
+
+    private void FinishReturnHome(SpawnedNpc npc)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped))
+        {
+            return;
+        }
+
+        npc.IsReturningHome = false;
+        npc.Activated = false;
+        npc.LastCombatActivityAt = Game.GameTime;
+
+        Function.Call(Hash.CLEAR_PED_TASKS, npc.Ped.Handle);
+
+        if (IsPatrolBehavior(npc.BaseBehavior))
+        {
+            npc.Behavior = npc.BaseBehavior;
+            npc.PatrolTarget = Vector3.Zero;
+
+            if (IsNeutralBehavior(npc.BaseBehavior))
+            {
+                npc.Ped.BlockPermanentEvents = true;
+                npc.Ped.IsEnemy = false;
+                Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, npc.Ped.Handle, _neutralGroupHash);
+            }
+            else if (IsAllyBehavior(npc.BaseBehavior))
+            {
+                npc.Ped.BlockPermanentEvents = false;
+                npc.Ped.IsEnemy = false;
+                Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, npc.Ped.Handle, _allyGroupHash);
+            }
+            else
+            {
+                npc.Ped.BlockPermanentEvents = false;
+                npc.Ped.IsEnemy = true;
+                Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, npc.Ped.Handle, _hostileGroupHash);
+            }
+
+            StartOrContinuePatrol(npc, true);
+            CreateOrUpdateNpcBlip(npc);
+            return;
+        }
+
+        npc.Ped.Position = npc.HomePosition;
+        npc.Ped.Heading = NormalizeHeading(npc.HomeHeading);
+
+        Function.Call(Hash.TASK_ACHIEVE_HEADING, npc.Ped.Handle, npc.HomeHeading, 1500);
+        Function.Call(Hash.TASK_STAND_STILL, npc.Ped.Handle, 2500);
+
+        if (IsNeutralBehavior(npc.BaseBehavior))
+        {
+            npc.Behavior = npc.BaseBehavior;
+            npc.Ped.BlockPermanentEvents = true;
+            npc.Ped.IsEnemy = false;
+            Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, npc.Ped.Handle, _neutralGroupHash);
+        }
+        else if (IsAllyBehavior(npc.BaseBehavior))
+        {
+            npc.Behavior = npc.BaseBehavior;
+            npc.Ped.BlockPermanentEvents = false;
+            npc.Ped.IsEnemy = false;
+            Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, npc.Ped.Handle, _allyGroupHash);
+        }
+
+        CreateOrUpdateNpcBlip(npc);
+    }
+
+    private Ped FindDamagingPedForVictim(Ped victim, Vector3 eventPosition, float radius)
+    {
+        if (!Entity.Exists(victim))
+        {
+            return null;
+        }
+
+        Ped[] candidates = GetNearbyPedsSafe(victim, radius);
+
+        for (int i = 0; i < candidates.Length; i++)
+        {
+            Ped candidate = candidates[i];
+
+            if (!Entity.Exists(candidate) || candidate.IsDead || candidate.Handle == victim.Handle)
+            {
+                continue;
+            }
+
+            if (victim.HasBeenDamagedBy(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            SpawnedNpc candidate = _spawnedNpcs[i];
+
+            if (candidate == null ||
+                !Entity.Exists(candidate.Ped) ||
+                candidate.Ped.IsDead ||
+                candidate.Ped.Handle == victim.Handle)
+            {
+                continue;
+            }
+
+            if (candidate.Ped.Position.DistanceTo(eventPosition) <= radius &&
+                victim.HasBeenDamagedBy(candidate.Ped))
+            {
+                return candidate.Ped;
+            }
+        }
+
+        return null;
+    }
+
+    private bool HasDamagedAnyManagedAlly(Ped candidate)
+    {
+        if (!Entity.Exists(candidate))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            SpawnedNpc ally = _spawnedNpcs[i];
+
+            if (ally == null ||
+                !IsAllyBehavior(ally.BaseBehavior) ||
+                !Entity.Exists(ally.Ped) ||
+                ally.Ped.IsDead)
+            {
+                continue;
+            }
+
+            if (HasDefensiveDamageAgainstProtectedPed(candidate, ally.Ped))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsInCombatWithAnyManagedAlly(Ped candidate)
+    {
+        if (!Entity.Exists(candidate))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            SpawnedNpc ally = _spawnedNpcs[i];
+
+            if (ally == null ||
+                !IsAllyBehavior(ally.BaseBehavior) ||
+                !Entity.Exists(ally.Ped) ||
+                ally.Ped.IsDead)
+            {
+                continue;
+            }
+
+            if (IsPedInCombatWith(candidate, ally.Ped))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsShootingThreatNearProtectedTarget(Ped candidate, Ped player)
+    {
+        if (!Entity.Exists(candidate) || !Entity.Exists(player))
+        {
+            return false;
+        }
+
+        if (candidate.Position.DistanceTo(player.Position) <= AllyShotThreatDistance)
+        {
+            return true;
+        }
+
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            SpawnedNpc ally = _spawnedNpcs[i];
+
+            if (ally == null ||
+                !IsAllyBehavior(ally.BaseBehavior) ||
+                !Entity.Exists(ally.Ped) ||
+                ally.Ped.IsDead)
+            {
+                continue;
+            }
+
+            if (candidate.Position.DistanceTo(ally.Ped.Position) <= AllyShotThreatDistance)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsValidThreatCandidateForAlly(Ped candidate, Ped player)
+    {
+        if (!Entity.Exists(candidate) || candidate.IsDead)
+        {
+            return false;
+        }
+
+        if (Entity.Exists(player) && candidate.Handle == player.Handle)
+        {
+            return false;
+        }
+
+        if (Entity.Exists(_placementPreviewPed) && candidate.Handle == _placementPreviewPed.Handle)
+        {
+            return false;
+        }
+
+        if (IsManagedAlly(candidate))
+        {
+            return false;
+        }
+
+        int group = GetPedRelationshipGroup(candidate);
+
+        if (group == _allyGroupHash)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool IsManagedAlly(Ped ped)
+    {
+        if (!Entity.Exists(ped))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            SpawnedNpc ally = _spawnedNpcs[i];
+
+            if (ally == null ||
+                !IsAllyBehavior(ally.BaseBehavior) ||
+                !Entity.Exists(ally.Ped))
+            {
+                continue;
+            }
+
+            if (ally.Ped.Handle == ped.Handle)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private Ped[] GetUniqueNearbyPeds(Ped firstCenter, Ped secondCenter, float radius)
+    {
+        List<Ped> result = new List<Ped>();
+        HashSet<int> seen = new HashSet<int>();
+
+        AddNearbyPeds(firstCenter, radius, result, seen);
+        AddNearbyPeds(secondCenter, radius, result, seen);
+
+        return result.ToArray();
+    }
+
+    private void AddNearbyPeds(Ped center, float radius, List<Ped> result, HashSet<int> seen)
+    {
+        Ped[] peds = GetNearbyPedsSafe(center, radius);
+
+        for (int i = 0; i < peds.Length; i++)
+        {
+            Ped ped = peds[i];
+
+            if (!Entity.Exists(ped) || seen.Contains(ped.Handle))
+            {
+                continue;
+            }
+
+            seen.Add(ped.Handle);
+            result.Add(ped);
+        }
+    }
+
+    private static Ped[] GetNearbyPedsSafe(Ped center, float radius)
+    {
+        if (!Entity.Exists(center))
+        {
+            return new Ped[0];
+        }
+
+        try
+        {
+            return World.GetNearbyPeds(center, radius) ?? new Ped[0];
+        }
+        catch
+        {
+            return new Ped[0];
+        }
+    }
+
+    private bool CanPedSeeEntity(Ped ped, Entity target, float maxDistance)
+    {
+        if (!Entity.Exists(ped) || !Entity.Exists(target))
+        {
+            return false;
+        }
+
+        if (ped.Position.DistanceTo(target.Position) > maxDistance)
+        {
+            return false;
+        }
+
+        return Function.Call<bool>(
+            Hash.HAS_ENTITY_CLEAR_LOS_TO_ENTITY,
+            ped.Handle,
+            target.Handle,
+            17);
+    }
+
+    private bool IsPlayerShootingNearPed(Ped player, Ped ped, float maxDistance)
+    {
+        if (!Entity.Exists(player) || !Entity.Exists(ped))
+        {
+            return false;
+        }
+
+        if (!IsPedShooting(player))
+        {
+            return false;
+        }
+
+        return player.Position.DistanceTo(ped.Position) <= maxDistance;
+    }
+
+    private static bool IsPedShooting(Ped ped)
+    {
+        if (!Entity.Exists(ped))
+        {
+            return false;
+        }
+
+        return Function.Call<bool>(Hash.IS_PED_SHOOTING, ped.Handle);
+    }
+
+    private static bool IsPedInCombatWith(Ped ped, Ped target)
+    {
+        if (!Entity.Exists(ped) || !Entity.Exists(target))
+        {
+            return false;
+        }
+
+        return Function.Call<bool>(Hash.IS_PED_IN_COMBAT, ped.Handle, target.Handle);
+    }
+
+    private bool ShouldRefreshPassiveTask(SpawnedNpc npc)
+    {
+        if (npc == null)
+        {
+            return false;
+        }
+
+        if (Game.GameTime < npc.NextPassiveTaskAt)
+        {
+            return false;
+        }
+
+        npc.NextPassiveTaskAt = GetNextPassiveTaskTime();
+        return true;
+    }
+
+    private void HoldStaticPositionThrottled(SpawnedNpc npc, Ped player)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+        {
+            return;
+        }
+
+        if (!ShouldRefreshPassiveTask(npc))
+        {
+            return;
+        }
+
+        if (Entity.Exists(player))
+        {
+            Function.Call(Hash.TASK_TURN_PED_TO_FACE_ENTITY, npc.Ped.Handle, player.Handle, 1200);
+        }
+
+        Function.Call(Hash.TASK_STAND_STILL, npc.Ped.Handle, PassiveHoldRefreshMs + 800);
+    }
+
+    private void HoldGuardPositionThrottled(SpawnedNpc npc)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+        {
+            return;
+        }
+
+        if (!ShouldRefreshPassiveTask(npc))
+        {
+            return;
+        }
+
+        Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, npc.Ped.Handle, _neutralGroupHash);
+        Function.Call(Hash.TASK_STAND_STILL, npc.Ped.Handle, PassiveHoldRefreshMs + 800);
+    }
+
+    private void HoldAllyPositionThrottled(SpawnedNpc npc)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+        {
+            return;
+        }
+
+        if (!ShouldRefreshPassiveTask(npc))
+        {
+            return;
+        }
+
+        Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, npc.Ped.Handle, _allyGroupHash);
+        Function.Call(Hash.TASK_STAND_STILL, npc.Ped.Handle, PassiveHoldRefreshMs + 800);
+    }
+
+    private void HoldStaticPosition(Ped ped)
+    {
+        if (!Entity.Exists(ped) || ped.IsDead)
+        {
+            return;
+        }
+
+        Ped player = Game.Player.Character;
+
+        if (Entity.Exists(player))
+        {
+            Function.Call(Hash.TASK_TURN_PED_TO_FACE_ENTITY, ped.Handle, player.Handle, 1200);
+        }
+
+        Function.Call(Hash.TASK_STAND_STILL, ped.Handle, 2500);
+    }
+
+    private void HoldGuardPosition(Ped ped)
+    {
+        if (!Entity.Exists(ped) || ped.IsDead)
+        {
+            return;
+        }
+
+        Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, ped.Handle, _neutralGroupHash);
+        Function.Call(Hash.TASK_STAND_STILL, ped.Handle, 2500);
+    }
+
+    private void HoldAllyPosition(Ped ped)
+    {
+        if (!Entity.Exists(ped) || ped.IsDead)
+        {
+            return;
+        }
+
+        Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, ped.Handle, _allyGroupHash);
+        Function.Call(Hash.TASK_STAND_STILL, ped.Handle, 2500);
+    }
+
+    private static bool IsAllyBehavior(NpcBehavior behavior)
+    {
+        return behavior == NpcBehavior.Ally ||
+               behavior == NpcBehavior.AllyPatrol ||
+               behavior == NpcBehavior.Bodyguard;
+    }
+
+    private static bool IsNeutralBehavior(NpcBehavior behavior)
+    {
+        return behavior == NpcBehavior.Neutral ||
+               behavior == NpcBehavior.NeutralPatrol;
+    }
+
+    private static bool IsHostileBehavior(NpcBehavior behavior)
+    {
+        return behavior == NpcBehavior.Attacker ||
+               behavior == NpcBehavior.Static ||
+               behavior == NpcBehavior.HostilePatrol;
+    }
+
+    private static bool IsPatrolBehavior(NpcBehavior behavior)
+    {
+        return behavior == NpcBehavior.NeutralPatrol ||
+               behavior == NpcBehavior.HostilePatrol ||
+               behavior == NpcBehavior.AllyPatrol;
+    }
+
+    private void CreateOrUpdateNpcBlip(SpawnedNpc npc)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+        {
+            RemoveNpcBlip(npc);
+            return;
+        }
+
+        if (npc.Blip == null || !npc.Blip.Exists())
+        {
+            try
+            {
+                npc.Blip = npc.Ped.AddBlip();
+                npc.Blip.Scale = 0.72f;
+                npc.Blip.IsShortRange = false;
+            }
+            catch
+            {
+                npc.Blip = null;
+                return;
+            }
+        }
+
+        try
+        {
+            npc.Blip.Sprite = BlipSprite.Enemy2;
+            npc.Blip.Name = "DonJ NPC";
+
+            if (IsAllyBehavior(npc.BaseBehavior))
+            {
+                npc.Blip.Color = BlipColor.Green;
+                npc.Blip.IsFriendly = true;
+                npc.Blip.Name = npc.BaseBehavior == NpcBehavior.Bodyguard ? "DonJ Garde du corps" : "DonJ Allie";
+            }
+            else if (IsNeutralBehavior(npc.Behavior))
+            {
+                npc.Blip.Color = BlipColor.Yellow;
+                npc.Blip.IsFriendly = false;
+                npc.Blip.Name = "DonJ Neutre";
+            }
+            else
+            {
+                npc.Blip.Color = BlipColor.Red;
+                npc.Blip.IsFriendly = false;
+                npc.Blip.Name = "DonJ Ennemi";
+            }
+
+            npc.Blip.IsFlashing = npc.IsReturningHome;
+        }
+        catch
+        {
+        }
+    }
+
+    private void RemoveNpcBlip(SpawnedNpc npc)
+    {
+        if (npc == null || npc.Blip == null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (npc.Blip.Exists())
+            {
+                npc.Blip.Remove();
+            }
+        }
+        catch
+        {
+        }
+
+        npc.Blip = null;
+    }
+
+    private void CreateOrUpdatePlacedVehicleBlip(PlacedVehicle placed)
+    {
+        if (placed == null || !Entity.Exists(placed.Vehicle))
+        {
+            RemovePlacedVehicleBlip(placed);
+            return;
+        }
+
+        if (placed.Blip == null || !placed.Blip.Exists())
+        {
+            try
+            {
+                placed.Blip = placed.Vehicle.AddBlip();
+                placed.Blip.Scale = 0.65f;
+                placed.Blip.IsShortRange = false;
+                placed.Blip.Name = "DonJ Vehicule";
+            }
+            catch
+            {
+                placed.Blip = null;
+                return;
+            }
+        }
+
+        try
+        {
+            placed.Blip.Color = BlipColor.Blue;
+            placed.Blip.IsFriendly = true;
+        }
+        catch
+        {
+        }
+    }
+
+    private void RemovePlacedVehicleBlip(PlacedVehicle placed)
+    {
+        if (placed == null || placed.Blip == null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (placed.Blip.Exists())
+            {
+                placed.Blip.Remove();
+            }
+        }
+        catch
+        {
+        }
+
+        placed.Blip = null;
+    }
+
+    private void UpdatePlacedVehicles()
+    {
+        Ped player = Game.Player.Character;
+
+        for (int i = _placedVehicles.Count - 1; i >= 0; i--)
+        {
+            PlacedVehicle placed = _placedVehicles[i];
+
+            if (placed == null)
+            {
+                _placedVehicles.RemoveAt(i);
+                continue;
+            }
+
+            if (placed.RespawnPending)
+            {
+                TryProcessPlacedVehicleAutoRespawn(placed, player);
+                continue;
+            }
+
+            if (!Entity.Exists(placed.Vehicle))
+            {
+                RemovePlacedVehicleBlip(placed);
+
+                if (placed.AutoRespawn)
+                {
+                    MarkPlacedVehicleForAutoRespawn(placed);
+                    TryProcessPlacedVehicleAutoRespawn(placed, player);
+                }
+                else
+                {
+                    _placedVehicles.RemoveAt(i);
+                }
+
+                continue;
+            }
+
+            if (placed.AutoRespawn && IsPlacedVehicleDestroyed(placed))
+            {
+                MarkPlacedVehicleForAutoRespawn(placed);
+                continue;
+            }
+
+            placed.Position = placed.Vehicle.Position;
+            placed.Heading = placed.Vehicle.Heading;
+            CreateOrUpdatePlacedVehicleBlip(placed);
+        }
+    }
+
+    private void UpdatePlacedObjects()
+    {
+        Ped player = Game.Player.Character;
+
+        for (int i = _placedObjects.Count - 1; i >= 0; i--)
+        {
+            PlacedObject placed = _placedObjects[i];
+
+            if (placed == null)
+            {
+                _placedObjects.RemoveAt(i);
+                continue;
+            }
+
+            if (placed.RespawnPending)
+            {
+                TryProcessPlacedObjectAutoRespawn(placed, player);
+                continue;
+            }
+
+            if (!Entity.Exists(placed.Prop))
+            {
+                if (placed.AutoRespawn)
+                {
+                    MarkPlacedObjectForAutoRespawn(placed);
+                    TryProcessPlacedObjectAutoRespawn(placed, player);
+                }
+                else
+                {
+                    _placedObjects.RemoveAt(i);
+                }
+
+                continue;
+            }
+
+            if (placed.AutoRespawn && IsPlacedObjectDestroyed(placed))
+            {
+                MarkPlacedObjectForAutoRespawn(placed);
+                continue;
+            }
+
+            placed.Position = placed.Prop.Position;
+            placed.Heading = placed.Prop.Heading;
+        }
+    }
+
+    private void StartPlacementMode()
+    {
+        if (_placementMode)
+        {
+            return;
+        }
+
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player) || player.IsDead)
+        {
+            ShowStatus("Placement impossible: joueur invalide.", 3000);
+            return;
+        }
+
+        EnsureRelationshipGroups();
+
+        _menuVisible = false;
+
+        _storedPlayerInvincible = player.IsInvincible;
+        _storedPlayerFrozen = player.FreezePosition;
+
+        player.IsInvincible = true;
+        player.FreezePosition = true;
+
+        Vector3 cameraPosition = Function.Call<Vector3>(Hash.GET_GAMEPLAY_CAM_COORD);
+        Vector3 cameraRotation = Function.Call<Vector3>(Hash.GET_GAMEPLAY_CAM_ROT, 2);
+
+        _placementCameraRotation = cameraRotation;
+        _placementHeading = NormalizeHeading(player.Heading);
+        _placementCamera = World.CreateCamera(cameraPosition, cameraRotation, 60.0f);
+
+        if (Camera.Exists(_placementCamera))
+        {
+            _placementCamera.FarClip = 10000.0f;
+            World.RenderingCamera = _placementCamera;
+
+            _placementMode = true;
+            _placementHasHit = false;
+            _placementCancelRequested = false;
+            _placementConfirmRequested = false;
+            _nextPlacementSpawnAllowedAt = 0;
+            _nextPreviewRetryAt = 0;
+
+            ShowStatus("Placement camera actif: clic gauche/Entree place, Echap/clic droit quitte.", 5000);
+        }
+        else
+        {
+            player.IsInvincible = _storedPlayerInvincible;
+            player.FreezePosition = _storedPlayerFrozen;
+            ShowStatus("Impossible de creer la camera de placement.", 4000);
+        }
+    }
+
+    private void StopPlacementMode(bool reopenMenu)
+    {
+        if (!_placementMode)
+        {
+            return;
+        }
+
+        _placementMode = false;
+
+        DeletePlacementPreview();
+
+        if (Camera.Exists(_placementCamera))
+        {
+            World.RenderingCamera = null;
+            _placementCamera.Destroy();
+        }
+
+        _placementCamera = null;
+
+        Ped player = Game.Player.Character;
+
+        if (Entity.Exists(player))
+        {
+            player.IsInvincible = _storedPlayerInvincible;
+            player.FreezePosition = _storedPlayerFrozen;
+        }
+
+        _placementCancelRequested = false;
+        _placementConfirmRequested = false;
+
+        if (reopenMenu)
+        {
+            _menuVisible = true;
+        }
+    }
+
+    private void UpdatePlacementMode()
+    {
+        if (!Camera.Exists(_placementCamera))
+        {
+            StopPlacementMode(true);
+            return;
+        }
+
+        KeepPlayerSafeDuringPlacement();
+        DisablePlacementControls();
+
+        bool mouseCancel = IsDisabledControlJustPressed(GtaControl.Aim);
+        bool mouseConfirm = IsDisabledControlJustPressed(GtaControl.Attack);
+
+        if (_placementCancelRequested || mouseCancel)
+        {
+            StopPlacementMode(true);
+            ShowStatus("Placement camera quitte.", 2500);
+            return;
+        }
+
+        UpdatePlacementCameraMovement();
+        UpdatePlacementRaycast();
+        CreateOrUpdatePlacementPreview();
+
+        if (_placementHasHit)
+        {
+            DrawPlacementMarker();
+        }
+
+        DrawPlacementHud();
+
+        if (_placementConfirmRequested || mouseConfirm)
+        {
+            _placementConfirmRequested = false;
+
+            if (Game.GameTime < _nextPlacementSpawnAllowedAt)
+            {
+                return;
+            }
+
+            _nextPlacementSpawnAllowedAt = Game.GameTime + PlacementSpawnCooldownMs;
+
+            if (_placementHasHit)
+            {
+                ConfirmPlacementSpawn();
+            }
+            else
+            {
+                ShowStatus("Aucune surface detectee au centre de l'ecran.", 2500);
+            }
+        }
+    }
+
+    private void KeepPlayerSafeDuringPlacement()
+    {
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player))
+        {
+            return;
+        }
+
+        player.IsInvincible = true;
+        player.FreezePosition = true;
+    }
+
+    private void DisablePlacementControls()
+    {
+        Game.DisableAllControlsThisFrame(0);
+        Function.Call(Hash.HIDE_HUD_AND_RADAR_THIS_FRAME);
+    }
+
+    private void DisableMenuGameplayControls()
+    {
+        Game.DisableControlThisFrame(0, GtaControl.Attack);
+        Game.DisableControlThisFrame(0, GtaControl.Aim);
+        Game.DisableControlThisFrame(0, GtaControl.Reload);
+        Game.DisableControlThisFrame(0, GtaControl.Phone);
+        Game.DisableControlThisFrame(0, GtaControl.SelectWeapon);
+        Game.DisableControlThisFrame(0, GtaControl.WeaponWheelLeftRight);
+        Game.DisableControlThisFrame(0, GtaControl.WeaponWheelUpDown);
+    }
+
+    private void UpdatePlacementCameraMovement()
+    {
+        float dt = Math.Min(Game.LastFrameTime, 0.05f);
+
+        float lookX = Game.GetDisabledControlNormal(0, GtaControl.LookLeftRight);
+        float lookY = Game.GetDisabledControlNormal(0, GtaControl.LookUpDown);
+
+        _placementCameraRotation.Z -= lookX * 8.0f;
+        _placementCameraRotation.X -= lookY * 8.0f;
+        _placementCameraRotation.X = ClampFloat(_placementCameraRotation.X, -89.0f, 89.0f);
+        _placementCameraRotation.Y = 0.0f;
+
+        _placementCamera.Rotation = _placementCameraRotation;
+
+        Vector3 forward = Normalize(_placementCamera.Direction);
+        Vector3 right = Normalize(new Vector3(forward.Y, -forward.X, 0.0f));
+        Vector3 up = new Vector3(0.0f, 0.0f, 1.0f);
+
+        float speed = 18.0f;
+
+        if (IsShiftHeld())
+        {
+            speed = 65.0f;
+        }
+        else if (IsAltHeld())
+        {
+            speed = 5.0f;
+        }
+
+        Vector3 movement = Vector3.Zero;
+
+        if (IsKeyDown(Keys.W) || IsKeyDown(Keys.Z)) movement += forward;
+        if (IsKeyDown(Keys.S)) movement -= forward;
+        if (IsKeyDown(Keys.D)) movement += right;
+        if (IsKeyDown(Keys.Q)) movement -= right;
+        if (IsKeyDown(Keys.Space)) movement += up;
+        if (IsControlHeld()) movement -= up;
+
+        if (movement.Length() > 0.001f)
+        {
+            movement = Normalize(movement);
+            _placementCamera.Position += movement * speed * dt;
+        }
+
+        float headingSpeed = IsShiftHeld() ? 180.0f : 75.0f;
+
+        if (IsKeyDown(Keys.A))
+        {
+            _placementHeading = NormalizeHeading(_placementHeading - headingSpeed * dt);
+        }
+
+        if (IsKeyDown(Keys.E))
+        {
+            _placementHeading = NormalizeHeading(_placementHeading + headingSpeed * dt);
+        }
+    }
+
+    private void UpdatePlacementRaycast()
+    {
+        Vector3 origin = _placementCamera.Position;
+        Vector3 direction = Normalize(_placementCamera.Direction);
+
+        IntersectOptions options = (IntersectOptions)(
+            (int)IntersectOptions.Map |
+            (int)IntersectOptions.Objects |
+            (int)IntersectOptions.Vegetation);
+
+        RaycastResult ray = World.Raycast(origin, direction, 5000.0f, options, Game.Player.Character);
+
+        if (ray.DitHitAnything)
+        {
+            _placementHasHit = true;
+            _placementHitPoint = ray.HitCoords;
+            _placementSurfaceNormal = ray.SurfaceNormal;
+            _placementSpawnPoint = CalculatePlacementSpawnPoint(ray.HitCoords, ray.SurfaceNormal, _selectedPlacementType);
+        }
+        else
+        {
+            _placementHasHit = false;
+            _placementHitPoint = origin + direction * 20.0f;
+            _placementSpawnPoint = _placementHitPoint;
+            _placementSurfaceNormal = new Vector3(0.0f, 0.0f, 1.0f);
+        }
+    }
+
+    private static Vector3 CalculatePlacementSpawnPoint(Vector3 hitCoords, Vector3 surfaceNormal, PlacementEntityType placementType)
+    {
+        Vector3 normal = Normalize(surfaceNormal);
+
+        if (normal.Length() < 0.001f)
+        {
+            normal = new Vector3(0.0f, 0.0f, 1.0f);
+        }
+
+        if (normal.Z > 0.35f)
+        {
+            switch (placementType)
+            {
+                case PlacementEntityType.Vehicle:
+                    return hitCoords + new Vector3(0.0f, 0.0f, 0.35f);
+
+                case PlacementEntityType.Object:
+                case PlacementEntityType.Entrance:
+                case PlacementEntityType.Exit:
+                    return hitCoords + new Vector3(0.0f, 0.0f, 0.05f);
+
+                case PlacementEntityType.Npc:
+                default:
+                    return hitCoords + new Vector3(0.0f, 0.0f, 0.75f);
+            }
+        }
+
+        if (placementType == PlacementEntityType.Object ||
+            placementType == PlacementEntityType.Entrance ||
+            placementType == PlacementEntityType.Exit)
+        {
+            return hitCoords + normal * 0.25f;
+        }
+
+        return hitCoords + normal * 0.85f + new Vector3(0.0f, 0.0f, 0.35f);
+    }
+
+    private void CreateOrUpdatePlacementPreview()
+    {
+        if (!_placementMode || !_placementHasHit)
+        {
+            DeletePlacementPreview();
+            return;
+        }
+
+        string currentKey = CurrentPlacementKey();
+
+        if (IsCurrentPlacementPreviewValid(currentKey))
+        {
+            MovePlacementPreview();
+            return;
+        }
+
+        DeletePlacementPreview();
+
+        if (Game.GameTime < _nextPreviewRetryAt)
+        {
+            return;
+        }
+
+        _nextPreviewRetryAt = Game.GameTime + PreviewRetryIntervalMs;
+
+        switch (_selectedPlacementType)
+        {
+            case PlacementEntityType.Vehicle:
+                CreateVehiclePlacementPreview(currentKey);
+                break;
+
+            case PlacementEntityType.Object:
+                CreateObjectPlacementPreview(currentKey);
+                break;
+
+            case PlacementEntityType.Entrance:
+            case PlacementEntityType.Exit:
+                _placementPreviewType = _selectedPlacementType;
+                _placementPreviewKey = currentKey;
+                break;
+
+            case PlacementEntityType.Npc:
+            default:
+                CreateNpcPlacementPreview(currentKey);
+                break;
+        }
+    }
+
+    private bool IsCurrentPlacementPreviewValid(string currentKey)
+    {
+        if (!string.Equals(_placementPreviewKey, currentKey, StringComparison.Ordinal) ||
+            _placementPreviewType != _selectedPlacementType)
+        {
+            return false;
+        }
+
+        switch (_selectedPlacementType)
+        {
+            case PlacementEntityType.Vehicle:
+                return Entity.Exists(_placementPreviewVehicle);
+
+            case PlacementEntityType.Object:
+                return Entity.Exists(_placementPreviewProp);
+
+            case PlacementEntityType.Entrance:
+            case PlacementEntityType.Exit:
+                return true;
+
+            case PlacementEntityType.Npc:
+            default:
+                return Entity.Exists(_placementPreviewPed);
+        }
+    }
+
+    private void CreateNpcPlacementPreview(string currentKey)
+    {
+        ModelIdentity identity = BuildCurrentModelIdentity();
+        Ped preview = CreatePedFromModelIdentity(identity, _placementSpawnPoint, NormalizeHeading(_placementHeading));
+
+        if (!Entity.Exists(preview))
+        {
+            return;
+        }
+
+        _placementPreviewPed = preview;
+        _placementPreviewType = PlacementEntityType.Npc;
+        _placementPreviewKey = currentKey;
+
+        ConfigureNpcPlacementPreview(preview);
+        MovePlacementPreview();
+    }
+
+    private void CreateVehiclePlacementPreview(string currentKey)
+    {
+        VehicleIdentity identity = BuildCurrentVehicleIdentity();
+        Vehicle preview = CreateVehicleFromIdentity(identity, _placementSpawnPoint, NormalizeHeading(_placementHeading));
+
+        if (!Entity.Exists(preview))
+        {
+            return;
+        }
+
+        _placementPreviewVehicle = preview;
+        _placementPreviewType = PlacementEntityType.Vehicle;
+        _placementPreviewKey = currentKey;
+
+        ConfigureVehiclePlacementPreview(preview);
+        MovePlacementPreview();
+    }
+
+    private void CreateObjectPlacementPreview(string currentKey)
+    {
+        ObjectIdentity identity = BuildCurrentObjectIdentity();
+        Prop preview = CreatePropFromIdentity(identity, _placementSpawnPoint, NormalizeHeading(_placementHeading));
+
+        if (!Entity.Exists(preview))
+        {
+            return;
+        }
+
+        _placementPreviewProp = preview;
+        _placementPreviewType = PlacementEntityType.Object;
+        _placementPreviewKey = currentKey;
+
+        ConfigureObjectPlacementPreview(preview);
+        MovePlacementPreview();
+    }
+
+    private void ConfigureNpcPlacementPreview(Ped preview)
+    {
+        if (!Entity.Exists(preview))
+        {
+            return;
+        }
+
+        preview.IsPersistent = true;
+        preview.AlwaysKeepTask = true;
+        preview.BlockPermanentEvents = true;
+        preview.FreezePosition = true;
+        preview.IsInvincible = true;
+        preview.CanBeTargetted = false;
+        preview.CanRagdoll = false;
+        preview.Health = Math.Max(1000, _selectedHealth);
+        preview.Armor = 0;
+
+        Function.Call(Hash.SET_ENTITY_AS_MISSION_ENTITY, preview.Handle, true, true);
+        Function.Call(Hash.SET_ENTITY_ALPHA, preview.Handle, PlacementPreviewAlpha, false);
+        Function.Call(Hash.SET_ENTITY_COLLISION, preview.Handle, false, false);
+        Function.Call(Hash.SET_ENTITY_INVINCIBLE, preview.Handle, true);
+        Function.Call(Hash.SET_ENTITY_VISIBLE, preview.Handle, true, false);
+        Function.Call(Hash.SET_PED_CAN_RAGDOLL, preview.Handle, false);
+        Function.Call(Hash.SET_PED_CAN_BE_TARGETTED, preview.Handle, false);
+        Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, preview.Handle, _neutralGroupHash);
+        Function.Call(Hash.TASK_STAND_STILL, preview.Handle, -1);
+
+        GiveWeaponLoadout(preview, _selectedWeaponLoadout, false);
+    }
+
+    private void ConfigureVehiclePlacementPreview(Vehicle preview)
+    {
+        if (!Entity.Exists(preview))
+        {
+            return;
+        }
+
+        preview.IsPersistent = true;
+        preview.FreezePosition = true;
+        preview.IsInvincible = true;
+        preview.Heading = NormalizeHeading(_placementHeading);
+
+        Function.Call(Hash.SET_ENTITY_AS_MISSION_ENTITY, preview.Handle, true, true);
+        Function.Call(Hash.SET_ENTITY_ALPHA, preview.Handle, PlacementPreviewAlpha, false);
+        Function.Call(Hash.SET_ENTITY_COLLISION, preview.Handle, false, false);
+        Function.Call(Hash.SET_ENTITY_INVINCIBLE, preview.Handle, true);
+        Function.Call(Hash.SET_ENTITY_VISIBLE, preview.Handle, true, false);
+        Function.Call(Hash.SET_VEHICLE_ENGINE_ON, preview.Handle, false, true, false);
+    }
+
+    private void ConfigureObjectPlacementPreview(Prop preview)
+    {
+        if (!Entity.Exists(preview))
+        {
+            return;
+        }
+
+        preview.IsPersistent = true;
+        preview.FreezePosition = true;
+        preview.IsInvincible = true;
+        preview.Heading = NormalizeHeading(_placementHeading);
+
+        Function.Call(Hash.SET_ENTITY_AS_MISSION_ENTITY, preview.Handle, true, true);
+        Function.Call(Hash.SET_ENTITY_ALPHA, preview.Handle, PlacementPreviewAlpha, false);
+        Function.Call(Hash.SET_ENTITY_COLLISION, preview.Handle, false, false);
+        Function.Call(Hash.SET_ENTITY_INVINCIBLE, preview.Handle, true);
+        Function.Call(Hash.SET_ENTITY_VISIBLE, preview.Handle, true, false);
+        Function.Call(Hash.FREEZE_ENTITY_POSITION, preview.Handle, true);
+    }
+
+    private void MovePlacementPreview()
+    {
+        switch (_selectedPlacementType)
+        {
+            case PlacementEntityType.Vehicle:
+                if (!Entity.Exists(_placementPreviewVehicle)) return;
+
+                _placementPreviewVehicle.Position = _placementSpawnPoint;
+                _placementPreviewVehicle.Heading = NormalizeHeading(_placementHeading);
+                _placementPreviewVehicle.FreezePosition = true;
+                Function.Call(Hash.SET_ENTITY_ALPHA, _placementPreviewVehicle.Handle, PlacementPreviewAlpha, false);
+                Function.Call(Hash.SET_ENTITY_COLLISION, _placementPreviewVehicle.Handle, false, false);
+                Function.Call(Hash.SET_ENTITY_INVINCIBLE, _placementPreviewVehicle.Handle, true);
+                break;
+
+            case PlacementEntityType.Object:
+                if (!Entity.Exists(_placementPreviewProp)) return;
+
+                _placementPreviewProp.Position = _placementSpawnPoint;
+                _placementPreviewProp.Heading = NormalizeHeading(_placementHeading);
+                _placementPreviewProp.FreezePosition = true;
+                Function.Call(Hash.SET_ENTITY_ALPHA, _placementPreviewProp.Handle, PlacementPreviewAlpha, false);
+                Function.Call(Hash.SET_ENTITY_COLLISION, _placementPreviewProp.Handle, false, false);
+                Function.Call(Hash.SET_ENTITY_INVINCIBLE, _placementPreviewProp.Handle, true);
+                Function.Call(Hash.FREEZE_ENTITY_POSITION, _placementPreviewProp.Handle, true);
+                break;
+
+            case PlacementEntityType.Npc:
+            default:
+                if (!Entity.Exists(_placementPreviewPed)) return;
+
+                _placementPreviewPed.Position = _placementSpawnPoint;
+                _placementPreviewPed.Heading = NormalizeHeading(_placementHeading);
+                _placementPreviewPed.FreezePosition = true;
+
+                Function.Call(Hash.SET_ENTITY_ALPHA, _placementPreviewPed.Handle, PlacementPreviewAlpha, false);
+                Function.Call(Hash.SET_ENTITY_COLLISION, _placementPreviewPed.Handle, false, false);
+                Function.Call(Hash.SET_ENTITY_INVINCIBLE, _placementPreviewPed.Handle, true);
+                Function.Call(Hash.TASK_STAND_STILL, _placementPreviewPed.Handle, -1);
+                break;
+        }
+    }
+
+    private void DeletePlacementPreview()
+    {
+        DeleteEntitySafe(_placementPreviewPed);
+        DeleteEntitySafe(_placementPreviewVehicle);
+        DeleteEntitySafe(_placementPreviewProp);
+
+        _placementPreviewPed = null;
+        _placementPreviewVehicle = null;
+        _placementPreviewProp = null;
+        _placementPreviewType = _selectedPlacementType;
+        _placementPreviewKey = string.Empty;
+    }
+
+    private void RestorePreviewAsRealPed(Ped ped)
+    {
+        if (!Entity.Exists(ped)) return;
+
+        ped.FreezePosition = false;
+        ped.IsInvincible = false;
+        ped.CanBeTargetted = true;
+        ped.CanRagdoll = true;
+        ped.Position = _placementSpawnPoint;
+        ped.Heading = NormalizeHeading(_placementHeading);
+
+        Function.Call(Hash.RESET_ENTITY_ALPHA, ped.Handle);
+        Function.Call(Hash.SET_ENTITY_ALPHA, ped.Handle, 255, false);
+        Function.Call(Hash.SET_ENTITY_COLLISION, ped.Handle, true, true);
+        Function.Call(Hash.SET_ENTITY_INVINCIBLE, ped.Handle, false);
+        Function.Call(Hash.SET_PED_CAN_RAGDOLL, ped.Handle, true);
+        Function.Call(Hash.SET_PED_CAN_BE_TARGETTED, ped.Handle, true);
+        Function.Call(Hash.CLEAR_ENTITY_LAST_DAMAGE_ENTITY, ped.Handle);
+    }
+
+    private void RestorePreviewAsRealVehicle(Vehicle vehicle)
+    {
+        if (!Entity.Exists(vehicle)) return;
+
+        vehicle.FreezePosition = false;
+        vehicle.IsInvincible = false;
+        vehicle.Position = _placementSpawnPoint;
+        vehicle.Heading = NormalizeHeading(_placementHeading);
+
+        Function.Call(Hash.RESET_ENTITY_ALPHA, vehicle.Handle);
+        Function.Call(Hash.SET_ENTITY_ALPHA, vehicle.Handle, 255, false);
+        Function.Call(Hash.SET_ENTITY_COLLISION, vehicle.Handle, true, true);
+        Function.Call(Hash.SET_ENTITY_INVINCIBLE, vehicle.Handle, false);
+        Function.Call(Hash.SET_ENTITY_VISIBLE, vehicle.Handle, true, false);
+    }
+
+    private void RestorePreviewAsRealObject(Prop prop)
+    {
+        if (!Entity.Exists(prop)) return;
+
+        prop.FreezePosition = false;
+        prop.IsInvincible = false;
+        prop.Position = _placementSpawnPoint;
+        prop.Heading = NormalizeHeading(_placementHeading);
+
+        Function.Call(Hash.RESET_ENTITY_ALPHA, prop.Handle);
+        Function.Call(Hash.SET_ENTITY_ALPHA, prop.Handle, 255, false);
+        Function.Call(Hash.SET_ENTITY_COLLISION, prop.Handle, true, true);
+        Function.Call(Hash.SET_ENTITY_INVINCIBLE, prop.Handle, false);
+        Function.Call(Hash.SET_ENTITY_VISIBLE, prop.Handle, true, false);
+        Function.Call(Hash.FREEZE_ENTITY_POSITION, prop.Handle, true);
+    }
+
+    private void ConfirmPlacementSpawn()
+    {
+        if (!_placementHasHit)
+        {
+            ShowStatus("Aucune surface detectee.", 2500);
+            return;
+        }
+
+        switch (_selectedPlacementType)
+        {
+            case PlacementEntityType.Vehicle:
+                ConfirmVehiclePlacementSpawn();
+                break;
+
+            case PlacementEntityType.Object:
+                ConfirmObjectPlacementSpawn();
+                break;
+
+            case PlacementEntityType.Entrance:
+                ConfirmInteriorEntrancePlacementSpawn();
+                break;
+
+            case PlacementEntityType.Exit:
+                ConfirmInteriorExitPlacementSpawn();
+                break;
+
+            case PlacementEntityType.Npc:
+            default:
+                ConfirmNpcPlacementSpawn();
+                break;
+        }
+
+        _nextPreviewRetryAt = 0;
+        CreateOrUpdatePlacementPreview();
+    }
+
+    private void ConfirmNpcPlacementSpawn()
+    {
+        Ped ped = null;
+        string currentKey = CurrentPlacementKey();
+        ModelIdentity modelIdentity = BuildCurrentModelIdentity();
+        WeaponLoadout loadout = _selectedWeaponLoadout.Clone();
+
+        if (Entity.Exists(_placementPreviewPed) &&
+            _placementPreviewType == PlacementEntityType.Npc &&
+            string.Equals(_placementPreviewKey, currentKey, StringComparison.Ordinal))
+        {
+            ped = _placementPreviewPed;
+            _placementPreviewPed = null;
+            _placementPreviewKey = string.Empty;
+            RestorePreviewAsRealPed(ped);
+        }
+        else
+        {
+            ped = CreatePedFromModelIdentity(modelIdentity, _placementSpawnPoint, _placementHeading);
+        }
+
+        if (!Entity.Exists(ped)) return;
+
+        RegisterSpawnedNpc(
+            ped,
+            _selectedBehavior,
+            true,
+            true,
+            modelIdentity,
+            loadout,
+            _selectedHealth,
+            _selectedArmor,
+            _placementSpawnPoint,
+            _placementHeading,
+            _selectedPatrolRadius,
+            _selectedAutoRespawn);
+    }
+
+    private void ConfirmVehiclePlacementSpawn()
+    {
+        Vehicle vehicle = null;
+        string currentKey = CurrentPlacementKey();
+        VehicleIdentity identity = BuildCurrentVehicleIdentity();
+
+        if (Entity.Exists(_placementPreviewVehicle) &&
+            _placementPreviewType == PlacementEntityType.Vehicle &&
+            string.Equals(_placementPreviewKey, currentKey, StringComparison.Ordinal))
+        {
+            vehicle = _placementPreviewVehicle;
+            _placementPreviewVehicle = null;
+            _placementPreviewKey = string.Empty;
+            RestorePreviewAsRealVehicle(vehicle);
+        }
+        else
+        {
+            vehicle = CreateVehicleFromIdentity(identity, _placementSpawnPoint, _placementHeading);
+        }
+
+        if (!Entity.Exists(vehicle)) return;
+
+        RegisterPlacedVehicle(vehicle, identity, _placementSpawnPoint, _placementHeading, true, _selectedAutoRespawn);
+    }
+
+    private void ConfirmObjectPlacementSpawn()
+    {
+        Prop prop = null;
+        string currentKey = CurrentPlacementKey();
+        ObjectIdentity identity = BuildCurrentObjectIdentity();
+
+        if (Entity.Exists(_placementPreviewProp) &&
+            _placementPreviewType == PlacementEntityType.Object &&
+            string.Equals(_placementPreviewKey, currentKey, StringComparison.Ordinal))
+        {
+            prop = _placementPreviewProp;
+            _placementPreviewProp = null;
+            _placementPreviewKey = string.Empty;
+            RestorePreviewAsRealObject(prop);
+        }
+        else
+        {
+            prop = CreatePropFromIdentity(identity, _placementSpawnPoint, _placementHeading);
+        }
+
+        if (!Entity.Exists(prop)) return;
+
+        RegisterPlacedObject(prop, identity, _placementSpawnPoint, _placementHeading, true, _selectedAutoRespawn);
+    }
+
+    private void DrawPlacementMarker()
+    {
+        World.DrawMarker(
+            MarkerType.VerticalCylinder,
+            _placementHitPoint + new Vector3(0.0f, 0.0f, 0.05f),
+            Vector3.Zero,
+            Vector3.Zero,
+            new Vector3(0.65f, 0.65f, 0.25f),
+            Color.FromArgb(170, 255, 40, 40));
+
+        World.DrawMarker(
+            MarkerType.DebugSphere,
+            _placementSpawnPoint,
+            Vector3.Zero,
+            Vector3.Zero,
+            new Vector3(0.28f, 0.28f, 0.28f),
+            Color.FromArgb(220, 255, 255, 255));
+    }
+
+    private void DrawPlacementHud()
+    {
+        DrawRect(0, 0, 1280, 54, Color.FromArgb(155, 0, 0, 0));
+
+        DrawText(
+            "Placement camera - type: " + PlacementTypeDisplayName(_selectedPlacementType) + " | clic gauche/Entree: placer | clic droit/Echap: quitter | A/E: tourner",
+            18,
+            12,
+            0.32f,
+            Color.White,
+            false,
+            true);
+
+        DrawText("+", 640, 346, 0.55f, Color.White, true, true);
+
+        string info = _placementHasHit
+            ? "Position: " + FormatVector(_placementHitPoint) + " | Direction: " + NormalizeHeading(_placementHeading).ToString("0", CultureInfo.InvariantCulture) + "°"
+            : "Aucune surface detectee";
+
+        DrawRect(0, 676, 1280, 44, Color.FromArgb(155, 0, 0, 0));
+        DrawText(info, 18, 688, 0.32f, Color.White, false, true);
+    }
+
+    private static bool IsDisabledControlJustPressed(GtaControl control)
+    {
+        return Function.Call<bool>(Hash.IS_DISABLED_CONTROL_JUST_PRESSED, 0, (int)control);
+    }
+
+    private string CurrentModelKey()
+    {
+        if (_modelCategories != null && _modelCategories.Count > 0)
+        {
+            ModelOption option = CurrentModelOption();
+
+            if (option.IsCustom)
+            {
+                return "custom:" + (_customModelName ?? string.Empty).Trim().ToLowerInvariant();
+            }
+
+            return "hash:" + option.Hash.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (_modelOptions == null || _modelOptions.Count == 0)
+        {
+            return "none";
+        }
+
+        _selectedModelIndex = Wrap(_selectedModelIndex, _modelOptions.Count);
+        ModelOption legacyOption = _modelOptions[_selectedModelIndex];
+
+        if (legacyOption.IsCustom)
+        {
+            return "custom:" + (_customModelName ?? string.Empty).Trim().ToLowerInvariant();
+        }
+
+        return "hash:" + legacyOption.Hash.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private string CurrentPlacementKey()
+    {
+        switch (_selectedPlacementType)
+        {
+            case PlacementEntityType.Vehicle:
+                return "vehicle:" + EnumToIntHash(CurrentVehicleOption().Hash).ToString(CultureInfo.InvariantCulture);
+
+            case PlacementEntityType.Object:
+                return "object:" + (CurrentObjectOption().ModelName ?? string.Empty).Trim().ToLowerInvariant();
+
+            case PlacementEntityType.Entrance:
+                return "entrance:" + (CurrentInteriorOption().Id ?? string.Empty).Trim().ToLowerInvariant();
+
+            case PlacementEntityType.Exit:
+                return _activeInteriorSession != null && _activeInteriorSession.Interior != null
+                    ? "exit:" + (_activeInteriorSession.Interior.Id ?? string.Empty).Trim().ToLowerInvariant()
+                    : "exit:none";
+
+            case PlacementEntityType.Npc:
+            default:
+                return "npc:" + CurrentModelKey();
+        }
+    }
+
+    private void SaveCurrentSetupWithPrompt()
+    {
+        _menuVisible = false;
+
+        string input = Game.GetUserInput(_lastSaveFileName, 64);
+
+        _menuVisible = true;
+
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            ShowStatus("Sauvegarde annulee.", 2500);
+            return;
+        }
+
+        _lastSaveFileName = NormalizeSaveFileName(input);
+        SaveCurrentSetup(_lastSaveFileName);
+    }
+
+    private void LoadSetupWithPrompt()
+    {
+        _menuVisible = false;
+
+        string input = Game.GetUserInput(_lastSaveFileName, 64);
+
+        _menuVisible = true;
+
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            ShowStatus("Chargement annule.", 2500);
+            return;
+        }
+
+        _lastSaveFileName = NormalizeSaveFileName(input);
+        LoadSetup(_lastSaveFileName);
+    }
+
+    private void SaveCurrentSetup(string fileName)
+    {
+        string normalizedFileName = NormalizeSaveFileName(fileName);
+        string tempPath = null;
+
+        try
+        {
+            string saveDirectory = GetSaveDirectory();
+            Directory.CreateDirectory(saveDirectory);
+
+            string path = Path.Combine(saveDirectory, normalizedFileName);
+            tempPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+
+            XmlWriterSettings settings = new XmlWriterSettings
+            {
+                Indent = true,
+                Encoding = System.Text.Encoding.UTF8
+            };
+
+            int savedNpcs = 0;
+            int savedVehicles = 0;
+            int savedObjects = 0;
+            int savedPortals = 0;
+
+            using (XmlWriter writer = XmlWriter.Create(tempPath, settings))
+            {
+                writer.WriteStartDocument();
+                writer.WriteStartElement("DonJEnemySpawnerSave");
+                writer.WriteAttributeString("version", "5");
+                writer.WriteAttributeString("createdUtc", DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture));
+                writer.WriteAttributeString("saveFile", normalizedFileName);
+                writer.WriteAttributeString("saveDirectory", saveDirectory);
+
+                writer.WriteStartElement("Npcs");
+
+                for (int i = 0; i < _spawnedNpcs.Count; i++)
+                {
+                    SpawnedNpc npc = _spawnedNpcs[i];
+
+                    if (npc == null || npc.ModelIdentity == null || npc.Loadout == null)
+                    {
+                        continue;
+                    }
+
+                    bool liveNpc = Entity.Exists(npc.Ped) && !npc.Ped.IsDead;
+
+                    if (!liveNpc && !npc.AutoRespawn)
+                    {
+                        continue;
+                    }
+
+                    writer.WriteStartElement("Npc");
+
+                    writer.WriteAttributeString("behavior", npc.BaseBehavior.ToString());
+                    writer.WriteAttributeString("currentBehavior", npc.Behavior.ToString());
+
+                    writer.WriteAttributeString("modelIsCustom", npc.ModelIdentity.IsCustom.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("modelName", npc.ModelIdentity.Name ?? string.Empty);
+                    writer.WriteAttributeString("modelHash", npc.ModelIdentity.Hash.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("modelDisplayName", npc.ModelIdentity.DisplayName ?? string.Empty);
+
+                    writer.WriteAttributeString("x", npc.HomePosition.X.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("y", npc.HomePosition.Y.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("z", npc.HomePosition.Z.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("heading", npc.HomeHeading.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("patrolRadius", npc.PatrolRadius.ToString(CultureInfo.InvariantCulture));
+
+                    int saveHealth = liveNpc ? npc.Ped.Health : npc.SavedMaxHealth;
+                    int saveArmor = liveNpc ? npc.Ped.Armor : npc.SavedArmor;
+
+                    writer.WriteAttributeString("maxHealth", npc.SavedMaxHealth.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("health", saveHealth.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("armor", saveArmor.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("autoRespawn", npc.AutoRespawn.ToString(CultureInfo.InvariantCulture));
+
+                    WriteLoadoutXml(writer, npc.Loadout);
+
+                    writer.WriteEndElement();
+                    savedNpcs++;
+                }
+
+                writer.WriteEndElement();
+
+                writer.WriteStartElement("Vehicles");
+
+                for (int i = 0; i < _placedVehicles.Count; i++)
+                {
+                    PlacedVehicle placed = _placedVehicles[i];
+
+                    if (placed == null || placed.Identity == null)
+                    {
+                        continue;
+                    }
+
+                    bool liveVehicle = Entity.Exists(placed.Vehicle);
+
+                    if (!liveVehicle && !placed.AutoRespawn)
+                    {
+                        continue;
+                    }
+
+                    Vector3 savePosition = placed.AutoRespawn ? placed.RespawnPosition : placed.Vehicle.Position;
+                    float saveHeading = placed.AutoRespawn ? placed.RespawnHeading : placed.Vehicle.Heading;
+
+                    writer.WriteStartElement("Vehicle");
+                    writer.WriteAttributeString("name", placed.Identity.Name ?? string.Empty);
+                    writer.WriteAttributeString("hash", placed.Identity.Hash.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("displayName", placed.Identity.DisplayName ?? string.Empty);
+                    writer.WriteAttributeString("x", savePosition.X.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("y", savePosition.Y.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("z", savePosition.Z.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("heading", saveHeading.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("autoRespawn", placed.AutoRespawn.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteEndElement();
+                    savedVehicles++;
+                }
+
+                writer.WriteEndElement();
+
+                writer.WriteStartElement("Objects");
+
+                for (int i = 0; i < _placedObjects.Count; i++)
+                {
+                    PlacedObject placed = _placedObjects[i];
+
+                    if (placed == null || placed.Identity == null)
+                    {
+                        continue;
+                    }
+
+                    bool liveObject = Entity.Exists(placed.Prop);
+
+                    if (!liveObject && !placed.AutoRespawn)
+                    {
+                        continue;
+                    }
+
+                    Vector3 savePosition = placed.AutoRespawn ? placed.RespawnPosition : placed.Prop.Position;
+                    float saveHeading = placed.AutoRespawn ? placed.RespawnHeading : placed.Prop.Heading;
+
+                    writer.WriteStartElement("Object");
+                    writer.WriteAttributeString("modelName", placed.Identity.ModelName ?? string.Empty);
+                    writer.WriteAttributeString("displayName", placed.Identity.DisplayName ?? string.Empty);
+                    writer.WriteAttributeString("x", savePosition.X.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("y", savePosition.Y.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("z", savePosition.Z.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("heading", saveHeading.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteAttributeString("autoRespawn", placed.AutoRespawn.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteEndElement();
+                    savedObjects++;
+                }
+
+                writer.WriteEndElement();
+
+                savedPortals = WriteInteriorPortalsXml(writer);
+
+                writer.WriteEndElement();
+                writer.WriteEndDocument();
+            }
+
+            ReplaceFileAtomically(tempPath, path);
+            tempPath = null;
+
+            _lastSaveFileName = normalizedFileName;
+            PersistLastSaveFileNameSafe(normalizedFileName);
+
+            ShowStatus(
+                "Sauvegarde OK: " + normalizedFileName +
+                " | NPC " + savedNpcs.ToString(CultureInfo.InvariantCulture) +
+                " | vehicules " + savedVehicles.ToString(CultureInfo.InvariantCulture) +
+                " | objets " + savedObjects.ToString(CultureInfo.InvariantCulture) +
+                " | portails " + savedPortals.ToString(CultureInfo.InvariantCulture),
+                6000);
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Erreur sauvegarde: " + ex.Message, 7000);
+        }
+        finally
+        {
+            DeleteFileIfExistsSafe(tempPath);
+        }
+    }
+
+    private void LoadSetup(string fileName)
+    {
+        string normalizedFileName = NormalizeSaveFileName(fileName);
+
+        try
+        {
+            string path;
+            string searchedDirectory;
+
+            if (!TryResolveSavePathForLoad(normalizedFileName, out path, out searchedDirectory))
+            {
+                ShowStatus(
+                    "Fichier introuvable: " + normalizedFileName + " | dossier: " + CompactPathForStatus(searchedDirectory),
+                    7000);
+                return;
+            }
+
+            XmlDocument doc = new XmlDocument();
+
+            using (FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            {
+                doc.Load(stream);
+            }
+
+            XmlNodeList npcNodes = doc.SelectNodes("/DonJEnemySpawnerSave/Npcs/Npc");
+
+            if (npcNodes == null || npcNodes.Count == 0)
+            {
+                npcNodes = doc.SelectNodes("/DonJEnemySpawnerSave/Npc");
+            }
+
+            XmlNodeList vehicleNodes = doc.SelectNodes("/DonJEnemySpawnerSave/Vehicles/Vehicle");
+            XmlNodeList objectNodes = doc.SelectNodes("/DonJEnemySpawnerSave/Objects/Object");
+
+            CleanAllSpawnedNpcs();
+            CleanAllPlacedVehicles();
+            CleanAllPlacedObjects();
+
+            int loadedNpcs = 0;
+            int loadedVehicles = 0;
+            int loadedObjects = 0;
+            int loadedPortals = 0;
+
+            if (npcNodes != null)
+            {
+                foreach (XmlNode node in npcNodes)
+                {
+                    ModelIdentity identity = ReadModelIdentityXml(node);
+                    WeaponLoadout loadout = ReadLoadoutXml(node);
+
+                    NpcBehavior behavior = ReadEnumAttribute(node, "behavior", NpcBehavior.Neutral);
+
+                    Vector3 position = new Vector3(
+                        ReadFloatAttribute(node, "x", 0.0f),
+                        ReadFloatAttribute(node, "y", 0.0f),
+                        ReadFloatAttribute(node, "z", 0.0f));
+
+                    float heading = ReadFloatAttribute(node, "heading", 0.0f);
+                    float patrolRadius = ReadFloatAttribute(node, "patrolRadius", _selectedPatrolRadius);
+                    int maxHealth = ReadIntAttribute(node, "maxHealth", _selectedHealth);
+                    int health = ReadIntAttribute(node, "health", maxHealth);
+                    int armor = ReadIntAttribute(node, "armor", _selectedArmor);
+                    bool autoRespawn = ReadBoolAttribute(node, "autoRespawn", false);
+
+                    Ped ped = CreatePedFromModelIdentity(identity, position, heading);
+
+                    if (!Entity.Exists(ped))
+                    {
+                        continue;
+                    }
+
+                    SpawnedNpc spawned = RegisterSpawnedNpc(
+                        ped,
+                        behavior,
+                        true,
+                        false,
+                        identity,
+                        loadout,
+                        maxHealth,
+                        armor,
+                        position,
+                        heading,
+                        patrolRadius,
+                        autoRespawn);
+
+                    if (spawned != null && Entity.Exists(spawned.Ped))
+                    {
+                        spawned.Ped.Health = Clamp(health, MinHealth, MaxHealth);
+                        spawned.Ped.Armor = Clamp(armor, MinArmor, MaxArmor);
+                        loadedNpcs++;
+                    }
+                }
+            }
+
+            if (vehicleNodes != null)
+            {
+                foreach (XmlNode node in vehicleNodes)
+                {
+                    VehicleIdentity identity = ReadVehicleIdentityXml(node);
+
+                    Vector3 position = new Vector3(
+                        ReadFloatAttribute(node, "x", 0.0f),
+                        ReadFloatAttribute(node, "y", 0.0f),
+                        ReadFloatAttribute(node, "z", 0.0f));
+
+                    float heading = ReadFloatAttribute(node, "heading", 0.0f);
+                    bool autoRespawn = ReadBoolAttribute(node, "autoRespawn", false);
+
+                    Vehicle vehicle = CreateVehicleFromIdentity(identity, position, heading);
+
+                    if (!Entity.Exists(vehicle))
+                    {
+                        continue;
+                    }
+
+                    RegisterPlacedVehicle(vehicle, identity, position, heading, false, autoRespawn);
+                    loadedVehicles++;
+                }
+            }
+
+            if (objectNodes != null)
+            {
+                foreach (XmlNode node in objectNodes)
+                {
+                    ObjectIdentity identity = ReadObjectIdentityXml(node);
+
+                    Vector3 position = new Vector3(
+                        ReadFloatAttribute(node, "x", 0.0f),
+                        ReadFloatAttribute(node, "y", 0.0f),
+                        ReadFloatAttribute(node, "z", 0.0f));
+
+                    float heading = ReadFloatAttribute(node, "heading", 0.0f);
+                    bool autoRespawn = ReadBoolAttribute(node, "autoRespawn", false);
+
+                    Prop prop = CreatePropFromIdentity(identity, position, heading);
+
+                    if (!Entity.Exists(prop))
+                    {
+                        continue;
+                    }
+
+                    RegisterPlacedObject(prop, identity, position, heading, false, autoRespawn);
+                    loadedObjects++;
+                }
+            }
+
+            loadedPortals = LoadInteriorPortalsFromXml(doc);
+
+            _lastSaveFileName = normalizedFileName;
+            PersistLastSaveFileNameSafe(normalizedFileName);
+            MigrateLoadedSaveToCanonicalLocationSafe(path, normalizedFileName);
+
+            ShowStatus(
+                "Chargement OK: " + normalizedFileName +
+                " | NPC " + loadedNpcs.ToString(CultureInfo.InvariantCulture) +
+                " | vehicules " + loadedVehicles.ToString(CultureInfo.InvariantCulture) +
+                " | objets " + loadedObjects.ToString(CultureInfo.InvariantCulture) +
+                " | portails " + loadedPortals.ToString(CultureInfo.InvariantCulture),
+                6000);
+        }
+        catch (Exception ex)
+        {
+            ShowStatus("Erreur chargement: " + ex.Message, 7000);
+        }
+    }
+
+    private static void WriteLoadoutXml(XmlWriter writer, WeaponLoadout loadout)
+    {
+        writer.WriteStartElement("Weapon");
+
+        writer.WriteAttributeString("hash", EnumToIntHash(loadout.Weapon).ToString(CultureInfo.InvariantCulture));
+        writer.WriteAttributeString("name", loadout.Weapon.ToString());
+        writer.WriteAttributeString("ammo", loadout.Ammo.ToString(CultureInfo.InvariantCulture));
+        writer.WriteAttributeString("tint", loadout.Tint.ToString(CultureInfo.InvariantCulture));
+        writer.WriteAttributeString("preset", loadout.Preset.ToString());
+        writer.WriteAttributeString("extendedClip", loadout.ExtendedClip.ToString(CultureInfo.InvariantCulture));
+        writer.WriteAttributeString("suppressor", loadout.Suppressor.ToString(CultureInfo.InvariantCulture));
+        writer.WriteAttributeString("flashlight", loadout.Flashlight.ToString(CultureInfo.InvariantCulture));
+        writer.WriteAttributeString("grip", loadout.Grip.ToString(CultureInfo.InvariantCulture));
+        writer.WriteAttributeString("scope", loadout.Scope.ToString());
+        writer.WriteAttributeString("muzzle", loadout.Muzzle.ToString(CultureInfo.InvariantCulture));
+        writer.WriteAttributeString("improvedBarrel", loadout.ImprovedBarrel.ToString(CultureInfo.InvariantCulture));
+        writer.WriteAttributeString("mk2Ammo", loadout.Mk2Ammo.ToString());
+
+        writer.WriteEndElement();
+    }
+
+    private WeaponLoadout ReadLoadoutXml(XmlNode npcNode)
+    {
+        XmlNode weaponNode = npcNode.SelectSingleNode("Weapon");
+
+        WeaponLoadout loadout = new WeaponLoadout
+        {
+            Weapon = _selectedWeaponLoadout.Weapon,
+            Ammo = 9999,
+            Tint = 0,
+            Preset = WeaponUpgradePreset.Standard
+        };
+
+        if (weaponNode == null)
+        {
+            return loadout;
+        }
+
+        loadout.Weapon = ReadWeaponHashAttribute(weaponNode, "name", "hash", _selectedWeaponLoadout.Weapon);
+        loadout.Ammo = ReadIntAttribute(weaponNode, "ammo", 9999);
+        loadout.Tint = ReadIntAttribute(weaponNode, "tint", 0);
+        loadout.Preset = ReadEnumAttribute(weaponNode, "preset", WeaponUpgradePreset.Standard);
+        loadout.ExtendedClip = ReadBoolAttribute(weaponNode, "extendedClip", false);
+        loadout.Suppressor = ReadBoolAttribute(weaponNode, "suppressor", false);
+        loadout.Flashlight = ReadBoolAttribute(weaponNode, "flashlight", false);
+        loadout.Grip = ReadBoolAttribute(weaponNode, "grip", false);
+        loadout.Scope = ReadEnumAttribute(weaponNode, "scope", WeaponScopeMode.None);
+        loadout.Muzzle = ReadBoolAttribute(weaponNode, "muzzle", false);
+        loadout.ImprovedBarrel = ReadBoolAttribute(weaponNode, "improvedBarrel", false);
+        loadout.Mk2Ammo = ReadEnumAttribute(weaponNode, "mk2Ammo", WeaponMk2AmmoMode.Standard);
+
+        return loadout;
+    }
+
+    private static ModelIdentity ReadModelIdentityXml(XmlNode node)
+    {
+        bool isCustom = ReadBoolAttribute(node, "modelIsCustom", false);
+        string modelName = ReadStringAttribute(node, "modelName", string.Empty);
+        int modelHash = ReadIntAttribute(node, "modelHash", 0);
+        string displayName = ReadStringAttribute(node, "modelDisplayName", modelName);
+
+        return new ModelIdentity
+        {
+            IsCustom = isCustom,
+            Name = modelName,
+            Hash = modelHash,
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? modelName : displayName
+        };
+    }
+
+    private static VehicleIdentity ReadVehicleIdentityXml(XmlNode node)
+    {
+        string name = ReadStringAttribute(node, "name", string.Empty);
+        int hash = ReadIntAttribute(node, "hash", 0);
+        string displayName = ReadStringAttribute(node, "displayName", name);
+
+        if (hash == 0 && !string.IsNullOrWhiteSpace(name))
+        {
+            VehicleHash parsed;
+
+            if (Enum.TryParse(name, true, out parsed))
+            {
+                hash = EnumToIntHash(parsed);
+            }
+        }
+
+        return new VehicleIdentity
+        {
+            Name = name,
+            Hash = hash,
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? name : displayName
+        };
+    }
+
+    private static ObjectIdentity ReadObjectIdentityXml(XmlNode node)
+    {
+        string modelName = ReadStringAttribute(node, "modelName", string.Empty);
+        string displayName = ReadStringAttribute(node, "displayName", modelName);
+
+        return new ObjectIdentity
+        {
+            ModelName = modelName,
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? modelName : displayName
+        };
+    }
+
+    private void InitializePersistentSaveState()
+    {
+        try
+        {
+            _lastSaveFileName = NormalizeSaveFileName(_lastSaveFileName);
+
+            string rememberedFileName = ReadRememberedSaveFileNameSafe();
+
+            if (!string.IsNullOrWhiteSpace(rememberedFileName))
+            {
+                _lastSaveFileName = NormalizeSaveFileName(rememberedFileName);
+            }
+
+            Directory.CreateDirectory(GetSaveDirectory());
+        }
+        catch
+        {
+            _lastSaveFileName = NormalizeSaveFileName(_lastSaveFileName);
+        }
+    }
+
+    private string GetSaveDirectory()
+    {
+        List<string> candidates = BuildSaveDirectoryCandidates();
+
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            string candidate = candidates[i];
+
+            if (CanUseDirectoryForSave(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        string fallbackBaseDirectory = GetAssemblyDirectorySafe();
+
+        if (string.IsNullOrWhiteSpace(fallbackBaseDirectory))
+        {
+            fallbackBaseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+        }
+
+        return Path.Combine(fallbackBaseDirectory, SaveFolderName);
+    }
+
+    private string GetSavePath(string fileName)
+    {
+        return Path.Combine(GetSaveDirectory(), NormalizeSaveFileName(fileName));
+    }
+
+    private bool TryResolveSavePathForLoad(string fileName, out string resolvedPath, out string searchedDirectory)
+    {
+        string normalizedFileName = NormalizeSaveFileName(fileName);
+        List<string> searchDirectories = GetSaveSearchDirectories();
+
+        for (int i = 0; i < searchDirectories.Count; i++)
+        {
+            string directory = searchDirectories[i];
+            string candidate = Path.Combine(directory, normalizedFileName);
+
+            if (File.Exists(candidate))
+            {
+                resolvedPath = candidate;
+                searchedDirectory = directory;
+                return true;
+            }
+
+            string backupCandidate = candidate + ".bak";
+
+            if (File.Exists(backupCandidate))
+            {
+                resolvedPath = backupCandidate;
+                searchedDirectory = directory;
+                return true;
+            }
+        }
+
+        searchedDirectory = searchDirectories.Count > 0 ? searchDirectories[0] : GetSaveDirectory();
+        resolvedPath = Path.Combine(searchedDirectory, normalizedFileName);
+        return false;
+    }
+
+    private List<string> GetSaveSearchDirectories()
+    {
+        List<string> result = new List<string>();
+
+        AddUniqueDirectory(result, GetSaveDirectory());
+
+        List<string> candidates = BuildSaveDirectoryCandidates();
+
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            AddUniqueDirectory(result, candidates[i]);
+        }
+
+        return result;
+    }
+
+    private List<string> BuildSaveDirectoryCandidates()
+    {
+        List<string> result = new List<string>();
+
+        AddUniqueDirectory(result, GetConfiguredSaveDirectorySafe());
+
+        List<string> scriptDirectories = BuildScriptDirectoryCandidates();
+
+        for (int i = 0; i < scriptDirectories.Count; i++)
+        {
+            AddUniqueDirectory(result, Path.Combine(scriptDirectories[i], SaveFolderName));
+        }
+
+        AddUniqueDirectory(result, GetDocumentsSaveDirectorySafe());
+        AddUniqueDirectory(result, GetLocalAppDataSaveDirectorySafe());
+        AddUniqueDirectory(result, GetLegacyAssemblySaveDirectorySafe());
+
+        string appDomainBaseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+
+        if (!string.IsNullOrWhiteSpace(appDomainBaseDirectory))
+        {
+            AddUniqueDirectory(result, Path.Combine(appDomainBaseDirectory, SaveFolderName));
+        }
+
+        return result;
+    }
+
+    private List<string> BuildScriptDirectoryCandidates()
+    {
+        List<string> result = new List<string>();
+
+        AddUniqueDirectory(result, GetProcessScriptsDirectorySafe());
+        AddScriptsDirectoryCandidateFromBase(result, AppDomain.CurrentDomain.BaseDirectory);
+        AddScriptsDirectoryCandidateFromBase(result, GetAssemblyDirectorySafe());
+
+        if (LooksLikeGtaRoot(DefaultEnhancedGtaRoot))
+        {
+            AddUniqueDirectory(result, Path.Combine(DefaultEnhancedGtaRoot, "Scripts"));
+        }
+
+        return result;
+    }
+
+    private static void AddScriptsDirectoryCandidateFromBase(List<string> result, string baseDirectory)
+    {
+        if (result == null || string.IsNullOrWhiteSpace(baseDirectory))
+        {
+            return;
+        }
+
+        string fullBaseDirectory = TryGetFullPath(baseDirectory);
+
+        if (string.IsNullOrWhiteSpace(fullBaseDirectory))
+        {
+            return;
+        }
+
+        if (LooksLikeScriptsDirectory(fullBaseDirectory))
+        {
+            AddUniqueDirectory(result, fullBaseDirectory);
+        }
+
+        if (LooksLikeGtaRoot(fullBaseDirectory))
+        {
+            AddUniqueDirectory(result, Path.Combine(fullBaseDirectory, "Scripts"));
+        }
+
+        string scriptsChild = Path.Combine(fullBaseDirectory, "Scripts");
+
+        if (Directory.Exists(scriptsChild) && (LooksLikeGtaRoot(fullBaseDirectory) || LooksLikeScriptsDirectory(scriptsChild)))
+        {
+            AddUniqueDirectory(result, scriptsChild);
+        }
+
+        string parentDirectory = GetParentDirectorySafe(fullBaseDirectory);
+
+        if (LooksLikeGtaRoot(parentDirectory))
+        {
+            AddUniqueDirectory(result, Path.Combine(parentDirectory, "Scripts"));
+        }
+    }
+
+    private static string GetProcessScriptsDirectorySafe()
+    {
+        try
+        {
+            using (System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess())
+            {
+                if (process == null || process.MainModule == null)
+                {
+                    return string.Empty;
+                }
+
+                string executablePath = process.MainModule.FileName;
+
+                if (string.IsNullOrWhiteSpace(executablePath))
+                {
+                    return string.Empty;
+                }
+
+                string rootDirectory = Path.GetDirectoryName(executablePath);
+                string executableName = Path.GetFileNameWithoutExtension(executablePath);
+
+                if (string.IsNullOrWhiteSpace(rootDirectory))
+                {
+                    return string.Empty;
+                }
+
+                if ((executableName != null && executableName.StartsWith("GTA5", StringComparison.OrdinalIgnoreCase)) || LooksLikeGtaRoot(rootDirectory))
+                {
+                    return Path.Combine(rootDirectory, "Scripts");
+                }
+            }
+        }
+        catch
+        {
+            // Le chemin du process peut etre refuse par Windows; les autres candidats prennent le relais.
+        }
+
+        return string.Empty;
+    }
+
+    private static string GetConfiguredSaveDirectorySafe()
+    {
+        try
+        {
+            string configuredDirectory = Environment.GetEnvironmentVariable(SaveDirectoryEnvironmentVariable);
+            return string.IsNullOrWhiteSpace(configuredDirectory) ? string.Empty : configuredDirectory.Trim();
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string GetDocumentsSaveDirectorySafe()
+    {
+        try
+        {
+            string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
+            if (string.IsNullOrWhiteSpace(documents))
+            {
+                return string.Empty;
+            }
+
+            return Path.Combine(documents, "Rockstar Games", "GTA V Enhanced", SaveFolderName);
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string GetLocalAppDataSaveDirectorySafe()
+    {
+        try
+        {
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+
+            if (string.IsNullOrWhiteSpace(localAppData))
+            {
+                return string.Empty;
+            }
+
+            return Path.Combine(localAppData, "DonJEnemySpawner", "Saves");
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string GetLegacyAssemblySaveDirectorySafe()
+    {
+        string assemblyDirectory = GetAssemblyDirectorySafe();
+        return string.IsNullOrWhiteSpace(assemblyDirectory) ? string.Empty : Path.Combine(assemblyDirectory, SaveFolderName);
+    }
+
+    private static string GetAssemblyDirectorySafe()
+    {
+        try
+        {
+            string assemblyLocation = Assembly.GetExecutingAssembly().Location;
+
+            if (string.IsNullOrWhiteSpace(assemblyLocation))
+            {
+                return AppDomain.CurrentDomain.BaseDirectory;
+            }
+
+            string directory = Path.GetDirectoryName(assemblyLocation);
+            return string.IsNullOrWhiteSpace(directory) ? AppDomain.CurrentDomain.BaseDirectory : directory;
+        }
+        catch
+        {
+            return AppDomain.CurrentDomain.BaseDirectory;
+        }
+    }
+
+    private static bool LooksLikeGtaRoot(string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            return false;
+        }
+
+        try
+        {
+            return File.Exists(Path.Combine(directory, "GTA5_Enhanced.exe")) ||
+                   File.Exists(Path.Combine(directory, "GTA5.exe")) ||
+                   File.Exists(Path.Combine(directory, "ScriptHookV.dll")) ||
+                   File.Exists(Path.Combine(directory, "NIBScriptHookVDotNet.asi"));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool LooksLikeScriptsDirectory(string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            return false;
+        }
+
+        try
+        {
+            string directoryName = new DirectoryInfo(directory).Name;
+
+            if (string.Equals(directoryName, "Scripts", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (File.Exists(Path.Combine(directory, "DonJCustomNpcPlacer.ENdll")) ||
+                File.Exists(Path.Combine(directory, "DonJCustomNpcPlacer.dll")) ||
+                File.Exists(Path.Combine(directory, "DonJEnemySpawner.ENdll")) ||
+                File.Exists(Path.Combine(directory, "DonJEnemySpawner.dll")))
+            {
+                return true;
+            }
+
+            return Directory.Exists(directory) && Directory.GetFiles(directory, "*.ENdll").Length > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool CanUseDirectoryForSave(string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            return false;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(directory);
+
+            string testPath = Path.Combine(directory, ".write_test_" + Guid.NewGuid().ToString("N") + ".tmp");
+
+            File.WriteAllText(testPath, "ok", System.Text.Encoding.UTF8);
+            File.Delete(testPath);
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void PersistLastSaveFileNameSafe(string fileName)
+    {
+        try
+        {
+            string normalizedFileName = NormalizeSaveFileName(fileName);
+            string markerPath = Path.Combine(GetSaveDirectory(), LastSaveFileMarkerName);
+            WriteTextFileAtomically(markerPath, normalizedFileName + Environment.NewLine);
+        }
+        catch
+        {
+            // Le marqueur ne doit jamais bloquer une vraie sauvegarde XML.
+        }
+    }
+
+    private string ReadRememberedSaveFileNameSafe()
+    {
+        List<string> searchDirectories = GetSaveSearchDirectories();
+
+        for (int i = 0; i < searchDirectories.Count; i++)
+        {
+            try
+            {
+                string markerPath = Path.Combine(searchDirectories[i], LastSaveFileMarkerName);
+
+                if (!File.Exists(markerPath))
+                {
+                    continue;
+                }
+
+                string remembered = File.ReadAllText(markerPath, System.Text.Encoding.UTF8).Trim();
+
+                if (!string.IsNullOrWhiteSpace(remembered))
+                {
+                    return NormalizeSaveFileName(remembered);
+                }
+            }
+            catch
+            {
+                // Je continue avec les autres dossiers possibles.
+            }
+        }
+
+        return FindNewestXmlSaveFileNameSafe(searchDirectories);
+    }
+
+    private static string FindNewestXmlSaveFileNameSafe(List<string> searchDirectories)
+    {
+        string newestFileName = string.Empty;
+        DateTime newestWriteTimeUtc = DateTime.MinValue;
+
+        if (searchDirectories == null)
+        {
+            return string.Empty;
+        }
+
+        for (int i = 0; i < searchDirectories.Count; i++)
+        {
+            string directory = searchDirectories[i];
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+                {
+                    continue;
+                }
+
+                string[] files = Directory.GetFiles(directory, "*.xml", SearchOption.TopDirectoryOnly);
+
+                for (int j = 0; j < files.Length; j++)
+                {
+                    string file = files[j];
+                    string fileName = Path.GetFileName(file);
+
+                    if (string.IsNullOrWhiteSpace(fileName) || fileName.StartsWith("_", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    DateTime writeTimeUtc = File.GetLastWriteTimeUtc(file);
+
+                    if (writeTimeUtc > newestWriteTimeUtc)
+                    {
+                        newestWriteTimeUtc = writeTimeUtc;
+                        newestFileName = fileName;
+                    }
+                }
+            }
+            catch
+            {
+                // Un dossier inaccessible ne doit pas empecher la lecture du prochain.
+            }
+        }
+
+        return newestFileName;
+    }
+
+    private void MigrateLoadedSaveToCanonicalLocationSafe(string loadedPath, string fileName)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(loadedPath) || !File.Exists(loadedPath))
+            {
+                return;
+            }
+
+            string canonicalPath = GetSavePath(fileName);
+
+            if (IsSamePath(loadedPath, canonicalPath) || File.Exists(canonicalPath))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(canonicalPath));
+            File.Copy(loadedPath, canonicalPath, false);
+        }
+        catch
+        {
+            // Migration opportuniste seulement: le chargement a deja reussi.
+        }
+    }
+
+    private static void WriteTextFileAtomically(string path, string content)
+    {
+        string tempPath = null;
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            tempPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            File.WriteAllText(tempPath, content ?? string.Empty, System.Text.Encoding.UTF8);
+            ReplaceFileAtomically(tempPath, path);
+            tempPath = null;
+        }
+        finally
+        {
+            DeleteFileIfExistsSafe(tempPath);
+        }
+    }
+
+    private static void ReplaceFileAtomically(string tempPath, string targetPath)
+    {
+        if (string.IsNullOrWhiteSpace(tempPath) || string.IsNullOrWhiteSpace(targetPath))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(targetPath));
+
+        if (!File.Exists(targetPath))
+        {
+            File.Move(tempPath, targetPath);
+            return;
+        }
+
+        string backupPath = targetPath + ".bak";
+
+        try
+        {
+            File.Replace(tempPath, targetPath, backupPath, true);
+        }
+        catch
+        {
+            File.Copy(targetPath, backupPath, true);
+            File.Delete(targetPath);
+            File.Move(tempPath, targetPath);
+        }
+    }
+
+    private static void DeleteFileIfExistsSafe(string path)
+    {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // Rien a faire: nettoyage best-effort.
+        }
+    }
+
+    private static void AddUniqueDirectory(List<string> directories, string directory)
+    {
+        if (directories == null || string.IsNullOrWhiteSpace(directory))
+        {
+            return;
+        }
+
+        string fullDirectory = TryGetFullPath(directory);
+
+        if (string.IsNullOrWhiteSpace(fullDirectory))
+        {
+            return;
+        }
+
+        for (int i = 0; i < directories.Count; i++)
+        {
+            if (IsSamePath(directories[i], fullDirectory))
+            {
+                return;
+            }
+        }
+
+        directories.Add(fullDirectory);
+    }
+
+    private static bool IsSamePath(string left, string right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+        {
+            return false;
+        }
+
+        return string.Equals(TryGetFullPath(left), TryGetFullPath(right), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string TryGetFullPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            return Path.GetFullPath(path.Trim());
+        }
+        catch
+        {
+            return path.Trim();
+        }
+    }
+
+    private static string GetParentDirectorySafe(string directory)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                return string.Empty;
+            }
+
+            DirectoryInfo parent = Directory.GetParent(directory);
+            return parent == null ? string.Empty : parent.FullName;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string CompactPathForStatus(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
+
+        string compact = path.Trim();
+
+        if (compact.Length <= 58)
+        {
+            return compact;
+        }
+
+        return "..." + compact.Substring(compact.Length - 55);
+    }
+
+    private static string NormalizeSaveFileName(string input)
+    {
+        string raw = (input ?? string.Empty).Replace("\0", string.Empty).Trim();
+        string safe;
+
+        try
+        {
+            safe = Path.GetFileName(raw);
+        }
+        catch
+        {
+            safe = raw;
+        }
+
+        safe = (safe ?? string.Empty).Trim();
+
+        foreach (char invalid in Path.GetInvalidFileNameChars())
+        {
+            safe = safe.Replace(invalid, '_');
+        }
+
+        safe = safe.Replace('/', '_').Replace('\\', '_');
+
+        if (string.IsNullOrWhiteSpace(safe) || string.Equals(safe, ".", StringComparison.Ordinal) || string.Equals(safe, "..", StringComparison.Ordinal))
+        {
+            safe = "maison.xml";
+        }
+
+        if (!safe.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+        {
+            safe += ".xml";
+        }
+
+        if (safe.Length > MaxSaveFileNameLength)
+        {
+            string extension = Path.GetExtension(safe);
+            string nameWithoutExtension = Path.GetFileNameWithoutExtension(safe);
+
+            if (string.IsNullOrWhiteSpace(extension))
+            {
+                extension = ".xml";
+            }
+
+            int allowedNameLength = Math.Max(1, MaxSaveFileNameLength - extension.Length);
+
+            if (nameWithoutExtension.Length > allowedNameLength)
+            {
+                nameWithoutExtension = nameWithoutExtension.Substring(0, allowedNameLength);
+            }
+
+            safe = nameWithoutExtension + extension;
+        }
+
+        return safe;
+    }
+
+    private static List<ModelOption> BuildAllModelOptions()
+    {
+        List<ModelOption> result = new List<ModelOption>();
+        HashSet<int> seen = new HashSet<int>();
+
+        result.Add(new ModelOption
+        {
+            DisplayName = "Custom",
+            IsCustom = true,
+            Hash = 0
+        });
+
+        foreach (PedHash pedHash in Enum.GetValues(typeof(PedHash)))
+        {
+            int hash = EnumToIntHash(pedHash);
+
+            if (seen.Contains(hash))
+            {
+                continue;
+            }
+
+            seen.Add(hash);
+
+            string name = pedHash.ToString();
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            result.Add(new ModelOption
+            {
+                DisplayName = name,
+                IsCustom = false,
+                Hash = hash
+            });
+        }
+
+        ModelOption custom = result[0];
+
+        List<ModelOption> sorted = result
+            .Skip(1)
+            .OrderBy(m => m.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        sorted.Insert(0, custom);
+        return sorted;
+    }
+
+    private static List<ModelCategory> BuildModelCategories(List<ModelOption> all)
+    {
+        List<ModelCategory> categories = new List<ModelCategory>();
+
+        AddModelCategory(categories, "Custom / Add-on", all, m => m.IsCustom);
+        AddModelCategory(categories, "Securite / Police / Militaire", all, m => IsSecurityModelName(m.DisplayName));
+        AddModelCategory(categories, "Gangs / Criminels", all, m => IsGangModelName(m.DisplayName));
+        AddModelCategory(categories, "Multiplayer / Online", all, m => IsMultiplayerModelName(m.DisplayName));
+        AddModelCategory(categories, "Scenario / Services", all, m => IsScenarioServiceModelName(m.DisplayName));
+        AddModelCategory(categories, "Civils hommes", all, m => IsMaleAmbientModelName(m.DisplayName));
+        AddModelCategory(categories, "Civils femmes", all, m => IsFemaleAmbientModelName(m.DisplayName));
+        AddModelCategory(categories, "Story / Cutscene", all, m => IsStoryModelName(m.DisplayName));
+        AddModelCategory(categories, "Animaux", all, m => IsAnimalModelName(m.DisplayName));
+        AddModelCategory(categories, "Tous les PNJ", all, m => true);
+
+        return categories;
+    }
+
+    private static void AddModelCategory(List<ModelCategory> categories, string name, List<ModelOption> all, Func<ModelOption, bool> predicate)
+    {
+        List<ModelOption> options = all
+            .Where(predicate)
+            .OrderBy(m => m.IsCustom ? "000_" : m.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (options.Count == 0)
+        {
+            return;
+        }
+
+        categories.Add(new ModelCategory
+        {
+            Name = name,
+            Options = options
+        });
+    }
+
+    private static List<WeaponOption> BuildAllWeaponOptions()
+    {
+        List<WeaponOption> result = new List<WeaponOption>();
+        HashSet<int> seen = new HashSet<int>();
+
+        foreach (WeaponHash weaponHash in Enum.GetValues(typeof(WeaponHash)))
+        {
+            int hash = EnumToIntHash(weaponHash);
+
+            if (seen.Contains(hash))
+            {
+                continue;
+            }
+
+            seen.Add(hash);
+
+            string name = weaponHash.ToString();
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            result.Add(new WeaponOption
+            {
+                DisplayName = name,
+                Hash = weaponHash
+            });
+        }
+
+        return result
+            .OrderBy(w => w.DisplayName == "Unarmed" ? "000_" : w.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static List<WeaponCategory> BuildWeaponCategories(List<WeaponOption> all)
+    {
+        List<WeaponCategory> categories = new List<WeaponCategory>();
+
+        AddWeaponCategory(categories, "Sans arme", all, w => w.Hash == WeaponHash.Unarmed);
+        AddWeaponCategory(categories, "Pistolets", all, w => IsPistolLikeWeaponName(w.DisplayName));
+        AddWeaponCategory(categories, "SMG / PDW", all, w => IsSmgWeaponName(w.DisplayName));
+        AddWeaponCategory(categories, "Fusils d'assaut", all, w => IsAssaultRifleWeaponName(w.DisplayName));
+        AddWeaponCategory(categories, "Fusils a pompe", all, w => w.DisplayName.IndexOf("Shotgun", StringComparison.OrdinalIgnoreCase) >= 0);
+        AddWeaponCategory(categories, "Snipers / Marksman", all, w => IsSniperWeaponName(w.DisplayName));
+        AddWeaponCategory(categories, "Mitrailleuses", all, w => IsMachineGunWeaponName(w.DisplayName));
+        AddWeaponCategory(categories, "Lourdes / Launchers", all, w => IsHeavyWeaponName(w.DisplayName));
+        AddWeaponCategory(categories, "Projectiles", all, w => IsThrowableWeaponName(w.DisplayName));
+        AddWeaponCategory(categories, "Melee", all, w => IsMeleeWeaponName(w.DisplayName));
+        AddWeaponCategory(categories, "Speciales / Divers", all, w => IsSpecialWeaponName(w.DisplayName));
+        AddWeaponCategory(categories, "Toutes les armes", all, w => true);
+
+        return categories;
+    }
+
+    private static void AddWeaponCategory(List<WeaponCategory> categories, string name, List<WeaponOption> all, Func<WeaponOption, bool> predicate)
+    {
+        List<WeaponOption> options = all
+            .Where(predicate)
+            .OrderBy(w => w.DisplayName == "Unarmed" ? "000_" : w.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (options.Count == 0)
+        {
+            return;
+        }
+
+        categories.Add(new WeaponCategory
+        {
+            Name = name,
+            Options = options
+        });
+    }
+
+    private static List<VehicleOption> BuildAllVehicleOptions()
+    {
+        List<VehicleOption> result = new List<VehicleOption>();
+        HashSet<int> seen = new HashSet<int>();
+
+        foreach (VehicleHash vehicleHash in Enum.GetValues(typeof(VehicleHash)))
+        {
+            int hash = EnumToIntHash(vehicleHash);
+
+            if (seen.Contains(hash))
+            {
+                continue;
+            }
+
+            seen.Add(hash);
+
+            string name = vehicleHash.ToString();
+
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            result.Add(new VehicleOption
+            {
+                DisplayName = name,
+                Hash = vehicleHash
+            });
+        }
+
+        return result
+            .OrderBy(v => v.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static List<VehicleCategory> BuildVehicleCategories(List<VehicleOption> all)
+    {
+        List<VehicleCategory> categories = new List<VehicleCategory>();
+
+        AddVehicleCategory(categories, "Sport / Super", all, v => IsSportsVehicleName(v.DisplayName));
+        AddVehicleCategory(categories, "Berlines / Coupes", all, v => IsCarVehicleName(v.DisplayName));
+        AddVehicleCategory(categories, "SUV / 4x4", all, v => IsSuvVehicleName(v.DisplayName));
+        AddVehicleCategory(categories, "Motos", all, v => IsMotorcycleVehicleName(v.DisplayName));
+        AddVehicleCategory(categories, "Police / Secours", all, v => IsEmergencyVehicleName(v.DisplayName));
+        AddVehicleCategory(categories, "Militaire", all, v => IsMilitaryVehicleName(v.DisplayName));
+        AddVehicleCategory(categories, "Utilitaires / Vans", all, v => IsUtilityVehicleName(v.DisplayName));
+        AddVehicleCategory(categories, "Camions", all, v => IsTruckVehicleName(v.DisplayName));
+        AddVehicleCategory(categories, "Avions / Helicos", all, v => IsAircraftVehicleName(v.DisplayName));
+        AddVehicleCategory(categories, "Bateaux", all, v => IsBoatVehicleName(v.DisplayName));
+        AddVehicleCategory(categories, "Tous les vehicules", all, v => true);
+
+        return categories;
+    }
+
+    private static void AddVehicleCategory(List<VehicleCategory> categories, string name, List<VehicleOption> all, Func<VehicleOption, bool> predicate)
+    {
+        List<VehicleOption> options = all
+            .Where(predicate)
+            .OrderBy(v => v.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (options.Count == 0)
+        {
+            return;
+        }
+
+        categories.Add(new VehicleCategory
+        {
+            Name = name,
+            Options = options
+        });
+    }
+
+    private static List<ObjectOption> BuildAllObjectOptions()
+    {
+        return new List<ObjectOption>
+        {
+            Obj("Cone orange", "prop_mp_cone_01", ObjectPlacementCategory.Securite),
+            Obj("Cone de chantier", "prop_roadcone02a", ObjectPlacementCategory.Securite),
+            Obj("Barriere police", "prop_barrier_work05", ObjectPlacementCategory.Securite),
+            Obj("Barriere chantier", "prop_barrier_work06a", ObjectPlacementCategory.Securite),
+            Obj("Barriere metal", "prop_mp_barrier_02b", ObjectPlacementCategory.Securite),
+            Obj("Potelet de securite", "prop_bollard_02a", ObjectPlacementCategory.Securite),
+
+            Obj("Bloc beton", "prop_mp_barrier_01", ObjectPlacementCategory.Couverture),
+            Obj("Barriere crash", "prop_barriercrash_03", ObjectPlacementCategory.Couverture),
+            Obj("Benne metal", "prop_dumpster_01a", ObjectPlacementCategory.Couverture),
+            Obj("Benne verte", "prop_dumpster_02a", ObjectPlacementCategory.Couverture),
+            Obj("Palette bois", "prop_pallet_01a", ObjectPlacementCategory.Couverture),
+
+            Obj("Chaise simple", "prop_chair_01a", ObjectPlacementCategory.Mobilier),
+            Obj("Chaise bureau", "prop_off_chair_04", ObjectPlacementCategory.Mobilier),
+            Obj("Table", "prop_table_04", ObjectPlacementCategory.Mobilier),
+            Obj("Banc", "prop_bench_01a", ObjectPlacementCategory.Mobilier),
+            Obj("Canape", "prop_couch_01", ObjectPlacementCategory.Mobilier),
+            Obj("Lit simple", "prop_bed_01", ObjectPlacementCategory.Mobilier),
+
+            Obj("Caisse bois", "prop_box_wood02a", ObjectPlacementCategory.CaisseStockage),
+            Obj("Caisse militaire", "prop_box_ammo03a", ObjectPlacementCategory.CaisseStockage),
+            Obj("Pile de cartons", "prop_boxpile_06b", ObjectPlacementCategory.CaisseStockage),
+            Obj("Caisse transport", "prop_crate_11e", ObjectPlacementCategory.CaisseStockage),
+            Obj("Valise", "prop_ld_suitcase_01", ObjectPlacementCategory.CaisseStockage),
+
+            Obj("Plante bureau", "prop_plant_int_01a", ObjectPlacementCategory.Decoration),
+            Obj("Television", "prop_tv_flat_01", ObjectPlacementCategory.Decoration),
+            Obj("Ordinateur portable", "prop_laptop_01a", ObjectPlacementCategory.Decoration),
+            Obj("Frigo", "prop_fridge_01", ObjectPlacementCategory.Decoration),
+            Obj("Machine cafe", "prop_coffee_mac_02", ObjectPlacementCategory.Decoration),
+
+            Obj("Projecteur chantier", "prop_worklight_03b", ObjectPlacementCategory.Lumiere),
+            Obj("Lampe chantier", "prop_worklight_01a", ObjectPlacementCategory.Lumiere),
+            Obj("Lampadaire", "prop_streetlight_01", ObjectPlacementCategory.Lumiere),
+
+            Obj("Tente", "prop_skid_tent_01", ObjectPlacementCategory.Exterieur),
+            Obj("Parasol", "prop_parasol_01", ObjectPlacementCategory.Exterieur),
+            Obj("Table pique-nique", "prop_picnictable_01", ObjectPlacementCategory.Exterieur),
+            Obj("Feu de camp", "prop_beach_fire", ObjectPlacementCategory.Exterieur),
+
+            Obj("Extincteur", "prop_fire_exting_1a", ObjectPlacementCategory.Divers),
+            Obj("Clavier acces", "prop_ld_keypad_01", ObjectPlacementCategory.Divers),
+            Obj("Sac sport", "prop_cs_heist_bag_02", ObjectPlacementCategory.Divers),
+            Obj("Bidon essence", "prop_jerrycan_01a", ObjectPlacementCategory.Divers)
+        };
+    }
+
+    private static ObjectOption Obj(string displayName, string modelName, ObjectPlacementCategory category)
+    {
+        return new ObjectOption
+        {
+            DisplayName = displayName,
+            ModelName = modelName,
+            Category = category
+        };
+    }
+
+    private static List<ObjectCategory> BuildObjectCategories(List<ObjectOption> all)
+    {
+        List<ObjectCategory> categories = new List<ObjectCategory>();
+
+        AddObjectCategory(categories, "Securite", all, ObjectPlacementCategory.Securite);
+        AddObjectCategory(categories, "Couverture / Combat", all, ObjectPlacementCategory.Couverture);
+        AddObjectCategory(categories, "Mobilier", all, ObjectPlacementCategory.Mobilier);
+        AddObjectCategory(categories, "Caisses / Stockage", all, ObjectPlacementCategory.CaisseStockage);
+        AddObjectCategory(categories, "Decoration", all, ObjectPlacementCategory.Decoration);
+        AddObjectCategory(categories, "Lumieres", all, ObjectPlacementCategory.Lumiere);
+        AddObjectCategory(categories, "Exterieur", all, ObjectPlacementCategory.Exterieur);
+        AddObjectCategory(categories, "Divers", all, ObjectPlacementCategory.Divers);
+
+        categories.Add(new ObjectCategory
+        {
+            Name = "Tous les objets",
+            Options = all.OrderBy(o => o.DisplayName, StringComparer.OrdinalIgnoreCase).ToList()
+        });
+
+        return categories;
+    }
+
+    private static void AddObjectCategory(List<ObjectCategory> categories, string name, List<ObjectOption> all, ObjectPlacementCategory category)
+    {
+        List<ObjectOption> options = all
+            .Where(o => o.Category == category)
+            .OrderBy(o => o.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (options.Count == 0)
+        {
+            return;
+        }
+
+        categories.Add(new ObjectCategory
+        {
+            Name = name,
+            Options = options
+        });
+    }
+
+    private static bool IsSecurityModelName(string name)
+    {
+        return ContainsAny(name,
+            "Cop", "Sheriff", "Swat", "Army", "Marine", "Fib", "CIA", "Security", "Sec",
+            "Guard", "Prison", "Ranger", "Uscg", "Military", "Blackops", "Agent", "Doa",
+            "Medic", "Fireman", "Paramedic");
+    }
+
+    private static bool IsGangModelName(string name)
+    {
+        return ContainsAny(name,
+            "Ballas", "Vagos", "Families", "Lost", "Salva", "Azteca", "Mex", "Korean",
+            "Triad", "Arm", "Mob", "Gang", "Biker", "PoloGoon") ||
+            EndsWithAny(name, "GFY", "GMM", "GMY");
+    }
+
+    private static bool IsMultiplayerModelName(string name)
+    {
+        return name.StartsWith("MP", StringComparison.OrdinalIgnoreCase) ||
+               name.IndexOf("MP", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool IsScenarioServiceModelName(string name)
+    {
+        return EndsWithAny(name, "SFM", "SFY", "SMM", "SMY") ||
+               ContainsAny(name, "Shop", "Dealer", "Bouncer", "Waiter", "Valet", "Mechanic", "Pilot", "Worker", "Doctor");
+    }
+
+    private static bool IsMaleAmbientModelName(string name)
+    {
+        return EndsWithAny(name, "AMM", "AMO", "AMY");
+    }
+
+    private static bool IsFemaleAmbientModelName(string name)
+    {
+        return EndsWithAny(name, "AFM", "AFO", "AFY");
+    }
+
+    private static bool IsStoryModelName(string name)
+    {
+        if (IsAnimalModelName(name) ||
+            IsSecurityModelName(name) ||
+            IsGangModelName(name) ||
+            IsMultiplayerModelName(name) ||
+            IsScenarioServiceModelName(name) ||
+            IsMaleAmbientModelName(name) ||
+            IsFemaleAmbientModelName(name))
+        {
+            return false;
+        }
+
+        return !string.Equals(name, "Custom", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAnimalModelName(string name)
+    {
+        return ContainsAny(name,
+            "Boar", "Cat", "Chicken", "Chimp", "Chop", "Cormorant", "Cow", "Coyote",
+            "Crow", "Deer", "Dolphin", "Fish", "Hen", "Humpback", "Husky", "KillerWhale",
+            "MountainLion", "Pig", "Pigeon", "Poodle", "Pug", "Rabbit", "Rat", "Retriever",
+            "Rhesus", "Rottweiler", "Seagull", "Shark", "Shepherd", "Stingray", "Westy");
+    }
+
+    private static bool IsPistolLikeWeaponName(string name)
+    {
+        return name.IndexOf("Pistol", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               name.IndexOf("Revolver", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               name.IndexOf("DoubleAction", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               name.IndexOf("FlareGun", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               name.IndexOf("UpNAtomizer", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool IsSmgWeaponName(string name)
+    {
+        return name.IndexOf("SMG", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               name.IndexOf("CombatPDW", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               name.IndexOf("MachinePistol", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool IsAssaultRifleWeaponName(string name)
+    {
+        return ContainsAny(name,
+            "AssaultRifle", "CarbineRifle", "AdvancedRifle", "SpecialCarbine",
+            "BullpupRifle", "CompactRifle", "MilitaryRifle", "HeavyRifle",
+            "ServiceCarbine", "BattleRifle");
+    }
+
+    private static bool IsSniperWeaponName(string name)
+    {
+        return name.IndexOf("Sniper", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               name.IndexOf("Marksman", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool IsMachineGunWeaponName(string name)
+    {
+        return name.IndexOf("MG", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               name.IndexOf("Gusenberg", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               name.IndexOf("Minigun", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               name.IndexOf("Widowmaker", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool IsHeavyWeaponName(string name)
+    {
+        return ContainsAny(name, "RPG", "Launcher", "Minigun", "Railgun", "Widowmaker", "Firework", "EMP");
+    }
+
+    private static bool IsThrowableWeaponName(string name)
+    {
+        return ContainsAny(name,
+            "Grenade", "Molotov", "StickyBomb", "ProximityMine", "TearGas",
+            "PipeBomb", "Snowball", "Flare", "BZGas");
+    }
+
+    private static bool IsMeleeWeaponName(string name)
+    {
+        return ContainsAny(name,
+            "Knife", "Nightstick", "Hammer", "Bat", "GolfClub", "Crowbar", "Bottle",
+            "Dagger", "Hatchet", "Machete", "Knuckle", "SwitchBlade", "PoolCue",
+            "Wrench", "BattleAxe", "StoneHatchet", "CandyCane");
+    }
+
+    private static bool IsSpecialWeaponName(string name)
+    {
+        if (IsPistolLikeWeaponName(name) ||
+            IsSmgWeaponName(name) ||
+            IsAssaultRifleWeaponName(name) ||
+            IsSniperWeaponName(name) ||
+            IsMachineGunWeaponName(name) ||
+            IsHeavyWeaponName(name) ||
+            IsThrowableWeaponName(name) ||
+            IsMeleeWeaponName(name) ||
+            name.IndexOf("Shotgun", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            string.Equals(name, "Unarmed", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsSportsVehicleName(string name)
+    {
+        return ContainsAny(name, "Adder", "Banshee", "Bullet", "Cheetah", "Comet", "Coquette", "Elegy", "Entity",
+            "Feltzer", "Furore", "Itali", "Jester", "Kuruma", "Nero", "Osiris", "Pariah", "Penetrator", "Pfister",
+            "Reaper", "T20", "Turismo", "Vacca", "Vagner", "Voltic", "Zentorno", "Cyclone", "Deveste", "Emerus",
+            "Furia", "Ignus", "Krieger", "Locust", "Neo", "Sultan");
+    }
+
+    private static bool IsCarVehicleName(string name)
+    {
+        if (IsSportsVehicleName(name) || IsEmergencyVehicleName(name) || IsUtilityVehicleName(name) ||
+            IsTruckVehicleName(name) || IsMotorcycleVehicleName(name) || IsAircraftVehicleName(name) ||
+            IsBoatVehicleName(name) || IsMilitaryVehicleName(name))
+        {
+            return false;
+        }
+
+        return ContainsAny(name, "Asea", "Asterope", "Blista", "Buffalo", "Dilettante", "Emperor", "Fugitive",
+            "Glendale", "Ingot", "Intruder", "Oracle", "Premier", "Primo", "Regina", "Schafter", "Stanier",
+            "Stratum", "Stretch", "Surge", "Tailgater", "Warrener", "Washington", "Zion", "F620");
+    }
+
+    private static bool IsSuvVehicleName(string name)
+    {
+        return ContainsAny(name, "Baller", "BeeJay", "Cavalcade", "Dubsta", "FQ2", "Granger", "Gresley",
+            "Habanero", "Huntley", "Landstalker", "Mesa", "Patriot", "Radius", "Rocoto", "Seminole", "Serrano",
+            "XLS", "Rebla", "Novak", "Jubilee");
+    }
+
+    private static bool IsMotorcycleVehicleName(string name)
+    {
+        return ContainsAny(name, "Akuma", "Avarus", "Bagger", "Bati", "BF400", "CarbonRS", "Chimera", "Cliffhanger",
+            "Daemon", "Defiler", "Diablous", "Double", "Enduro", "Esskey", "Faggio", "Gargoyle", "Hakuchou",
+            "Hexer", "Innovation", "Lectro", "Manchez", "Nemesis", "Nightblade", "PCJ", "RatBike", "Ruffian",
+            "Sanchez", "Sanctus", "Shotaro", "Sovereign", "Thrust", "Vader", "Vindicator", "Vortex", "Wolfsbane",
+            "Zombie");
+    }
+
+    private static bool IsEmergencyVehicleName(string name)
+    {
+        return ContainsAny(name, "Police", "Sheriff", "FBI", "FIB", "Ambulance", "Fire", "Riot", "Pranger", "Predator");
+    }
+
+    private static bool IsMilitaryVehicleName(string name)
+    {
+        return ContainsAny(name, "Barracks", "Crusader", "Rhino", "Lazer", "Hydra", "Titan", "Cargobob", "Savage",
+            "Hunter", "APC", "Halftrack", "Insurgent", "Khanjali", "Menacer", "Nightshark", "Patrolboat", "Technical",
+            "Valkyrie", "Barrage");
+    }
+
+    private static bool IsUtilityVehicleName(string name)
+    {
+        return ContainsAny(name, "Bison", "Bobcat", "Boxville", "Burrito", "Camper", "Journey", "Minivan", "Mule",
+            "Pony", "Rumpo", "Speedo", "Surfer", "Taco", "Towtruck", "Trash", "Utility", "Youga", "Sadler");
+    }
+
+    private static bool IsTruckVehicleName(string name)
+    {
+        return ContainsAny(name, "Benson", "Biff", "Hauler", "Packer", "Phantom", "Pounder", "Stockade", "Trailer",
+            "Tanker", "Tipper", "Flatbed", "Mixer", "Docktug");
+    }
+
+    private static bool IsAircraftVehicleName(string name)
+    {
+        return ContainsAny(name, "AlphaZ1", "Besra", "Blimp", "Buzzard", "Cargobob", "Cuban", "Dodo", "Duster",
+            "Frogger", "Hydra", "Jet", "Lazer", "Luxor", "Mammatus", "Maverick", "Miljet", "Nimbus", "Shamal",
+            "Stunt", "Titan", "Velum", "Vestra", "Volatol", "Akula", "Hunter", "Savage", "Seabreeze", "Skylift");
+    }
+
+    private static bool IsBoatVehicleName(string name)
+    {
+        return ContainsAny(name, "Boat", "Dinghy", "Jetmax", "Marquis", "Seashark", "Speeder", "Squalo", "Submersible",
+            "Suntrap", "Toro", "Tropic", "Tug", "Predator");
+    }
+
+    private static bool ContainsAny(string value, params string[] tokens)
+    {
+        for (int i = 0; i < tokens.Length; i++)
+        {
+            if (value.IndexOf(tokens[i], StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool EndsWithAny(string value, params string[] suffixes)
+    {
+        for (int i = 0; i < suffixes.Length; i++)
+        {
+            if (value.EndsWith(suffixes[i], StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string PlacementTypeDisplayName(PlacementEntityType placementType)
+    {
+        switch (placementType)
+        {
+            case PlacementEntityType.Vehicle:
+                return "Vehicule";
+
+            case PlacementEntityType.Object:
+                return "Objet";
+
+            case PlacementEntityType.Entrance:
+                return "Entree";
+
+            case PlacementEntityType.Exit:
+                return "Sortie";
+
+            case PlacementEntityType.Npc:
+            default:
+                return "NPC";
+        }
+    }
+
+    private static string NpcBehaviorDisplayName(NpcBehavior behavior)
+    {
+        switch (behavior)
+        {
+            case NpcBehavior.Static:
+                return "Statique / hostile \u00E0 vue";
+
+            case NpcBehavior.Attacker:
+                return "Attaquer / agressif";
+
+            case NpcBehavior.Neutral:
+                return "Neutre / garde passif";
+
+            case NpcBehavior.Ally:
+                return "Alli\u00E9 / garde d\u00E9fense";
+
+            case NpcBehavior.Bodyguard:
+                return "Garde du corps / escorte joueur";
+
+            case NpcBehavior.NeutralPatrol:
+                return "Neutre patrouille";
+
+            case NpcBehavior.HostilePatrol:
+                return "Hostile patrouille";
+
+            case NpcBehavior.AllyPatrol:
+                return "Allie patrouille";
+
+            default:
+                return behavior.ToString();
+        }
+    }
+
+    private static string BoolText(bool value)
+    {
+        return value ? "Oui" : "Non";
+    }
+
+    private static string WeaponPresetDisplayName(WeaponUpgradePreset preset)
+    {
+        switch (preset)
+        {
+            case WeaponUpgradePreset.Standard:
+                return "Standard";
+
+            case WeaponUpgradePreset.ChargeurEtendu:
+                return "Chargeur etendu";
+
+            case WeaponUpgradePreset.Silencieux:
+                return "Silencieux";
+
+            case WeaponUpgradePreset.Tactique:
+                return "Tactique";
+
+            case WeaponUpgradePreset.Full:
+                return "Full";
+
+            default:
+                return preset.ToString();
+        }
+    }
+
+    private static string ScopeDisplayName(WeaponScopeMode scope)
+    {
+        switch (scope)
+        {
+            case WeaponScopeMode.None:
+                return "Aucune";
+
+            case WeaponScopeMode.Small:
+                return "Petite";
+
+            case WeaponScopeMode.Medium:
+                return "Moyenne";
+
+            case WeaponScopeMode.Large:
+                return "Grande";
+
+            default:
+                return scope.ToString();
+        }
+    }
+
+    private static string Mk2AmmoDisplayName(WeaponMk2AmmoMode ammo)
+    {
+        switch (ammo)
+        {
+            case WeaponMk2AmmoMode.Standard:
+                return "Standard";
+
+            case WeaponMk2AmmoMode.Tracer:
+                return "Traceur";
+
+            case WeaponMk2AmmoMode.Incendiary:
+                return "Incendiaire";
+
+            case WeaponMk2AmmoMode.ArmorPiercing:
+                return "Perforante";
+
+            case WeaponMk2AmmoMode.FMJ:
+                return "FMJ";
+
+            case WeaponMk2AmmoMode.Explosive:
+                return "Explosive";
+
+            default:
+                return ammo.ToString();
+        }
+    }
+
+    private static string ReadStringAttribute(XmlNode node, string name, string defaultValue)
+    {
+        XmlAttribute attribute = node.Attributes == null ? null : node.Attributes[name];
+
+        if (attribute == null)
+        {
+            return defaultValue;
+        }
+
+        return attribute.Value;
+    }
+
+    private static bool ReadBoolAttribute(XmlNode node, string name, bool defaultValue)
+    {
+        string value = ReadStringAttribute(node, name, null);
+
+        bool parsed;
+
+        if (bool.TryParse(value, out parsed))
+        {
+            return parsed;
+        }
+
+        return defaultValue;
+    }
+
+    private static int ReadIntAttribute(XmlNode node, string name, int defaultValue)
+    {
+        string value = ReadStringAttribute(node, name, null);
+
+        int parsed;
+
+        if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed))
+        {
+            return parsed;
+        }
+
+        return defaultValue;
+    }
+
+    private static float ReadFloatAttribute(XmlNode node, string name, float defaultValue)
+    {
+        string value = ReadStringAttribute(node, name, null);
+
+        float parsed;
+
+        if (float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed))
+        {
+            return parsed;
+        }
+
+        return defaultValue;
+    }
+
+    private static TEnum ReadEnumAttribute<TEnum>(XmlNode node, string name, TEnum defaultValue) where TEnum : struct
+    {
+        string value = ReadStringAttribute(node, name, null);
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return defaultValue;
+        }
+
+        TEnum parsed;
+
+        if (Enum.TryParse(value, true, out parsed))
+        {
+            return parsed;
+        }
+
+        return defaultValue;
+    }
+
+    private static WeaponHash ReadWeaponHashAttribute(XmlNode node, string nameAttribute, string hashAttribute, WeaponHash defaultValue)
+    {
+        string name = ReadStringAttribute(node, nameAttribute, null);
+
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            WeaponHash parsed;
+
+            if (Enum.TryParse(name, true, out parsed))
+            {
+                return parsed;
+            }
+        }
+
+        int hash = ReadIntAttribute(node, hashAttribute, EnumToIntHash(defaultValue));
+
+        try
+        {
+            return (WeaponHash)hash;
+        }
+        catch
+        {
+            return defaultValue;
+        }
+    }
+
+    private void DrawStatus()
+    {
+        if (Game.GameTime > _statusUntil || string.IsNullOrEmpty(_statusText))
+        {
+            return;
+        }
+
+        DrawRect(270, 28, 760, 38, Color.FromArgb(170, 0, 0, 0));
+        DrawText(_statusText, 650, 38, 0.32f, Color.White, true, true);
+    }
+
+    private void ShowStatus(string text, int milliseconds)
+    {
+        _statusText = text ?? string.Empty;
+        _statusUntil = Game.GameTime + milliseconds;
+    }
+
+    private static void DrawRect(int x, int y, int width, int height, Color color)
+    {
+        new UIRectangle(new Point(x, y), new Size(width, height), color).Draw();
+    }
+
+    private static void DrawText(string text, int x, int y, float scale, Color color, bool centered, bool outline)
+    {
+        new UIText(
+            text ?? string.Empty,
+            new Point(x, y),
+            scale,
+            color,
+            GtaFont.ChaletLondon,
+            centered,
+            false,
+            outline).Draw();
+    }
+
+    private static void DeleteEntitySafe(Entity entity)
+    {
+        if (!Entity.Exists(entity))
+        {
+            return;
+        }
+
+        try
+        {
+            entity.Delete();
+        }
+        catch
+        {
+        }
+    }
+
+    private static string FitText(string text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return string.Empty;
+        }
+
+        if (text.Length <= maxLength)
+        {
+            return text;
+        }
+
+        if (maxLength <= 3)
+        {
+            return text.Substring(0, maxLength);
+        }
+
+        return text.Substring(0, maxLength - 3) + "...";
+    }
+
+    private static int Wrap(int value, int count)
+    {
+        if (count <= 0)
+        {
+            return 0;
+        }
+
+        while (value < 0)
+        {
+            value += count;
+        }
+
+        while (value >= count)
+        {
+            value -= count;
+        }
+
+        return value;
+    }
+
+    private static int Clamp(int value, int min, int max)
+    {
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
+    }
+
+    private static float ClampFloat(float value, float min, float max)
+    {
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
+    }
+
+    private static int RoundToStep(int value, int step)
+    {
+        if (step <= 0)
+        {
+            return value;
+        }
+
+        return (int)Math.Round(value / (double)step) * step;
+    }
+
+    private static TEnum CycleEnum<TEnum>(TEnum current, int direction) where TEnum : struct
+    {
+        Array values = Enum.GetValues(typeof(TEnum));
+        int currentIndex = 0;
+
+        for (int i = 0; i < values.Length; i++)
+        {
+            if (values.GetValue(i).Equals(current))
+            {
+                currentIndex = i;
+                break;
+            }
+        }
+
+        int nextIndex = Wrap(currentIndex + direction, values.Length);
+        return (TEnum)values.GetValue(nextIndex);
+    }
+
+    private static Vector3 Normalize(Vector3 vector)
+    {
+        float length = vector.Length();
+
+        if (length < 0.0001f)
+        {
+            return Vector3.Zero;
+        }
+
+        return vector / length;
+    }
+
+    private static bool IsZeroVector(Vector3 vector)
+    {
+        return Math.Abs(vector.X) < 0.001f &&
+               Math.Abs(vector.Y) < 0.001f &&
+               Math.Abs(vector.Z) < 0.001f;
+    }
+
+    private static float HeadingFromTo(Vector3 from, Vector3 to)
+    {
+        Vector3 delta = to - from;
+        double heading = Math.Atan2(delta.X, delta.Y) * 180.0 / Math.PI;
+
+        if (heading < 0.0)
+        {
+            heading += 360.0;
+        }
+
+        return (float)heading;
+    }
+
+    private static float NormalizeHeading(float heading)
+    {
+        while (heading < 0.0f)
+        {
+            heading += 360.0f;
+        }
+
+        while (heading >= 360.0f)
+        {
+            heading -= 360.0f;
+        }
+
+        return heading;
+    }
+
+    private static string FormatVector(Vector3 v)
+    {
+        return string.Format(
+            CultureInfo.InvariantCulture,
+            "X {0:0.0} | Y {1:0.0} | Z {2:0.0}",
+            v.X,
+            v.Y,
+            v.Z);
+    }
+
+    private static int EnumToIntHash(Enum value)
+    {
+        Type underlying = Enum.GetUnderlyingType(value.GetType());
+        object raw = Convert.ChangeType(value, underlying, CultureInfo.InvariantCulture);
+
+        if (raw is uint) return unchecked((int)(uint)raw);
+        if (raw is int) return (int)raw;
+        if (raw is ulong) return unchecked((int)(ulong)raw);
+        if (raw is long) return unchecked((int)(long)raw);
+        if (raw is ushort) return (ushort)raw;
+        if (raw is short) return (short)raw;
+        if (raw is byte) return (byte)raw;
+        if (raw is sbyte) return (sbyte)raw;
+
+        return Convert.ToInt32(raw, CultureInfo.InvariantCulture);
+    }
+
+    private static bool IsKeyDown(Keys key)
+    {
+        return Game.IsKeyPressed(key);
+    }
+
+    private static bool IsShiftHeld()
+    {
+        return Game.IsKeyPressed(Keys.ShiftKey) ||
+               Game.IsKeyPressed(Keys.LShiftKey) ||
+               Game.IsKeyPressed(Keys.RShiftKey);
+    }
+
+    private static bool IsAltHeld()
+    {
+        return Game.IsKeyPressed(Keys.Menu) ||
+               Game.IsKeyPressed(Keys.LMenu) ||
+               Game.IsKeyPressed(Keys.RMenu);
+    }
+
+    private static bool IsControlHeld()
+    {
+        return Game.IsKeyPressed(Keys.ControlKey) ||
+               Game.IsKeyPressed(Keys.LControlKey) ||
+               Game.IsKeyPressed(Keys.RControlKey);
+    }
+
+    // ---------------------------------------------------------------------
+    // Compatibilite tests historiques
+    // ---------------------------------------------------------------------
+
+    private static List<ModelOption> BuildModelOptions()
+    {
+        return BuildAllModelOptions();
+    }
+
+    private static List<WeaponOption> BuildWeaponOptions()
+    {
+        return BuildAllWeaponOptions();
+    }
+
+    private int FindDefaultModelIndex()
+    {
+        List<ModelOption> options = _modelOptions ?? _allModelOptions;
+
+        if (options == null || options.Count == 0)
+        {
+            return 0;
+        }
+
+        int swat = options.FindIndex(m =>
+            !m.IsCustom &&
+            string.Equals(m.DisplayName, "Swat01SMY", StringComparison.OrdinalIgnoreCase));
+
+        if (swat >= 0)
+        {
+            return swat;
+        }
+
+        int cop = options.FindIndex(m =>
+            !m.IsCustom &&
+            m.DisplayName.IndexOf("Cop", StringComparison.OrdinalIgnoreCase) >= 0);
+
+        return cop >= 0 ? cop : 0;
+    }
+
+    private int FindDefaultWeaponIndex()
+    {
+        List<WeaponOption> options = _weaponOptions ?? _allWeaponOptions;
+
+        if (options == null || options.Count == 0)
+        {
+            return 0;
+        }
+
+        int carbine = options.FindIndex(w =>
+            string.Equals(w.DisplayName, "CarbineRifle", StringComparison.OrdinalIgnoreCase));
+
+        if (carbine >= 0)
+        {
+            return carbine;
+        }
+
+        int pistol = options.FindIndex(w =>
+            string.Equals(w.DisplayName, "Pistol", StringComparison.OrdinalIgnoreCase));
+
+        return pistol >= 0 ? pistol : 0;
+    }
+
+    private static EnemyBehavior CycleBehavior(EnemyBehavior current, int direction)
+    {
+        int count = Enum.GetValues(typeof(EnemyBehavior)).Length;
+        int next = Wrap((int)current + direction, count);
+        return (EnemyBehavior)next;
+    }
+
+    private static string BehaviorDisplayName(EnemyBehavior behavior)
+    {
+        switch (behavior)
+        {
+            case EnemyBehavior.Static:
+                return "Statique / hostile \u00E0 vue";
+
+            case EnemyBehavior.Attacker:
+                return "Attaquer / agressif";
+
+            case EnemyBehavior.Neutral:
+                return "Neutre / garde passif";
+
+            case EnemyBehavior.Ally:
+                return "Alli\u00E9 / garde d\u00E9fense";
+
+            default:
+                return behavior.ToString();
+        }
+    }
+
+    private int GetRelationshipGroupForBehavior(EnemyBehavior behavior)
+    {
+        switch (behavior)
+        {
+            case EnemyBehavior.Neutral:
+                return _neutralGroupHash;
+
+            case EnemyBehavior.Ally:
+                return _allyGroupHash;
+
+            case EnemyBehavior.Static:
+            case EnemyBehavior.Attacker:
+            default:
+                return _hostileGroupHash;
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Contact téléphone : Cartel
+    // ---------------------------------------------------------------------
+    /*
+     * Amélioration Cartel :
+     * - Arrivée plus rapide.
+     * - Spawn plus proche mais hors champ de vision.
+     * - Spawn prioritaire sur route / node véhicule.
+     * - Déblocage automatique des véhicules bloqués.
+     * - Téléportation de secours hors champ de vision si le joueur s'éloigne trop.
+     * - Repli plus rapide.
+     * - Les hommes restent alliés pendant le repli.
+     * - Les anciens hommes en repli n'empêchent plus de rappeler une nouvelle équipe.
+     */
+
+    private const string CartelContactName = "Cartel";
+
+    private const int CartelGuardCount = 11;
+    private const int CartelVehicleCount = 3;
+
+    private const int CartelGuardHealth = 500;
+    private const int CartelGuardArmor = 200;
+
+    private const int CartelCallCooldownMs = 1800;
+    private const int CartelThinkIntervalMs = 700;
+
+    /*
+     * Fréquence des ordres de conduite.
+     * On espace un peu les ordres pour éviter de "spam" l'IA conducteur.
+     * Le véhicule reste contrôlé par le conducteur, pas par une force physique.
+     */
+    private const int CartelVehicleOrderIntervalMs = 1800;
+    private const int CartelDismissOrderIntervalMs = 2200;
+
+    private const int CartelStuckTimeoutMs = 6500;
+    private const int CartelRescueCooldownMs = 6500;
+    private const int CartelGuardRescueCooldownMs = 5500;
+
+    private const int CartelDismissMinLifeMs = 2200;
+    private const int CartelDismissForceCleanupMs = 18000;
+
+    /*
+     * Spawn plus proche que l'ancienne version, mais pas collé au joueur.
+     * Le script cherche une route hors champ de vision.
+     */
+    private const float CartelSpawnMinDistance = 68.0f;
+    private const float CartelSpawnMaxDistance = 118.0f;
+
+    private const float CartelRelocationMinDistance = 68.0f;
+    private const float CartelRelocationMaxDistance = 118.0f;
+
+    /*
+     * Vitesses réalistes en mètres/seconde GTA.
+     * 72.0f était beaucoup trop violent : ça poussait la voiture comme un projectile
+     * quand combiné à une propulsion scriptée.
+     */
+    private const float CartelArrivalDriveSpeed = 38.0f;
+    private const float CartelRetreatDriveSpeed = 34.0f;
+
+    private const float CartelTooFarVehicleDistance = 185.0f;
+    private const float CartelCriticalVehicleDistance = 285.0f;
+    private const float CartelTooFarGuardDistance = 165.0f;
+
+    private const float CartelDismissDeleteDistance = 28.0f;
+
+    /*
+     * Style de conduite naturel/professionnel.
+     * On garde une conduite PNJ crédible : routes, évitement, virages.
+     * La rapidité vient du spawn proche + ordre de conduite, pas d'une force physique.
+     */
+    private const int CartelRapidDrivingStyle = ProfessionalDrivingStyle;
+
+    private const ulong NativeIsPedRunningMobilePhoneTask = 0x2AFE52F782F25775UL;
+
+    private bool _cartelPhoneKeyLatch;
+    private bool _cartelConvoyActive;
+    private bool _cartelConvoyDismissing;
+
+    private int _nextCartelCallAllowedAt;
+    private int _nextCartelThinkAt;
+    private int _cartelDismissStartedAt;
+    private int _cartelDismissCleanupAt;
+    private int _nextCartelDismissOrderAt;
+
+    /*
+     * Handles actifs :
+     * - Ces hommes sont encore au service du joueur.
+     * - Si le joueur rappelle Cartel pendant qu'ils sont actifs, ils passent en repli.
+     */
+    private readonly HashSet<int> _cartelNpcHandles = new HashSet<int>();
+    private readonly HashSet<int> _cartelVehicleHandles = new HashSet<int>();
+
+    /*
+     * Handles en repli :
+     * - Ils ne bloquent plus un nouvel appel.
+     * - Ils restent alliés, mais ne sont plus gérés comme gardes du corps actifs.
+     * - Ils disparaissent vite dès qu'ils ne sont plus visibles.
+     */
+    private readonly Dictionary<int, SpawnedNpc> _cartelDismissingNpcRecords = new Dictionary<int, SpawnedNpc>();
+    private readonly HashSet<int> _cartelDismissingVehicleHandles = new HashSet<int>();
+
+    private readonly Dictionary<int, Vector3> _cartelLastVehiclePositions = new Dictionary<int, Vector3>();
+    private readonly Dictionary<int, int> _cartelLastVehicleMoveAt = new Dictionary<int, int>();
+    private readonly Dictionary<int, int> _cartelLastVehicleRescueAt = new Dictionary<int, int>();
+    private readonly Dictionary<int, int> _cartelNextVehicleOrderAt = new Dictionary<int, int>();
+    private readonly Dictionary<int, int> _cartelLastGuardRescueAt = new Dictionary<int, int>();
+    /*
+     * Anti-pulsation véhicules Cartel :
+     * - Les upgrades lourdes sont appliquées une seule fois par véhicule.
+     * - Les tâches de conduite ne sont pas ré-envoyées si le véhicule est déjà proche.
+     * - Le véhicule n'est plus remis au sol en boucle.
+     */
+    private readonly HashSet<int> _cartelFullyUpgradedVehicleHandles = new HashSet<int>();
+    private readonly Dictionary<int, int> _cartelLastVehicleSoftMaintenanceAt = new Dictionary<int, int>();
+    private readonly Dictionary<int, Vector3> _cartelLastVehicleOrderTarget = new Dictionary<int, Vector3>();
+    /*
+     * Combat Cartel :
+     * Les dernieres mises a jour ont rendu les vehicules plus propres, mais les gardes
+     * peuvent rester dans un etat "vise la cible" sans tirer. Cette couche force
+     * un vrai ordre de tir uniquement quand une menace reelle existe.
+     */
+    private const int CartelCombatOrderIntervalMs = 750;
+    private const float CartelThreatScanRadius = 210.0f;
+    private const float CartelThreatEvidenceRadius = 230.0f;
+    private const float CartelDriveByDistance = 135.0f;
+    private const float CartelPassengerExitCombatDistance = 45.0f;
+    private const float CartelOnFootShootDistance = 145.0f;
+
+    /*
+     * Firing pattern GTA full-auto.
+     * Permet d'eviter le comportement "je vise mais je ne tire pas".
+     */
+    private const int CartelFullAutoFiringPattern = unchecked((int)0xC6EE6B4C);
+
+    /*
+     * Anti-spam des ordres de combat.
+     * On veut forcer le tir, mais pas reassigner TASK_COMBAT_PED a chaque frame.
+     */
+    private readonly Dictionary<int, int> _cartelNextCombatOrderAt = new Dictionary<int, int>();
+    private readonly Dictionary<int, int> _cartelNextGuardPassiveMaintenanceAt = new Dictionary<int, int>();
+    private readonly Dictionary<int, int> _cartelNextGuardMobilityOrderAt = new Dictionary<int, int>();
+    /*
+     * Optimisation Cartel :
+     * La derniere correction du tir scannait trop de PNJ trop souvent.
+     * On met maintenant en cache la menace et on limite les scans lourds.
+     */
+    private const int CartelThreatScanIntervalMs = 1250;
+    private const int CartelThreatCacheLifetimeMs = 1800;
+    private const int CartelLateMaintenanceIntervalMs = 500;
+    private const int CartelMaxGuardThreatScansPerPass = 2;
+    private const int CartelThreatRelationshipRefreshMs = 2500;
+    /*
+     * Maintenance passive des gardes Cartel.
+     * Elle remplace le passage générique Bodyguard pour éviter les scans et
+     * les ordres synchronisés toutes les secondes. Le jitter par handle évite
+     * que les 11 gardes exécutent leur petite maintenance exactement au même tick.
+     */
+    private const int CartelGuardPassiveMaintenanceIntervalMs = 2400;
+    private const int CartelGuardPassiveMaintenanceJitterMs = 700;
+
+    /*
+     * Synchronisation pied / vehicule des gardes Cartel.
+     * Important : cette couche ne scanne pas le monde. Elle ne fait que gérer
+     * les gardes et véhicules Cartel déjà connus par handle.
+     */
+    private const int CartelGuardMobilityOrderIntervalMs = 900;
+    private const int CartelGuardFootFollowIntervalMs = 850;
+
+    private const float CartelVehicleFootExitDistance = 30.0f;
+    private const float CartelVehicleFootExitSpeed = 5.0f;
+    private const float CartelVehicleForcedFootExitMaxDistance = 125.0f;
+
+    private const float CartelGuardFootFollowDistance = 3.4f;
+    private const float CartelGuardFootStandDistance = 2.4f;
+    private const float CartelGuardImmediateThreatDistance = 26.0f;
+
+    private int _nextCartelThreatScanAt;
+    private int _cartelCachedThreatUntil;
+    private int _cartelGuardThreatScanCursor;
+    private int _nextCartelLateMaintenanceAt;
+
+    private int _cartelLastThreatRelationshipHandle;
+    private int _cartelLastThreatRelationshipAt;
+
+    private Ped _cartelCachedThreatPed;
+
+    private void UpdateCartelContactAndConvoy()
+    {
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player))
+        {
+            return;
+        }
+
+        UpdateCartelPhoneContact(player);
+        UpdateCartelConvoyState(player);
+    }
+
+    /*
+     * Appelé après UpdateNpcs().
+     * Important : l'IA bodyguard standard peut donner des ordres plus lents.
+     * Cette passe tardive laisse surtout l'IA conducteur se recaler proprement.
+     */
+    private void UpdateCartelConvoyLate()
+    {
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player))
+        {
+            return;
+        }
+
+        if (_cartelConvoyActive)
+        {
+            if (Game.GameTime >= _nextCartelLateMaintenanceAt)
+            {
+                _nextCartelLateMaintenanceAt = Game.GameTime + CartelLateMaintenanceIntervalMs;
+                MaintainCartelTeamWeaponsAndDrivers(player, true);
+            }
+        }
+
+        if (_cartelConvoyDismissing)
+        {
+            UpdateCartelDismissal(player, true);
+        }
+    }
+
+    private void UpdateCartelPhoneContact(Ped player)
+    {
+        bool phoneOpen = IsPlayerPhoneOpen(player);
+
+        if (!phoneOpen)
+        {
+            _cartelPhoneKeyLatch = false;
+            return;
+        }
+
+        DrawCartelPhoneContactOverlay();
+
+        bool cPressed = Game.IsKeyPressed(Keys.C);
+
+        if (!cPressed)
+        {
+            _cartelPhoneKeyLatch = false;
+            return;
+        }
+
+        if (_cartelPhoneKeyLatch)
+        {
+            return;
+        }
+
+        _cartelPhoneKeyLatch = true;
+        ToggleCartelCall();
+    }
+
+    private bool IsPlayerPhoneOpen(Ped player)
+    {
+        if (!Entity.Exists(player))
+        {
+            return false;
+        }
+
+        try
+        {
+            return Function.Call<bool>((Hash)NativeIsPedRunningMobilePhoneTask, player.Handle);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void DrawCartelPhoneContactOverlay()
+    {
+        int x = 845;
+        int y = 445;
+        int width = 430;
+        int height = 118;
+
+        DrawRect(x, y, width, height, Color.FromArgb(190, 0, 0, 0));
+        DrawRect(x, y, width, 34, Color.FromArgb(230, 110, 15, 15));
+
+        DrawText("Contact téléphone", x + 14, y + 8, 0.31f, Color.White, false, true);
+        DrawText(CartelContactName, x + 18, y + 45, 0.45f, Color.White, false, true);
+
+        string status;
+
+        if (HasActiveCartelTeam())
+        {
+            status = "C : rappeler / faire replier l'équipe active";
+        }
+        else if (_cartelConvoyDismissing)
+        {
+            status = "C : appeler une nouvelle équipe";
+        }
+        else
+        {
+            status = "C : appeler les hommes de main";
+        }
+
+        DrawText(status, x + 18, y + 82, 0.30f, Color.FromArgb(230, 230, 230), false, false);
+    }
+
+    private void ToggleCartelCall()
+    {
+        if (Game.GameTime < _nextCartelCallAllowedAt)
+        {
+            int remaining = Math.Max(1, (_nextCartelCallAllowedAt - Game.GameTime) / 1000);
+            ShowStatus("Cartel indisponible encore " + remaining.ToString(CultureInfo.InvariantCulture) + " seconde(s).", 3000);
+            return;
+        }
+
+        _nextCartelCallAllowedAt = Game.GameTime + CartelCallCooldownMs;
+
+        /*
+         * Si une équipe active existe : on la renvoie.
+         * Si seules des anciennes équipes sont encore en train de partir : on autorise un nouvel appel.
+         */
+        if (HasActiveCartelTeam())
+        {
+            DismissCartelTeam(true);
+            return;
+        }
+
+        SpawnCartelConvoy();
+    }
+
+    private bool HasActiveCartelTeam()
+    {
+        CleanupCartelHandleSets();
+
+        return _cartelNpcHandles.Count > 0 || _cartelVehicleHandles.Count > 0;
+    }
+
+    private void CleanupCartelHandleSets()
+    {
+        List<int> deadActiveNpcHandles = new List<int>();
+
+        foreach (int handle in _cartelNpcHandles)
+        {
+            SpawnedNpc npc = FindSpawnedNpcByHandle(handle);
+
+            if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+            {
+                deadActiveNpcHandles.Add(handle);
+            }
+        }
+
+        for (int i = 0; i < deadActiveNpcHandles.Count; i++)
+        {
+            _cartelNpcHandles.Remove(deadActiveNpcHandles[i]);
+            _cartelNextCombatOrderAt.Remove(deadActiveNpcHandles[i]);
+            _cartelLastGuardRescueAt.Remove(deadActiveNpcHandles[i]);
+            _cartelNextGuardPassiveMaintenanceAt.Remove(deadActiveNpcHandles[i]);
+            _cartelNextGuardMobilityOrderAt.Remove(deadActiveNpcHandles[i]);
+
+            if (_cartelCachedThreatPed != null &&
+                Entity.Exists(_cartelCachedThreatPed) &&
+                _cartelCachedThreatPed.Handle == deadActiveNpcHandles[i])
+            {
+                ClearCachedCartelThreat();
+            }
+        }
+
+        List<int> deadActiveVehicleHandles = new List<int>();
+
+        foreach (int handle in _cartelVehicleHandles)
+        {
+            if (!DoesVehicleHandleExist(handle))
+            {
+                deadActiveVehicleHandles.Add(handle);
+            }
+        }
+
+        for (int i = 0; i < deadActiveVehicleHandles.Count; i++)
+        {
+            _cartelVehicleHandles.Remove(deadActiveVehicleHandles[i]);
+            ClearCartelVehicleTracking(deadActiveVehicleHandles[i]);
+        }
+
+        List<int> deadDismissingNpcHandles = new List<int>();
+
+        foreach (KeyValuePair<int, SpawnedNpc> pair in _cartelDismissingNpcRecords)
+        {
+            if (pair.Value == null || !Entity.Exists(pair.Value.Ped))
+            {
+                deadDismissingNpcHandles.Add(pair.Key);
+            }
+        }
+
+        for (int i = 0; i < deadDismissingNpcHandles.Count; i++)
+        {
+            _cartelDismissingNpcRecords.Remove(deadDismissingNpcHandles[i]);
+            _cartelNextCombatOrderAt.Remove(deadDismissingNpcHandles[i]);
+            _cartelLastGuardRescueAt.Remove(deadDismissingNpcHandles[i]);
+            _cartelNextGuardPassiveMaintenanceAt.Remove(deadDismissingNpcHandles[i]);
+            _cartelNextGuardMobilityOrderAt.Remove(deadDismissingNpcHandles[i]);
+
+            if (_cartelCachedThreatPed != null &&
+                Entity.Exists(_cartelCachedThreatPed) &&
+                _cartelCachedThreatPed.Handle == deadDismissingNpcHandles[i])
+            {
+                ClearCachedCartelThreat();
+            }
+        }
+
+        List<int> deadDismissingVehicleHandles = new List<int>();
+
+        foreach (int handle in _cartelDismissingVehicleHandles)
+        {
+            if (!DoesVehicleHandleExist(handle))
+            {
+                deadDismissingVehicleHandles.Add(handle);
+            }
+        }
+
+        for (int i = 0; i < deadDismissingVehicleHandles.Count; i++)
+        {
+            _cartelDismissingVehicleHandles.Remove(deadDismissingVehicleHandles[i]);
+            ClearCartelVehicleTracking(deadDismissingVehicleHandles[i]);
+        }
+
+        _cartelConvoyActive = _cartelNpcHandles.Count > 0 || _cartelVehicleHandles.Count > 0;
+        _cartelConvoyDismissing = _cartelDismissingNpcRecords.Count > 0 || _cartelDismissingVehicleHandles.Count > 0;
+    }
+
+    private void SpawnCartelConvoy()
+    {
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player) || player.IsDead)
+        {
+            ShowStatus("Impossible d'appeler le Cartel : joueur invalide.", 3500);
+            return;
+        }
+
+        EnsureRelationshipGroups();
+
+        CleanupCartelHandleSets();
+
+        ModelIdentity guardModel = ResolveCartelGuardModelIdentity();
+        VehicleIdentity vehicleIdentity = ResolveCartelVehicleIdentity();
+        WeaponLoadout serviceCarbineLoadout = CreateCartelPrimaryLoadout();
+
+        int createdGuards = 0;
+        int createdVehicles = 0;
+
+        for (int vehicleIndex = 0; vehicleIndex < CartelVehicleCount; vehicleIndex++)
+        {
+            if (createdGuards >= CartelGuardCount)
+            {
+                break;
+            }
+
+            Vector3 spawnPosition = FindCartelVehicleSpawnPosition(player, vehicleIndex);
+            float heading = HeadingFromTo(spawnPosition, player.Position);
+
+            Vehicle vehicle = CreateVehicleFromIdentity(vehicleIdentity, spawnPosition, heading);
+
+            if (!Entity.Exists(vehicle))
+            {
+                continue;
+            }
+
+            RegisterPlacedVehicle(vehicle, vehicleIdentity, spawnPosition, heading, false);
+            UpgradeCartelVehicle(vehicle);
+
+            _cartelVehicleHandles.Add(vehicle.Handle);
+            createdVehicles++;
+
+            InitializeCartelVehicleTracking(vehicle);
+
+            int seatsForThisVehicle = GetVehicleSeatCapacityIncludingDriver(vehicle);
+            int seatsFilled = 0;
+
+            for (int localSeatIndex = 0; localSeatIndex < seatsForThisVehicle; localSeatIndex++)
+            {
+                if (createdGuards >= CartelGuardCount)
+                {
+                    break;
+                }
+
+                int seat = localSeatIndex == 0 ? -1 : localSeatIndex - 1;
+
+                if (!IsSeatFreeSafe(vehicle, seat))
+                {
+                    continue;
+                }
+
+                Vector3 pedSpawnPosition = spawnPosition + GetSpawnOffsetAroundVehicle(localSeatIndex);
+                Ped guard = CreatePedFromModelIdentity(guardModel, pedSpawnPosition, heading);
+
+                if (!Entity.Exists(guard))
+                {
+                    continue;
+                }
+
+                SpawnedNpc spawned = RegisterSpawnedNpc(
+                    guard,
+                    NpcBehavior.Bodyguard,
+                    true,
+                    false,
+                    guardModel,
+                    serviceCarbineLoadout.Clone(),
+                    CartelGuardHealth,
+                    CartelGuardArmor,
+                    pedSpawnPosition,
+                    heading,
+                    _selectedPatrolRadius);
+
+                if (spawned == null || !Entity.Exists(spawned.Ped))
+                {
+                    DeleteEntitySafe(guard);
+                    continue;
+                }
+
+                _cartelNpcHandles.Add(spawned.Ped.Handle);
+
+                GiveCartelWeapons(spawned.Ped);
+                ConfigureCartelGuard(spawned, vehicle, seat);
+                PutPedIntoVehicleSafe(spawned.Ped, vehicle, seat);
+
+                createdGuards++;
+                seatsFilled++;
+            }
+
+            if (seatsFilled == 0)
+            {
+                _cartelVehicleHandles.Remove(vehicle.Handle);
+                ClearCartelVehicleTracking(vehicle.Handle);
+                DeleteEntitySafe(vehicle);
+            }
+        }
+
+        if (createdGuards == 0)
+        {
+            CleanupCartelHandleSets();
+            ShowStatus("Cartel : aucun homme de main n'a pu être créé.", 5000);
+            return;
+        }
+
+        _cartelConvoyActive = true;
+        _nextCartelThinkAt = 0;
+
+        OrderCartelConvoyToPlayer(true);
+
+        ShowStatus(
+            "Cartel appelé : " +
+            createdGuards.ToString(CultureInfo.InvariantCulture) +
+            " hommes arrivent rapidement en " +
+            createdVehicles.ToString(CultureInfo.InvariantCulture) +
+            " Baller6 blindée(s).",
+            6500);
+    }
+
+    private ModelIdentity ResolveCartelGuardModelIdentity()
+    {
+        try
+        {
+            for (int i = 0; i < _allModelOptions.Count; i++)
+            {
+                ModelOption option = _allModelOptions[i];
+
+                if (option == null || option.IsCustom)
+                {
+                    continue;
+                }
+
+                if (string.Equals(option.DisplayName, "CartelGoons01GMM", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new ModelIdentity
+                    {
+                        IsCustom = false,
+                        Name = option.DisplayName,
+                        Hash = option.Hash,
+                        DisplayName = option.DisplayName
+                    };
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return new ModelIdentity
+        {
+            IsCustom = true,
+            Name = "g_m_m_cartelgoons_01",
+            Hash = 0,
+            DisplayName = "CartelGoons01GMM"
+        };
+    }
+
+    private VehicleIdentity ResolveCartelVehicleIdentity()
+    {
+        return new VehicleIdentity
+        {
+            Name = "Baller6",
+            Hash = EnumToIntHash(VehicleHash.Baller6),
+            DisplayName = "Baller6 blindée Cartel"
+        };
+    }
+
+    private WeaponLoadout CreateCartelPrimaryLoadout()
+    {
+        return new WeaponLoadout
+        {
+            Weapon = WeaponHash.ServiceCarbine,
+            Ammo = 9999,
+            Tint = 0,
+            Preset = WeaponUpgradePreset.Tactique,
+            ExtendedClip = true,
+            Suppressor = false,
+            Flashlight = true,
+            Grip = true,
+            Scope = WeaponScopeMode.Small,
+            Muzzle = false,
+            ImprovedBarrel = false,
+            Mk2Ammo = WeaponMk2AmmoMode.Standard
+        };
+    }
+
+    private void GiveCartelWeapons(Ped ped)
+    {
+        if (!Entity.Exists(ped))
+        {
+            return;
+        }
+
+        try
+        {
+            ped.Weapons.RemoveAll();
+
+            WeaponLoadout carbine = CreateCartelPrimaryLoadout();
+            GiveWeaponLoadout(ped, carbine, false);
+
+            ped.Weapons.Give(WeaponHash.MachinePistol, 9999, false, true);
+
+            if (ped.IsInVehicle())
+            {
+                ped.Weapons.Select(WeaponHash.MachinePistol, true);
+            }
+            else
+            {
+                ped.Weapons.Select(WeaponHash.ServiceCarbine, true);
+            }
+        }
+        catch
+        {
+            try
+            {
+                ped.Weapons.Give(WeaponHash.CarbineRifle, 9999, true, true);
+                ped.Weapons.Give(WeaponHash.MicroSMG, 9999, false, true);
+                ped.Weapons.Select(WeaponHash.CarbineRifle, true);
+            }
+            catch
+            {
+                ped.Weapons.Select(WeaponHash.Unarmed);
+            }
+        }
+    }
+
+    private void ConfigureCartelGuard(SpawnedNpc spawned, Vehicle assignedVehicle, int assignedSeat)
+    {
+        if (spawned == null || !Entity.Exists(spawned.Ped))
+        {
+            return;
+        }
+
+        spawned.BaseBehavior = NpcBehavior.Bodyguard;
+        spawned.Behavior = NpcBehavior.Bodyguard;
+        spawned.Activated = false;
+        spawned.IsReturningHome = false;
+        spawned.LastCombatActivityAt = Game.GameTime;
+        spawned.NextBodyguardTaskAt = 0;
+
+        if (Entity.Exists(assignedVehicle))
+        {
+            spawned.BodyguardAssignedVehicleHandle = assignedVehicle.Handle;
+            spawned.BodyguardAssignedSeat = assignedSeat;
+            spawned.BodyguardIsDriver = assignedSeat == -1;
+        }
+
+        spawned.Ped.Armor = CartelGuardArmor;
+        spawned.Ped.MaxHealth = CartelGuardHealth;
+        spawned.Ped.Health = CartelGuardHealth;
+        spawned.Ped.Accuracy = 64;
+        spawned.Ped.ShootRate = 900;
+        spawned.Ped.IsEnemy = false;
+
+        /*
+         * Je bloque les evenements ambiants parce que le script gere deja
+         * les ordres de protection, de convoi, de descente et de remontée véhicule.
+         */
+        spawned.Ped.BlockPermanentEvents = true;
+        spawned.Ped.AlwaysKeepTask = true;
+
+        Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, spawned.Ped.Handle, _allyGroupHash);
+        Function.Call(Hash.SET_PED_COMBAT_ABILITY, spawned.Ped.Handle, 2);
+        Function.Call(Hash.SET_PED_COMBAT_RANGE, spawned.Ped.Handle, 2);
+        Function.Call(Hash.SET_PED_COMBAT_MOVEMENT, spawned.Ped.Handle, 2);
+        Function.Call(Hash.SET_PED_FLEE_ATTRIBUTES, spawned.Ped.Handle, 0, false);
+        Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, spawned.Ped.Handle, 0, true);
+        Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, spawned.Ped.Handle, 5, true);
+        Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, spawned.Ped.Handle, 46, true);
+
+        int initialMaintenanceStagger = CalculateCartelHandleStaggerMs(
+            spawned.Ped.Handle,
+            CartelGuardPassiveMaintenanceJitterMs);
+
+        spawned.NextThinkAt = Game.GameTime + initialMaintenanceStagger;
+        spawned.NextBodyguardTaskAt = Game.GameTime + initialMaintenanceStagger;
+
+        _cartelNextGuardPassiveMaintenanceAt[spawned.Ped.Handle] = Game.GameTime + initialMaintenanceStagger;
+        _cartelNextGuardMobilityOrderAt[spawned.Ped.Handle] = Game.GameTime + initialMaintenanceStagger;
+
+        CreateOrUpdateNpcBlip(spawned);
+    }
+
+    private void UpgradeCartelVehicle(Vehicle vehicle)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return;
+        }
+
+        int handle = vehicle.Handle;
+
+        /*
+         * Très important :
+         * Cette méthode peut être appelée plusieurs fois par la logique Cartel.
+         * Avant, elle réappliquait les mods + la remise au sol native en boucle,
+         * ce qui provoquait les petites pulsations physiques du véhicule.
+         *
+         * Maintenant :
+         * - upgrade lourd une seule fois ;
+         * - maintenance légère seulement de temps en temps ;
+         * - aucune remise au sol répétée.
+         */
+        if (!_cartelFullyUpgradedVehicleHandles.Contains(handle))
+        {
+            _cartelFullyUpgradedVehicleHandles.Add(handle);
+
+            vehicle.IsPersistent = true;
+
+            try
+            {
+                Function.Call(Hash.SET_ENTITY_AS_MISSION_ENTITY, vehicle.Handle, true, true);
+
+                Function.Call(Hash.SET_VEHICLE_MOD_KIT, vehicle.Handle, 0);
+
+                // Mods GTA :
+                // 11 moteur, 12 freins, 13 transmission, 15 suspension, 16 blindage, 18 turbo.
+                Function.Call(Hash.SET_VEHICLE_MOD, vehicle.Handle, 11, 3, false);
+                Function.Call(Hash.SET_VEHICLE_MOD, vehicle.Handle, 12, 2, false);
+                Function.Call(Hash.SET_VEHICLE_MOD, vehicle.Handle, 13, 2, false);
+                Function.Call(Hash.SET_VEHICLE_MOD, vehicle.Handle, 15, 3, false);
+                Function.Call(Hash.SET_VEHICLE_MOD, vehicle.Handle, 16, 4, false);
+                Function.Call(Hash.TOGGLE_VEHICLE_MOD, vehicle.Handle, 18, true);
+
+                Function.Call(Hash.SET_VEHICLE_COLOURS, vehicle.Handle, 0, 0);
+                Function.Call(Hash.SET_VEHICLE_EXTRA_COLOURS, vehicle.Handle, 0, 0);
+                Function.Call(Hash.SET_VEHICLE_WINDOW_TINT, vehicle.Handle, 1);
+
+                Function.Call(Hash.SET_VEHICLE_TYRES_CAN_BURST, vehicle.Handle, false);
+                Function.Call(Hash.SET_VEHICLE_ENGINE_HEALTH, vehicle.Handle, 1000.0f);
+                Function.Call(Hash.SET_VEHICLE_PETROL_TANK_HEALTH, vehicle.Handle, 1000.0f);
+                Function.Call(Hash.SET_VEHICLE_DIRT_LEVEL, vehicle.Handle, 0.0f);
+                Function.Call(Hash.SET_VEHICLE_DOORS_LOCKED, vehicle.Handle, 1);
+                Function.Call(Hash.SET_VEHICLE_ENGINE_ON, vehicle.Handle, true, true, false);
+
+                /*
+                 * Autorisé une seule fois au moment de l'initialisation.
+                 * Ne jamais appeler ça en boucle : ça crée des pulsations.
+                 */
+                Function.Call(Hash.SET_VEHICLE_ON_GROUND_PROPERLY, vehicle.Handle);
+            }
+            catch
+            {
+                // Certaines options peuvent ne pas être supportées selon le véhicule/build.
+            }
+
+            return;
+        }
+
+        MaintainCartelVehicleSoftState(vehicle);
+    }
+
+    private void MaintainCartelVehicleSoftState(Vehicle vehicle)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return;
+        }
+
+        int handle = vehicle.Handle;
+
+        int lastMaintenanceAt;
+
+        if (_cartelLastVehicleSoftMaintenanceAt.TryGetValue(handle, out lastMaintenanceAt) &&
+            Game.GameTime - lastMaintenanceAt < 3500)
+        {
+            return;
+        }
+
+        _cartelLastVehicleSoftMaintenanceAt[handle] = Game.GameTime;
+
+        /*
+         * Maintenance légère uniquement.
+         *
+         * On évite volontairement :
+         * - la remise au sol native
+         * - le kit de mods
+         * - les mods GTA
+         * - un repositionnement direct
+         * - une modification de vélocité
+         *
+         * Ces appels peuvent modifier physiquement le véhicule ou réinitialiser son état.
+         */
+        try
+        {
+            vehicle.IsPersistent = true;
+
+            Function.Call(Hash.SET_ENTITY_AS_MISSION_ENTITY, vehicle.Handle, true, true);
+            Function.Call(Hash.SET_VEHICLE_TYRES_CAN_BURST, vehicle.Handle, false);
+            Function.Call(Hash.SET_VEHICLE_ENGINE_ON, vehicle.Handle, true, true, false);
+            Function.Call(Hash.SET_VEHICLE_DOORS_LOCKED, vehicle.Handle, 1);
+        }
+        catch
+        {
+            // État véhicule temporairement invalide, on ignore.
+        }
+    }
+
+    private Vector3 FindCartelVehicleSpawnPosition(Ped player, int convoyIndex)
+    {
+        Vector3 roadPoint;
+
+        if (TryFindHiddenRoadPointNearPlayer(
+            player,
+            convoyIndex,
+            CartelSpawnMinDistance,
+            CartelSpawnMaxDistance,
+            out roadPoint))
+        {
+            return roadPoint;
+        }
+
+        Vector3 playerPos = player.Position;
+        Vector3 camForward = GetGameplayCameraForwardVector();
+
+        if (camForward.Length() < 0.001f)
+        {
+            camForward = Normalize(player.ForwardVector);
+        }
+
+        if (camForward.Length() < 0.001f)
+        {
+            camForward = new Vector3(0.0f, 1.0f, 0.0f);
+        }
+
+        Vector3 baseDirection = -camForward;
+        Vector3 right = Normalize(new Vector3(baseDirection.Y, -baseDirection.X, 0.0f));
+
+        Vector3 fallback =
+            playerPos +
+            baseDirection * (CartelSpawnMinDistance + convoyIndex * 10.0f) +
+            right * ((convoyIndex - 1) * 12.0f);
+
+        Vector3 safe = World.GetSafeCoordForPed(fallback, false, 16);
+
+        if (!IsZeroVector(safe) && !IsPointInPlayerView(player, safe))
+        {
+            return safe + new Vector3(0.0f, 0.0f, 0.45f);
+        }
+
+        float ground = World.GetGroundHeight(new Vector3(fallback.X, fallback.Y, fallback.Z + 1000.0f));
+
+        if (Math.Abs(ground) > 0.001f)
+        {
+            fallback.Z = ground + 0.45f;
+        }
+
+        return fallback;
+    }
+
+    private bool TryFindHiddenRoadPointNearPlayer(Ped player, int seedIndex, float minDistance, float maxDistance, out Vector3 roadPoint)
+    {
+        roadPoint = Vector3.Zero;
+
+        if (!Entity.Exists(player))
+        {
+            return false;
+        }
+
+        Vector3 playerPos = player.Position;
+        Vector3 camForward = GetGameplayCameraForwardVector();
+
+        if (camForward.Length() < 0.001f)
+        {
+            camForward = Normalize(player.ForwardVector);
+        }
+
+        if (camForward.Length() < 0.001f)
+        {
+            camForward = new Vector3(0.0f, 1.0f, 0.0f);
+        }
+
+        Vector3 hiddenBase = -camForward;
+
+        float[] angleOffsets =
+        {
+            0.0f, -28.0f, 28.0f, -52.0f, 52.0f,
+            -75.0f, 75.0f, 110.0f, -110.0f, 145.0f, -145.0f, 180.0f
+        };
+
+        for (int attempt = 0; attempt < 28; attempt++)
+        {
+            float t = attempt / 27.0f;
+            float distance = minDistance + (maxDistance - minDistance) * t;
+
+            int angleIndex = (attempt + seedIndex * 3) % angleOffsets.Length;
+            float angle = angleOffsets[angleIndex] + seedIndex * 11.0f;
+
+            Vector3 direction = RotateDirection2D(hiddenBase, angle);
+            Vector3 right = Normalize(new Vector3(direction.Y, -direction.X, 0.0f));
+            float lateral = ((seedIndex % 3) - 1) * 9.0f;
+
+            Vector3 desired = playerPos + direction * distance + right * lateral;
+
+            Vector3 node;
+
+            if (!TryGetClosestVehicleNode(desired, attempt % 6, out node))
+            {
+                continue;
+            }
+
+            float actualDistance = node.DistanceTo(playerPos);
+
+            if (actualDistance < minDistance * 0.75f || actualDistance > maxDistance * 1.35f)
+            {
+                continue;
+            }
+
+            if (IsPointInPlayerView(player, node))
+            {
+                continue;
+            }
+
+            roadPoint = node + new Vector3(0.0f, 0.0f, 0.45f);
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool TryGetClosestVehicleNode(Vector3 desired, int nth, out Vector3 node)
+    {
+        node = Vector3.Zero;
+
+        try
+        {
+            OutputArgument outPos = new OutputArgument();
+
+            bool found = Function.Call<bool>(
+                Hash.GET_NTH_CLOSEST_VEHICLE_NODE,
+                desired.X,
+                desired.Y,
+                desired.Z,
+                Math.Max(0, nth),
+                outPos,
+                1,
+                3.0f,
+                0.0f);
+
+            if (!found)
+            {
+                return false;
+            }
+
+            node = outPos.GetResult<Vector3>();
+
+            return !IsZeroVector(node);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static Vector3 GetGameplayCameraForwardVector()
+    {
+        Vector3 rotation = Function.Call<Vector3>(Hash.GET_GAMEPLAY_CAM_ROT, 2);
+
+        float pitch = rotation.X * (float)Math.PI / 180.0f;
+        float yaw = rotation.Z * (float)Math.PI / 180.0f;
+
+        float cosPitch = (float)Math.Cos(pitch);
+
+        return Normalize(new Vector3(
+            -(float)Math.Sin(yaw) * cosPitch,
+            (float)Math.Cos(yaw) * cosPitch,
+            (float)Math.Sin(pitch)));
+    }
+
+    private static Vector3 RotateDirection2D(Vector3 direction, float degrees)
+    {
+        float radians = degrees * (float)Math.PI / 180.0f;
+        float cos = (float)Math.Cos(radians);
+        float sin = (float)Math.Sin(radians);
+
+        Vector3 normalized = Normalize(new Vector3(direction.X, direction.Y, 0.0f));
+
+        return Normalize(new Vector3(
+            normalized.X * cos - normalized.Y * sin,
+            normalized.X * sin + normalized.Y * cos,
+            0.0f));
+    }
+
+    private bool IsPointInPlayerView(Ped player, Vector3 point)
+    {
+        if (!Entity.Exists(player))
+        {
+            return false;
+        }
+
+        Vector3 camPos = Function.Call<Vector3>(Hash.GET_GAMEPLAY_CAM_COORD);
+        Vector3 camForward = GetGameplayCameraForwardVector();
+
+        Vector3 toPoint = Normalize(point - camPos);
+
+        if (toPoint.Length() < 0.001f || camForward.Length() < 0.001f)
+        {
+            return false;
+        }
+
+        float dot = camForward.X * toPoint.X + camForward.Y * toPoint.Y + camForward.Z * toPoint.Z;
+        float distance = camPos.DistanceTo(point);
+
+        if (distance < 38.0f)
+        {
+            return true;
+        }
+
+        return dot > 0.35f && distance < 180.0f;
+    }
+
+    private bool IsEntityLikelyVisibleToPlayer(Entity entity)
+    {
+        if (!Entity.Exists(entity))
+        {
+            return false;
+        }
+
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player))
+        {
+            return false;
+        }
+
+        float distance = player.Position.DistanceTo(entity.Position);
+
+        if (distance < 35.0f)
+        {
+            return true;
+        }
+
+        try
+        {
+            if (Function.Call<bool>(Hash.IS_ENTITY_ON_SCREEN, entity.Handle))
+            {
+                return true;
+            }
+        }
+        catch
+        {
+        }
+
+        Vector3 camPos = Function.Call<Vector3>(Hash.GET_GAMEPLAY_CAM_COORD);
+        Vector3 camForward = GetGameplayCameraForwardVector();
+        Vector3 toEntity = Normalize(entity.Position - camPos);
+
+        if (toEntity.Length() < 0.001f || camForward.Length() < 0.001f)
+        {
+            return false;
+        }
+
+        float dot = camForward.X * toEntity.X + camForward.Y * toEntity.Y + camForward.Z * toEntity.Z;
+
+        if (dot < 0.28f)
+        {
+            return false;
+        }
+
+        if (distance > 180.0f)
+        {
+            return false;
+        }
+
+        try
+        {
+            return Function.Call<bool>(
+                Hash.HAS_ENTITY_CLEAR_LOS_TO_ENTITY,
+                player.Handle,
+                entity.Handle,
+                17);
+        }
+        catch
+        {
+            return dot > 0.55f;
+        }
+    }
+
+    private static Vector3 GetSpawnOffsetAroundVehicle(int index)
+    {
+        switch (index)
+        {
+            case 0:
+                return new Vector3(0.0f, -1.5f, 0.0f);
+
+            case 1:
+                return new Vector3(1.4f, 0.8f, 0.0f);
+
+            case 2:
+                return new Vector3(-1.4f, 0.8f, 0.0f);
+
+            case 3:
+                return new Vector3(1.4f, -0.8f, 0.0f);
+
+            default:
+                return new Vector3(-1.4f, -0.8f, 0.0f);
+        }
+    }
+
+    private int GetVehicleSeatCapacityIncludingDriver(Vehicle vehicle)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return 0;
+        }
+
+        int passengers = 3;
+
+        try
+        {
+            passengers = Function.Call<int>(Hash.GET_VEHICLE_MAX_NUMBER_OF_PASSENGERS, vehicle.Handle);
+        }
+        catch
+        {
+            passengers = 3;
+        }
+
+        return Clamp(passengers + 1, 1, 8);
+    }
+
+    private bool IsSeatFreeSafe(Vehicle vehicle, int seat)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return false;
+        }
+
+        try
+        {
+            return Function.Call<bool>(Hash.IS_VEHICLE_SEAT_FREE, vehicle.Handle, seat, false);
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private void PutPedIntoVehicleSafe(Ped ped, Vehicle vehicle, int seat)
+    {
+        if (!Entity.Exists(ped) || !Entity.Exists(vehicle))
+        {
+            return;
+        }
+
+        try
+        {
+            Function.Call(Hash.SET_PED_INTO_VEHICLE, ped.Handle, vehicle.Handle, seat);
+        }
+        catch
+        {
+            try
+            {
+                Function.Call(
+                    Hash.TASK_ENTER_VEHICLE,
+                    ped.Handle,
+                    vehicle.Handle,
+                    5000,
+                    seat,
+                    2.0f,
+                    1,
+                    0);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private void OrderCartelConvoyToPlayer(bool force)
+    {
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player))
+        {
+            return;
+        }
+
+        foreach (int vehicleHandle in _cartelVehicleHandles)
+        {
+            Vehicle vehicle = FindVehicleByHandle(vehicleHandle);
+
+            if (!Entity.Exists(vehicle))
+            {
+                continue;
+            }
+
+            IssueCartelFastFollowOrder(vehicle, player, force);
+        }
+    }
+
+    private void ConfigureCartelDriver(Ped driver)
+    {
+        if (!Entity.Exists(driver))
+        {
+            return;
+        }
+
+        try
+        {
+            /*
+             * On rend le conducteur compétent, mais on ne le rend pas "kamikaze".
+             * L'ancien réglage trop agressif + vitesse forcée créait des collisions violentes.
+             */
+            Function.Call(Hash.SET_DRIVER_ABILITY, driver.Handle, 1.0f);
+            Function.Call(Hash.SET_DRIVER_AGGRESSIVENESS, driver.Handle, 0.42f);
+            Function.Call(Hash.SET_DRIVE_TASK_DRIVING_STYLE, driver.Handle, CartelRapidDrivingStyle);
+            Function.Call(Hash.SET_PED_CAN_BE_DRAGGED_OUT, driver.Handle, false);
+            Function.Call(Hash.SET_PED_STAY_IN_VEHICLE_WHEN_JACKED, driver.Handle, true);
+        }
+        catch
+        {
+            // On ignore proprement : certains états véhicule/ped peuvent être temporaires.
+        }
+    }
+
+    private Ped GetDriverOfVehicle(Vehicle vehicle)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return null;
+        }
+
+        try
+        {
+            int driverHandle = Function.Call<int>(Hash.GET_PED_IN_VEHICLE_SEAT, vehicle.Handle, -1, false);
+
+            if (driverHandle == 0)
+            {
+                return null;
+            }
+
+            for (int i = 0; i < _spawnedNpcs.Count; i++)
+            {
+                SpawnedNpc npc = _spawnedNpcs[i];
+
+                if (npc != null && Entity.Exists(npc.Ped) && npc.Ped.Handle == driverHandle)
+                {
+                    return npc.Ped;
+                }
+            }
+
+            foreach (KeyValuePair<int, SpawnedNpc> pair in _cartelDismissingNpcRecords)
+            {
+                SpawnedNpc npc = pair.Value;
+
+                if (npc != null && Entity.Exists(npc.Ped) && npc.Ped.Handle == driverHandle)
+                {
+                    return npc.Ped;
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    private void UpdateCartelConvoyState(Ped player)
+    {
+        CleanupCartelHandleSets();
+
+        if (!_cartelConvoyActive && !_cartelConvoyDismissing)
+        {
+            return;
+        }
+
+        if (Game.GameTime < _nextCartelThinkAt)
+        {
+            return;
+        }
+
+        _nextCartelThinkAt = Game.GameTime + CartelThinkIntervalMs;
+
+        if (!Entity.Exists(player) || player.IsDead)
+        {
+            DismissCartelTeam(false);
+            return;
+        }
+
+        if (_cartelConvoyActive)
+        {
+            MaintainCartelTeamWeaponsAndDrivers(player, false);
+        }
+
+        if (_cartelConvoyDismissing)
+        {
+            UpdateCartelDismissal(player, false);
+        }
+    }
+
+    private void MaintainCartelTeamWeaponsAndDrivers(Ped player, bool latePass)
+    {
+        CleanupCartelHandleSets();
+
+        /*
+         * Correction performance conservee :
+         * - la passe tardive ne lance pas de scan lourd ;
+         * - la menace est scannee / cachee uniquement par ResolveCartelThreat ;
+         * - la synchronisation pied/vehicule ci-dessous ne parcourt pas tous les PNJ du monde.
+         */
+        Ped cartelThreat = ResolveCartelThreat(player, latePass);
+
+        if (Entity.Exists(cartelThreat))
+        {
+            EngageCartelTeamThreat(cartelThreat, player, latePass);
+            return;
+        }
+
+        List<int> activeVehicles = new List<int>(_cartelVehicleHandles);
+
+        for (int i = 0; i < activeVehicles.Count; i++)
+        {
+            Vehicle vehicle = FindVehicleByHandle(activeVehicles[i]);
+
+            if (!Entity.Exists(vehicle))
+            {
+                continue;
+            }
+
+            if (!latePass)
+            {
+                UpgradeCartelVehicle(vehicle);
+                RescueCartelVehicleIfNeeded(vehicle, player, i);
+            }
+
+            /*
+             * Joueur à pied :
+             * le véhicule approche du joueur ; quand il est arrivé, les gardes
+             * descendent via SynchronizeCartelGuardWithPlayerState().
+             *
+             * Joueur en véhicule :
+             * cet ordre redevient une escorte classique.
+             */
+            IssueCartelFastFollowOrder(vehicle, player, false);
+        }
+
+        List<int> activeNpcs = new List<int>(_cartelNpcHandles);
+
+        for (int i = 0; i < activeNpcs.Count; i++)
+        {
+            SpawnedNpc npc = FindSpawnedNpcByHandle(activeNpcs[i]);
+
+            if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+            {
+                continue;
+            }
+
+            if (ShouldRunCartelGuardPassiveMaintenance(npc.Ped, false))
+            {
+                MaintainCartelGuardPassiveState(npc, true);
+            }
+
+            SynchronizeCartelGuardWithPlayerState(npc, player, latePass);
+
+            if (!latePass)
+            {
+                RescueCartelGuardIfNeeded(npc, player, i);
+            }
+        }
+    }
+
+    private void MaintainCartelGuardPassiveState(SpawnedNpc npc, bool includeWeaponSelection)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+        {
+            return;
+        }
+
+        npc.BaseBehavior = NpcBehavior.Bodyguard;
+        npc.Behavior = NpcBehavior.Bodyguard;
+        npc.Ped.IsEnemy = false;
+        npc.Ped.BlockPermanentEvents = true;
+        npc.Ped.AlwaysKeepTask = true;
+
+        try
+        {
+            Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, npc.Ped.Handle, _allyGroupHash);
+        }
+        catch
+        {
+        }
+
+        if (!includeWeaponSelection)
+        {
+            return;
+        }
+
+        if (npc.Ped.IsInVehicle())
+        {
+            TrySelectPedWeapon(npc.Ped, WeaponHash.MachinePistol);
+        }
+        else
+        {
+            TrySelectPedWeapon(npc.Ped, WeaponHash.ServiceCarbine);
+        }
+
+        if (npc.Ped.IsInVehicle() && IsPedDriverOfAnyCartelVehicle(npc.Ped))
+        {
+            ConfigureCartelDriver(npc.Ped);
+        }
+    }
+
+    private bool ShouldRunCartelGuardPassiveMaintenance(Ped ped, bool force)
+    {
+        if (!Entity.Exists(ped))
+        {
+            return false;
+        }
+
+        int nextAt =
+            Game.GameTime +
+            CartelGuardPassiveMaintenanceIntervalMs +
+            CalculateCartelHandleStaggerMs(ped.Handle, CartelGuardPassiveMaintenanceJitterMs);
+
+        if (force)
+        {
+            _cartelNextGuardPassiveMaintenanceAt[ped.Handle] = nextAt;
+            return true;
+        }
+
+        int nextMaintenanceAt;
+
+        if (_cartelNextGuardPassiveMaintenanceAt.TryGetValue(ped.Handle, out nextMaintenanceAt) &&
+            Game.GameTime < nextMaintenanceAt)
+        {
+            return false;
+        }
+
+        _cartelNextGuardPassiveMaintenanceAt[ped.Handle] = nextAt;
+        return true;
+    }
+
+    private static int CalculateCartelHandleStaggerMs(int handle, int maxExclusive)
+    {
+        if (maxExclusive <= 0)
+        {
+            return 0;
+        }
+
+        unchecked
+        {
+            uint mixed = (uint)handle;
+            mixed ^= mixed >> 16;
+            mixed *= 2246822519U;
+            mixed ^= mixed >> 13;
+            mixed *= 3266489917U;
+            mixed ^= mixed >> 16;
+
+            return (int)(mixed % (uint)maxExclusive);
+        }
+    }
+
+    private void SynchronizeCartelGuardWithPlayerState(SpawnedNpc guard, Ped player, bool latePass)
+    {
+        if (guard == null ||
+            !Entity.Exists(guard.Ped) ||
+            guard.Ped.IsDead ||
+            !Entity.Exists(player) ||
+            player.IsDead)
+        {
+            return;
+        }
+
+        if (player.IsInVehicle() && Entity.Exists(player.CurrentVehicle))
+        {
+            ReturnCartelGuardToVehicleIfNeeded(guard, player, false);
+            return;
+        }
+
+        KeepCartelGuardWithPlayerOnFoot(guard, player, false);
+    }
+
+    private void KeepCartelGuardWithPlayerOnFoot(SpawnedNpc guard, Ped player, bool combatMode)
+    {
+        if (guard == null || !Entity.Exists(guard.Ped) || !Entity.Exists(player))
+        {
+            return;
+        }
+
+        if (guard.Ped.IsInVehicle() && Entity.Exists(guard.Ped.CurrentVehicle))
+        {
+            Vehicle currentVehicle = guard.Ped.CurrentVehicle;
+
+            if (ShouldCartelGuardLeaveVehicleForPlayerOnFoot(guard.Ped, currentVehicle, player, combatMode))
+            {
+                CommandCartelGuardLeaveVehicle(guard, currentVehicle, combatMode);
+            }
+
+            return;
+        }
+
+        if (!combatMode)
+        {
+            FollowCartelGuardOnFoot(guard, player, false);
+        }
+    }
+
+    private void ReturnCartelGuardToVehicleIfNeeded(SpawnedNpc guard, Ped player, bool combatMode)
+    {
+        if (guard == null ||
+            !Entity.Exists(guard.Ped) ||
+            guard.Ped.IsDead ||
+            !Entity.Exists(player))
+        {
+            return;
+        }
+
+        if (guard.Ped.IsInVehicle() && Entity.Exists(guard.Ped.CurrentVehicle))
+        {
+            Vehicle currentVehicle = guard.Ped.CurrentVehicle;
+
+            if (_cartelVehicleHandles.Contains(currentVehicle.Handle))
+            {
+                if (IsPedDriverOfVehicle(guard.Ped, currentVehicle))
+                {
+                    ConfigureCartelDriver(guard.Ped);
+                }
+
+                return;
+            }
+
+            /*
+             * Cas rare : le garde est dans un vehicule qui n'est pas un vehicule Cartel.
+             * On le fait sortir, puis la prochaine passe le fera remonter dans une Baller Cartel.
+             */
+            CommandCartelGuardLeaveVehicle(guard, currentVehicle, combatMode);
+            return;
+        }
+
+        Vehicle targetVehicle = FindBestActiveCartelVehicleForGuard(guard);
+
+        if (!Entity.Exists(targetVehicle))
+        {
+            return;
+        }
+
+        int seat = FindBestCartelSeatForGuard(guard, targetVehicle);
+
+        if (seat == 999)
+        {
+            CommandCartelGuardMoveToVehicle(guard, targetVehicle);
+            return;
+        }
+
+        CommandCartelGuardEnterVehicle(guard, targetVehicle, seat);
+    }
+
+    private Vehicle FindBestActiveCartelVehicleForGuard(SpawnedNpc guard)
+    {
+        if (guard == null || !Entity.Exists(guard.Ped))
+        {
+            return null;
+        }
+
+        Vehicle assignedVehicle = FindVehicleByHandle(guard.BodyguardAssignedVehicleHandle);
+
+        if (Entity.Exists(assignedVehicle) &&
+            _cartelVehicleHandles.Contains(assignedVehicle.Handle) &&
+            IsVehicleDriveable(assignedVehicle))
+        {
+            return assignedVehicle;
+        }
+
+        Vehicle bestVehicle = null;
+        float bestDistance = float.MaxValue;
+
+        foreach (int handle in _cartelVehicleHandles)
+        {
+            Vehicle vehicle = FindVehicleByHandle(handle);
+
+            if (!Entity.Exists(vehicle) || !IsVehicleDriveable(vehicle))
+            {
+                continue;
+            }
+
+            float distance = vehicle.Position.DistanceTo(guard.Ped.Position);
+
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestVehicle = vehicle;
+            }
+        }
+
+        return bestVehicle;
+    }
+
+    private int FindBestCartelSeatForGuard(SpawnedNpc guard, Vehicle vehicle)
+    {
+        if (guard == null || !Entity.Exists(guard.Ped) || !Entity.Exists(vehicle))
+        {
+            return 999;
+        }
+
+        int assignedSeat = guard.BodyguardAssignedSeat;
+        bool assignedAsDriver = guard.BodyguardIsDriver || assignedSeat == -1;
+
+        if (assignedSeat != 999 && IsSeatFreeSafe(vehicle, assignedSeat))
+        {
+            return assignedSeat;
+        }
+
+        if (assignedAsDriver && IsSeatFreeSafe(vehicle, -1))
+        {
+            return -1;
+        }
+
+        int passengerSeat = FindFreePassengerSeatForCartel(vehicle);
+
+        if (passengerSeat != 999)
+        {
+            return passengerSeat;
+        }
+
+        return 999;
+    }
+
+    private int FindFreePassengerSeatForCartel(Vehicle vehicle)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return 999;
+        }
+
+        int passengers = 3;
+
+        try
+        {
+            passengers = Function.Call<int>(Hash.GET_VEHICLE_MAX_NUMBER_OF_PASSENGERS, vehicle.Handle);
+        }
+        catch
+        {
+            passengers = 3;
+        }
+
+        for (int seat = 0; seat < passengers; seat++)
+        {
+            if (IsSeatFreeSafe(vehicle, seat))
+            {
+                return seat;
+            }
+        }
+
+        return 999;
+    }
+
+    private bool ShouldCartelGuardLeaveVehicleForPlayerOnFoot(Ped guard, Vehicle vehicle, Ped player, bool combatMode)
+    {
+        if (!Entity.Exists(guard) || !Entity.Exists(vehicle) || !Entity.Exists(player))
+        {
+            return false;
+        }
+
+        if (player.IsInVehicle())
+        {
+            return false;
+        }
+
+        float distanceToPlayer = vehicle.Position.DistanceTo(player.Position);
+
+        /*
+         * Véhicule mort / bloqué / sans conducteur :
+         * les gardes ne doivent pas rester coincés dedans.
+         */
+        if (!IsVehicleDriveable(vehicle))
+        {
+            return true;
+        }
+
+        Ped driver = GetDriverOfVehicle(vehicle);
+
+        if (!Entity.Exists(driver))
+        {
+            return true;
+        }
+
+        /*
+         * Arrivée normale : la Baller s'approche du joueur, ralentit,
+         * puis tout le monde descend pour continuer à pied.
+         */
+        if (distanceToPlayer <= CartelVehicleFootExitDistance &&
+            vehicle.Speed <= CartelVehicleFootExitSpeed)
+        {
+            return true;
+        }
+
+        /*
+         * Si le véhicule n'arrive pas à rejoindre le joueur à pied,
+         * on autorise la sortie à pied au lieu d'attendre indéfiniment.
+         */
+        if (HasCartelVehicleFailedToApproachFootPlayer(vehicle, player))
+        {
+            return true;
+        }
+
+        /*
+         * En combat, on est un peu plus permissif : si le joueur est à pied,
+         * le Cartel doit rapidement devenir une protection à pied, pas rester
+         * éternellement en drive-by.
+         */
+        if (combatMode &&
+            distanceToPlayer <= CartelVehicleFootExitDistance + 10.0f &&
+            vehicle.Speed <= CartelVehicleFootExitSpeed + 1.5f)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private bool HasCartelVehicleFailedToApproachFootPlayer(Vehicle vehicle, Ped player)
+    {
+        if (!Entity.Exists(vehicle) || !Entity.Exists(player) || player.IsInVehicle())
+        {
+            return false;
+        }
+
+        float distanceToPlayer = vehicle.Position.DistanceTo(player.Position);
+
+        if (distanceToPlayer <= CartelVehicleFootExitDistance ||
+            distanceToPlayer > CartelVehicleForcedFootExitMaxDistance)
+        {
+            return false;
+        }
+
+        Vector3 lastPosition;
+        int lastMoveAt;
+
+        if (!_cartelLastVehiclePositions.TryGetValue(vehicle.Handle, out lastPosition) ||
+            !_cartelLastVehicleMoveAt.TryGetValue(vehicle.Handle, out lastMoveAt))
+        {
+            return false;
+        }
+
+        float moved = vehicle.Position.DistanceTo(lastPosition);
+
+        return moved <= 4.0f &&
+               vehicle.Speed <= 2.0f &&
+               Game.GameTime - lastMoveAt >= CartelStuckTimeoutMs;
+    }
+
+    private bool CommandCartelGuardLeaveVehicle(SpawnedNpc guard, Vehicle vehicle, bool combatMode)
+    {
+        if (guard == null || !Entity.Exists(guard.Ped) || !Entity.Exists(vehicle))
+        {
+            return false;
+        }
+
+        if (!guard.Ped.IsInVehicle())
+        {
+            return false;
+        }
+
+        if (!CanIssueCartelGuardMobilityOrder(guard.Ped, false))
+        {
+            return false;
+        }
+
+        guard.BodyguardAssignedVehicleHandle = vehicle.Handle;
+
+        try
+        {
+            int currentSeat = (int)guard.Ped.SeatIndex;
+
+            if (currentSeat >= -1)
+            {
+                guard.BodyguardAssignedSeat = currentSeat;
+                guard.BodyguardIsDriver = currentSeat == -1;
+            }
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            guard.Ped.IsEnemy = false;
+            guard.Ped.BlockPermanentEvents = true;
+            guard.Ped.AlwaysKeepTask = true;
+
+            Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, guard.Ped.Handle, _allyGroupHash);
+
+            Function.Call(
+                Hash.TASK_LEAVE_VEHICLE,
+                guard.Ped.Handle,
+                vehicle.Handle,
+                combatMode ? 256 : 0);
+        }
+        catch
+        {
+            return false;
+        }
+
+        /*
+         * Après la sortie, on permet à l'ordre de combat à pied de repartir proprement.
+         */
+        _cartelNextCombatOrderAt.Remove(guard.Ped.Handle);
+
+        return true;
+    }
+
+    private bool CommandCartelGuardEnterVehicle(SpawnedNpc guard, Vehicle vehicle, int seat)
+    {
+        if (guard == null || !Entity.Exists(guard.Ped) || !Entity.Exists(vehicle) || seat == 999)
+        {
+            return false;
+        }
+
+        if (guard.Ped.IsInVehicle(vehicle))
+        {
+            return true;
+        }
+
+        if (!CanIssueCartelGuardMobilityOrder(guard.Ped, false))
+        {
+            return false;
+        }
+
+        guard.BodyguardAssignedVehicleHandle = vehicle.Handle;
+        guard.BodyguardAssignedSeat = seat;
+        guard.BodyguardIsDriver = seat == -1;
+
+        try
+        {
+            guard.Ped.IsEnemy = false;
+            guard.Ped.BlockPermanentEvents = true;
+            guard.Ped.AlwaysKeepTask = true;
+
+            Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, guard.Ped.Handle, _allyGroupHash);
+
+            Function.Call(
+                Hash.TASK_ENTER_VEHICLE,
+                guard.Ped.Handle,
+                vehicle.Handle,
+                9000,
+                seat,
+                2.4f,
+                1,
+                0);
+        }
+        catch
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool CommandCartelGuardMoveToVehicle(SpawnedNpc guard, Vehicle vehicle)
+    {
+        if (guard == null || !Entity.Exists(guard.Ped) || !Entity.Exists(vehicle))
+        {
+            return false;
+        }
+
+        if (!CanIssueCartelGuardMobilityOrder(guard.Ped, false))
+        {
+            return false;
+        }
+
+        try
+        {
+            Function.Call(
+                Hash.TASK_GO_TO_ENTITY,
+                guard.Ped.Handle,
+                vehicle.Handle,
+                -1,
+                5.5f,
+                2.0f,
+                1073741824,
+                0);
+        }
+        catch
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private void FollowCartelGuardOnFoot(SpawnedNpc guard, Ped player, bool force)
+    {
+        if (guard == null ||
+            !Entity.Exists(guard.Ped) ||
+            guard.Ped.IsDead ||
+            !Entity.Exists(player) ||
+            player.IsDead ||
+            guard.Ped.IsInVehicle())
+        {
+            return;
+        }
+
+        if (!CanIssueCartelGuardFootFollowOrder(guard, force))
+        {
+            return;
+        }
+
+        float distance = guard.Ped.Position.DistanceTo(player.Position);
+
+        try
+        {
+            guard.Ped.IsEnemy = false;
+            guard.Ped.BlockPermanentEvents = true;
+            guard.Ped.AlwaysKeepTask = true;
+            Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, guard.Ped.Handle, _allyGroupHash);
+        }
+        catch
+        {
+        }
+
+        if (distance > CartelGuardFootStandDistance)
+        {
+            int handleSeed = Math.Abs(guard.Ped.Handle);
+
+            float offsetSide = ((handleSeed % 5) - 2) * 0.85f;
+            float offsetBack = -CartelGuardFootFollowDistance - ((handleSeed % 3) * 0.75f);
+            float speed = distance > 18.0f ? 3.0f : 2.0f;
+
+            try
+            {
+                Function.Call(
+                    Hash.TASK_FOLLOW_TO_OFFSET_OF_ENTITY,
+                    guard.Ped.Handle,
+                    player.Handle,
+                    offsetSide,
+                    offsetBack,
+                    0.0f,
+                    speed,
+                    -1,
+                    1.6f,
+                    true);
+            }
+            catch
+            {
+            }
+        }
+        else
+        {
+            try
+            {
+                Function.Call(Hash.TASK_STAND_STILL, guard.Ped.Handle, 850);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private bool CanIssueCartelGuardMobilityOrder(Ped ped, bool force)
+    {
+        if (!Entity.Exists(ped))
+        {
+            return false;
+        }
+
+        if (!force)
+        {
+            int nextAt;
+
+            if (_cartelNextGuardMobilityOrderAt.TryGetValue(ped.Handle, out nextAt) &&
+                Game.GameTime < nextAt)
+            {
+                return false;
+            }
+        }
+
+        _cartelNextGuardMobilityOrderAt[ped.Handle] =
+            Game.GameTime +
+            CartelGuardMobilityOrderIntervalMs +
+            CalculateCartelHandleStaggerMs(ped.Handle, CartelGuardPassiveMaintenanceJitterMs);
+
+        return true;
+    }
+
+    private bool CanIssueCartelGuardFootFollowOrder(SpawnedNpc guard, bool force)
+    {
+        if (guard == null || !Entity.Exists(guard.Ped))
+        {
+            return false;
+        }
+
+        if (!force && Game.GameTime < guard.NextBodyguardTaskAt)
+        {
+            return false;
+        }
+
+        guard.NextBodyguardTaskAt =
+            Game.GameTime +
+            CartelGuardFootFollowIntervalMs +
+            CalculateCartelHandleStaggerMs(guard.Ped.Handle, CartelGuardPassiveMaintenanceJitterMs);
+
+        return true;
+    }
+
+    private bool ShouldCartelGuardReturnToVehicleDuringCombat(SpawnedNpc guard, Ped threat, Ped player)
+    {
+        if (guard == null ||
+            !Entity.Exists(guard.Ped) ||
+            !Entity.Exists(threat) ||
+            !Entity.Exists(player) ||
+            !player.IsInVehicle())
+        {
+            return false;
+        }
+
+        if (guard.Ped.IsInVehicle())
+        {
+            return false;
+        }
+
+        float threatDistance = guard.Ped.Position.DistanceTo(threat.Position);
+
+        /*
+         * Si l'ennemi est vraiment sur le garde, il se défend à pied.
+         * Sinon, quand le joueur repart en véhicule, il remonte dans une Baller.
+         */
+        if (threatDistance <= CartelGuardImmediateThreatDistance &&
+            CanPedSeeEntity(guard.Ped, threat, 55.0f))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private Ped ResolveCartelThreat(Ped player, bool latePass)
+    {
+        Ped cachedThreat = GetCachedCartelThreat(player);
+
+        if (Entity.Exists(cachedThreat))
+        {
+            return cachedThreat;
+        }
+
+        /*
+         * Tres important :
+         * La passe tardive ne scanne jamais le monde.
+         * Elle est appelee trop souvent pour ca.
+         */
+        if (latePass)
+        {
+            return null;
+        }
+
+        if (Game.GameTime < _nextCartelThreatScanAt)
+        {
+            return null;
+        }
+
+        _nextCartelThreatScanAt = Game.GameTime + CartelThreatScanIntervalMs;
+
+        Ped scannedThreat = FindBestCartelThreat(player);
+
+        if (Entity.Exists(scannedThreat))
+        {
+            CacheCartelThreat(scannedThreat);
+        }
+
+        return scannedThreat;
+    }
+
+    private Ped GetCachedCartelThreat(Ped player)
+    {
+        if (!Entity.Exists(player))
+        {
+            ClearCachedCartelThreat();
+            return null;
+        }
+
+        if (_cartelCachedThreatPed == null)
+        {
+            return null;
+        }
+
+        if (Game.GameTime > _cartelCachedThreatUntil)
+        {
+            ClearCachedCartelThreat();
+            return null;
+        }
+
+        if (!Entity.Exists(_cartelCachedThreatPed) ||
+            _cartelCachedThreatPed.IsDead ||
+            !IsValidCartelThreatCandidate(_cartelCachedThreatPed, player))
+        {
+            ClearCachedCartelThreat();
+            return null;
+        }
+
+        /*
+         * Si la menace cached est vraiment trop loin, on l'oublie.
+         * Pas besoin de faire un scan complet ici.
+         */
+        if (_cartelCachedThreatPed.Position.DistanceTo(player.Position) > CartelThreatScanRadius + 120.0f)
+        {
+            ClearCachedCartelThreat();
+            return null;
+        }
+
+        return _cartelCachedThreatPed;
+    }
+
+    private void CacheCartelThreat(Ped threat)
+    {
+        if (!Entity.Exists(threat) || threat.IsDead)
+        {
+            ClearCachedCartelThreat();
+            return;
+        }
+
+        _cartelCachedThreatPed = threat;
+        _cartelCachedThreatUntil = Game.GameTime + CartelThreatCacheLifetimeMs;
+    }
+
+    private void ClearCachedCartelThreat()
+    {
+        _cartelCachedThreatPed = null;
+        _cartelCachedThreatUntil = 0;
+        _cartelLastThreatRelationshipHandle = 0;
+        _cartelLastThreatRelationshipAt = 0;
+    }
+
+    private Ped FindBestCartelThreat(Ped player)
+    {
+        if (!Entity.Exists(player) || player.IsDead)
+        {
+            return null;
+        }
+
+        Ped bestThreat = null;
+        float bestScore = float.MaxValue;
+
+        /*
+         * 1) Menaces creees par le mod.
+         * Cette boucle est peu couteuse : elle parcourt notre liste interne.
+         */
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            SpawnedNpc candidateNpc = _spawnedNpcs[i];
+
+            if (candidateNpc == null ||
+                !Entity.Exists(candidateNpc.Ped) ||
+                candidateNpc.Ped.IsDead)
+            {
+                continue;
+            }
+
+            if (IsAllyBehavior(candidateNpc.BaseBehavior) ||
+                IsNeutralBehavior(candidateNpc.Behavior))
+            {
+                continue;
+            }
+
+            if (!IsValidCartelThreatCandidate(candidateNpc.Ped, player))
+            {
+                continue;
+            }
+
+            float score = ScoreCartelThreat(candidateNpc.Ped, player);
+
+            if (score < bestScore)
+            {
+                bestScore = score;
+                bestThreat = candidateNpc.Ped;
+            }
+        }
+
+        /*
+         * 2) PNJ proches du joueur.
+         * Un seul GetNearbyPeds autour du joueur par scan.
+         */
+        Ped[] nearbyPlayerPeds = GetNearbyPedsSafe(player, CartelThreatScanRadius);
+
+        for (int i = 0; i < nearbyPlayerPeds.Length; i++)
+        {
+            Ped candidate = nearbyPlayerPeds[i];
+
+            if (!IsValidCartelThreatCandidate(candidate, player))
+            {
+                continue;
+            }
+
+            if (!HasCartelThreatEvidence(candidate, player))
+            {
+                continue;
+            }
+
+            float score = ScoreCartelThreat(candidate, player);
+
+            if (score < bestScore)
+            {
+                bestScore = score;
+                bestThreat = candidate;
+            }
+        }
+
+        /*
+         * 3) PNJ proches des gardes Cartel.
+         *
+         * Avant :
+         * on scannait les 11 gardes a chaque appel, et parfois chaque frame.
+         *
+         * Maintenant :
+         * on scanne seulement quelques gardes par passe.
+         * Sur plusieurs passes, tous les gardes sont quand meme couverts,
+         * mais on evite le pic FPS au moment de l'appel.
+         */
+        List<int> cartelNpcHandles = new List<int>(_cartelNpcHandles);
+
+        if (cartelNpcHandles.Count > 0)
+        {
+            int scansThisPass = Math.Min(CartelMaxGuardThreatScansPerPass, cartelNpcHandles.Count);
+
+            for (int scan = 0; scan < scansThisPass; scan++)
+            {
+                int handleIndex = Wrap(_cartelGuardThreatScanCursor + scan, cartelNpcHandles.Count);
+                SpawnedNpc guard = FindSpawnedNpcByHandle(cartelNpcHandles[handleIndex]);
+
+                if (guard == null || !Entity.Exists(guard.Ped) || guard.Ped.IsDead)
+                {
+                    continue;
+                }
+
+                Ped[] nearbyGuardPeds = GetNearbyPedsSafe(guard.Ped, CartelThreatScanRadius);
+
+                for (int j = 0; j < nearbyGuardPeds.Length; j++)
+                {
+                    Ped candidate = nearbyGuardPeds[j];
+
+                    if (!IsValidCartelThreatCandidate(candidate, player))
+                    {
+                        continue;
+                    }
+
+                    if (!HasCartelThreatEvidenceAgainstSpecificGuard(candidate, guard.Ped, player))
+                    {
+                        continue;
+                    }
+
+                    float score = ScoreCartelThreat(candidate, player);
+
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        bestThreat = candidate;
+                    }
+                }
+            }
+
+            _cartelGuardThreatScanCursor = Wrap(_cartelGuardThreatScanCursor + scansThisPass, cartelNpcHandles.Count);
+        }
+
+        return bestThreat;
+    }
+
+    private bool IsValidCartelThreatCandidate(Ped candidate, Ped player)
+    {
+        if (!Entity.Exists(candidate) || candidate.IsDead)
+        {
+            return false;
+        }
+
+        if (Entity.Exists(player) && candidate.Handle == player.Handle)
+        {
+            return false;
+        }
+
+        if (Entity.Exists(_placementPreviewPed) && candidate.Handle == _placementPreviewPed.Handle)
+        {
+            return false;
+        }
+
+        /*
+         * Jamais les allies du joueur.
+         */
+        if (IsManagedAlly(candidate))
+        {
+            return false;
+        }
+
+        /*
+         * Jamais les gardes Cartel actifs ou en repli.
+         */
+        if (_cartelNpcHandles.Contains(candidate.Handle))
+        {
+            return false;
+        }
+
+        if (_cartelDismissingNpcRecords.ContainsKey(candidate.Handle))
+        {
+            return false;
+        }
+
+        int group = GetPedRelationshipGroup(candidate);
+
+        if (group == _allyGroupHash)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool HasCartelThreatEvidence(Ped candidate, Ped player)
+    {
+        if (!Entity.Exists(candidate) || !Entity.Exists(player))
+        {
+            return false;
+        }
+
+        /*
+         * Cas joueur :
+         * ces tests sont rapides et suffisent pour la majorite des combats.
+         */
+        if (HasDefensiveDamageAgainstProtectedPed(candidate, player))
+        {
+            return true;
+        }
+
+        if (IsPedInCombatWith(candidate, player))
+        {
+            return true;
+        }
+
+        if (IsPedShooting(candidate) &&
+            candidate.Position.DistanceTo(player.Position) <= CartelThreatEvidenceRadius &&
+            HasHostileRelationshipToProtectedPed(candidate, player))
+        {
+            return true;
+        }
+
+        /*
+         * Cas gardes Cartel :
+         * on ne teste un garde que si la menace candidate est dans une distance utile.
+         * Ca evite 11 series de natives couteuses pour des PNJ trop loin.
+         */
+        List<int> cartelNpcHandles = new List<int>(_cartelNpcHandles);
+
+        for (int i = 0; i < cartelNpcHandles.Count; i++)
+        {
+            SpawnedNpc guard = FindSpawnedNpcByHandle(cartelNpcHandles[i]);
+
+            if (guard == null || !Entity.Exists(guard.Ped) || guard.Ped.IsDead)
+            {
+                continue;
+            }
+
+            if (candidate.Position.DistanceTo(guard.Ped.Position) > CartelThreatEvidenceRadius)
+            {
+                continue;
+            }
+
+            if (HasCartelThreatEvidenceAgainstSpecificGuard(candidate, guard.Ped, player))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool HasCartelThreatEvidenceAgainstSpecificGuard(Ped candidate, Ped guard, Ped player)
+    {
+        if (!Entity.Exists(candidate) || !Entity.Exists(guard))
+        {
+            return false;
+        }
+
+        if (candidate.Position.DistanceTo(guard.Position) > CartelThreatEvidenceRadius)
+        {
+            return false;
+        }
+
+        /*
+         * Le candidat attaque le garde.
+         */
+        if (HasDefensiveDamageAgainstProtectedPed(candidate, guard))
+        {
+            return true;
+        }
+
+        if (IsPedInCombatWith(candidate, guard))
+        {
+            return true;
+        }
+
+        if (IsPedShooting(candidate) &&
+            (HasHostileRelationshipToProtectedPed(candidate, guard) ||
+             (Entity.Exists(player) && HasHostileRelationshipToProtectedPed(candidate, player))))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private float ScoreCartelThreat(Ped candidate, Ped player)
+    {
+        if (!Entity.Exists(candidate) || !Entity.Exists(player))
+        {
+            return float.MaxValue;
+        }
+
+        float best = candidate.Position.DistanceTo(player.Position);
+
+        List<int> cartelNpcHandles = new List<int>(_cartelNpcHandles);
+
+        for (int i = 0; i < cartelNpcHandles.Count; i++)
+        {
+            SpawnedNpc guard = FindSpawnedNpcByHandle(cartelNpcHandles[i]);
+
+            if (guard == null || !Entity.Exists(guard.Ped) || guard.Ped.IsDead)
+            {
+                continue;
+            }
+
+            float distance = candidate.Position.DistanceTo(guard.Ped.Position);
+
+            if (distance < best)
+            {
+                best = distance;
+            }
+        }
+
+        if (IsPedShooting(candidate))
+        {
+            best -= 45.0f;
+        }
+
+        if (IsPedInCombatWith(candidate, player) || player.HasBeenDamagedBy(candidate))
+        {
+            best -= 65.0f;
+        }
+
+        return Math.Max(0.0f, best);
+    }
+
+    private void EngageCartelTeamThreat(Ped threat, Ped player, bool latePass)
+    {
+        if (!Entity.Exists(threat) || threat.IsDead || !Entity.Exists(player))
+        {
+            return;
+        }
+
+        MakeCartelAlliesHostileToThreat(threat);
+
+        /*
+         * Pendant un combat, les vehicules ne recoivent pas d'ordre de convoi classique.
+         * Les conducteurs rapprochent les vehicules de la menace.
+         * Les passagers tirent.
+         */
+        List<int> activeVehicles = new List<int>(_cartelVehicleHandles);
+
+        for (int i = 0; i < activeVehicles.Count; i++)
+        {
+            Vehicle vehicle = FindVehicleByHandle(activeVehicles[i]);
+
+            if (!Entity.Exists(vehicle))
+            {
+                continue;
+            }
+
+            if (!latePass)
+            {
+                UpgradeCartelVehicle(vehicle);
+                RescueCartelVehicleIfNeeded(vehicle, player, i);
+            }
+
+            CommandCartelVehicleForCombat(vehicle, threat, player);
+        }
+
+        List<int> activeNpcs = new List<int>(_cartelNpcHandles);
+
+        for (int i = 0; i < activeNpcs.Count; i++)
+        {
+            SpawnedNpc guard = FindSpawnedNpcByHandle(activeNpcs[i]);
+
+            if (guard == null || !Entity.Exists(guard.Ped) || guard.Ped.IsDead)
+            {
+                continue;
+            }
+
+            EngageCartelGuardThreat(guard, threat, player, latePass);
+
+            if (!latePass)
+            {
+                RescueCartelGuardIfNeeded(guard, player, i);
+            }
+        }
+    }
+
+    private void MakeCartelAlliesHostileToThreat(Ped threat)
+    {
+        if (!Entity.Exists(threat))
+        {
+            return;
+        }
+
+        /*
+         * Avant :
+         * les relations pouvaient etre forcees tres souvent.
+         *
+         * Maintenant :
+         * on ne refresh la relation contre la meme cible que toutes les quelques secondes.
+         */
+        if (_cartelLastThreatRelationshipHandle == threat.Handle &&
+            Game.GameTime - _cartelLastThreatRelationshipAt < CartelThreatRelationshipRefreshMs)
+        {
+            return;
+        }
+
+        _cartelLastThreatRelationshipHandle = threat.Handle;
+        _cartelLastThreatRelationshipAt = Game.GameTime;
+
+        try
+        {
+            int targetGroup = GetPedRelationshipGroup(threat);
+
+            if (targetGroup != 0 &&
+                targetGroup != _allyGroupHash &&
+                ShouldUseGroupHostilityForThreat(threat, targetGroup))
+            {
+                World.SetRelationshipBetweenGroups((Relationship)RelationshipHate, _allyGroupHash, targetGroup);
+                World.SetRelationshipBetweenGroups((Relationship)RelationshipHate, targetGroup, _allyGroupHash);
+            }
+        }
+        catch
+        {
+            /*
+             * Meme si la relation echoue, les taches TASK_COMBAT_PED / TASK_DRIVE_BY
+             * restent utilisees.
+             */
+        }
+    }
+
+    private void EngageCartelGuardThreat(SpawnedNpc guard, Ped threat, Ped player, bool latePass)
+    {
+        if (guard == null ||
+            !Entity.Exists(guard.Ped) ||
+            guard.Ped.IsDead ||
+            !Entity.Exists(threat) ||
+            threat.IsDead ||
+            !Entity.Exists(player))
+        {
+            return;
+        }
+
+        /*
+         * Si le joueur est reparti en véhicule et que le garde est à pied,
+         * il remonte dans une Baller sauf s'il a une menace immédiate sur lui.
+         */
+        if (ShouldCartelGuardReturnToVehicleDuringCombat(guard, threat, player))
+        {
+            ReturnCartelGuardToVehicleIfNeeded(guard, player, true);
+            return;
+        }
+
+        /*
+         * Correction principale :
+         * joueur à pied + garde en véhicule = le garde doit finir par descendre.
+         * On fait cette vérification avant le cooldown de combat, sinon un drive-by
+         * récent peut retarder inutilement la sortie du véhicule.
+         */
+        if (guard.Ped.IsInVehicle() && Entity.Exists(guard.Ped.CurrentVehicle))
+        {
+            Vehicle currentVehicle = guard.Ped.CurrentVehicle;
+
+            if (!player.IsInVehicle() &&
+                ShouldCartelGuardLeaveVehicleForPlayerOnFoot(guard.Ped, currentVehicle, player, true) &&
+                CommandCartelGuardLeaveVehicle(guard, currentVehicle, true))
+            {
+                return;
+            }
+        }
+
+        /*
+         * Optimisation conservée :
+         * on évite de relancer les ordres de combat à chaque frame.
+         */
+        if (!CanIssueCartelCombatOrder(guard.Ped))
+        {
+            return;
+        }
+
+        PrepareCartelGuardForCombat(guard, threat);
+
+        if (guard.Ped.IsInVehicle() && Entity.Exists(guard.Ped.CurrentVehicle))
+        {
+            Vehicle vehicle = guard.Ped.CurrentVehicle;
+
+            if (!player.IsInVehicle() &&
+                ShouldCartelGuardLeaveVehicleForPlayerOnFoot(guard.Ped, vehicle, player, true) &&
+                CommandCartelGuardLeaveVehicle(guard, vehicle, true))
+            {
+                return;
+            }
+
+            if (IsPedDriverOfVehicle(guard.Ped, vehicle))
+            {
+                /*
+                 * Conducteur :
+                 * - si le joueur est à pied, le véhicule se rapproche du joueur ;
+                 * - si le joueur est en véhicule, la logique combat véhicule reste active.
+                 */
+                CommandCartelVehicleForCombat(vehicle, threat, player);
+                return;
+            }
+
+            if (ShouldCartelPassengerExitToFight(guard.Ped, vehicle, threat, player))
+            {
+                CommandCartelGuardLeaveVehicle(guard, vehicle, true);
+                return;
+            }
+
+            StartCartelPassengerDriveBy(guard.Ped, threat);
+            return;
+        }
+
+        StartCartelOnFootCombat(guard.Ped, threat);
+    }
+
+    private void PrepareCartelGuardForCombat(SpawnedNpc guard, Ped threat)
+    {
+        if (guard == null || !Entity.Exists(guard.Ped) || !Entity.Exists(threat))
+        {
+            return;
+        }
+
+        guard.BaseBehavior = NpcBehavior.Bodyguard;
+        guard.Behavior = NpcBehavior.Bodyguard;
+        guard.Activated = true;
+        guard.IsReturningHome = false;
+        guard.LastCombatActivityAt = Game.GameTime;
+
+        guard.Ped.IsEnemy = false;
+        guard.Ped.BlockPermanentEvents = false;
+        guard.Ped.AlwaysKeepTask = true;
+        guard.Ped.Accuracy = 72;
+        guard.Ped.ShootRate = 1000;
+
+        try
+        {
+            Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, guard.Ped.Handle, _allyGroupHash);
+            Function.Call(Hash.SET_PED_COMBAT_ABILITY, guard.Ped.Handle, 2);
+            Function.Call(Hash.SET_PED_COMBAT_RANGE, guard.Ped.Handle, 2);
+            Function.Call(Hash.SET_PED_COMBAT_MOVEMENT, guard.Ped.Handle, 2);
+            Function.Call(Hash.SET_PED_FLEE_ATTRIBUTES, guard.Ped.Handle, 0, false);
+
+            Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, guard.Ped.Handle, 0, true);
+            Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, guard.Ped.Handle, 5, true);
+            Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, guard.Ped.Handle, 46, true);
+
+            /*
+             * Important pour eviter le cas "vise mais ne tire pas".
+             */
+            Function.Call(Hash.SET_PED_FIRING_PATTERN, guard.Ped.Handle, CartelFullAutoFiringPattern);
+        }
+        catch
+        {
+        }
+
+        MakeCartelAlliesHostileToThreat(threat);
+    }
+
+    private bool CanIssueCartelCombatOrder(Ped ped)
+    {
+        if (!Entity.Exists(ped))
+        {
+            return false;
+        }
+
+        int nextAt;
+
+        if (_cartelNextCombatOrderAt.TryGetValue(ped.Handle, out nextAt) &&
+            Game.GameTime < nextAt)
+        {
+            return false;
+        }
+
+        _cartelNextCombatOrderAt[ped.Handle] = Game.GameTime + CartelCombatOrderIntervalMs;
+        return true;
+    }
+
+    private bool ShouldCartelPassengerExitToFight(Ped passenger, Vehicle vehicle, Ped threat, Ped player)
+    {
+        if (!Entity.Exists(passenger) ||
+            !Entity.Exists(vehicle) ||
+            !Entity.Exists(threat) ||
+            !Entity.Exists(player))
+        {
+            return false;
+        }
+
+        /*
+         * Ancien comportement :
+         * le passager ne sortait que si la menace était très proche.
+         *
+         * Nouveau comportement :
+         * si le joueur est à pied, la priorité est de transformer le convoi
+         * en protection à pied dès que le véhicule est arrivé ou bloqué.
+         */
+        if (!player.IsInVehicle())
+        {
+            return ShouldCartelGuardLeaveVehicleForPlayerOnFoot(passenger, vehicle, player, true);
+        }
+
+        return false;
+    }
+
+    private void StartCartelPassengerDriveBy(Ped passenger, Ped threat)
+    {
+        if (!Entity.Exists(passenger) || !Entity.Exists(threat) || threat.IsDead)
+        {
+            return;
+        }
+
+        try
+        {
+            passenger.Weapons.Select(WeaponHash.MachinePistol, true);
+        }
+        catch
+        {
+            try
+            {
+                passenger.Weapons.Give(WeaponHash.MachinePistol, 9999, true, true);
+                passenger.Weapons.Select(WeaponHash.MachinePistol, true);
+            }
+            catch
+            {
+            }
+        }
+
+        try
+        {
+            /*
+             * Tache essentielle :
+             * un passager arme ne tire pas forcement avec TASK_COMBAT_PED.
+             * TASK_DRIVE_BY force le vrai tir depuis le vehicule.
+             */
+            Function.Call(
+                Hash.TASK_DRIVE_BY,
+                passenger.Handle,
+                threat.Handle,
+                0,
+                0.0f,
+                0.0f,
+                0.0f,
+                CartelDriveByDistance,
+                90,
+                true,
+                CartelFullAutoFiringPattern);
+        }
+        catch
+        {
+            try
+            {
+                Function.Call(Hash.TASK_COMBAT_PED, passenger.Handle, threat.Handle, 0, 16);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private void StartCartelOnFootCombat(Ped guard, Ped threat)
+    {
+        if (!Entity.Exists(guard) || !Entity.Exists(threat) || threat.IsDead)
+        {
+            return;
+        }
+
+        try
+        {
+            guard.Weapons.Select(WeaponHash.ServiceCarbine, true);
+        }
+        catch
+        {
+            try
+            {
+                guard.Weapons.Give(WeaponHash.ServiceCarbine, 9999, true, true);
+                guard.Weapons.Select(WeaponHash.ServiceCarbine, true);
+            }
+            catch
+            {
+            }
+        }
+
+        try
+        {
+            /*
+             * TASK_COMBAT_PED donne le comportement general de combat.
+             */
+            Function.Call(Hash.TASK_COMBAT_PED, guard.Handle, threat.Handle, 0, 16);
+
+            /*
+             * TASK_SHOOT_AT_ENTITY force le declenchement du tir si le garde voit la cible.
+             * C'est la correction du symptome "il vise mais ne tire pas".
+             */
+            if (guard.Position.DistanceTo(threat.Position) <= CartelOnFootShootDistance &&
+                CanPedSeeEntity(guard, threat, CartelOnFootShootDistance))
+            {
+                Function.Call(
+                    Hash.TASK_SHOOT_AT_ENTITY,
+                    guard.Handle,
+                    threat.Handle,
+                    1800,
+                    CartelFullAutoFiringPattern);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private void CommandCartelVehicleForCombat(Vehicle vehicle, Ped threat, Ped player)
+    {
+        if (!Entity.Exists(vehicle) || !Entity.Exists(threat))
+        {
+            return;
+        }
+
+        Ped driver = GetDriverOfVehicle(vehicle);
+
+        if (!Entity.Exists(driver))
+        {
+            return;
+        }
+
+        ConfigureCartelDriver(driver);
+
+        int handle = vehicle.Handle;
+        int nextOrder;
+
+        if (_cartelNextVehicleOrderAt.TryGetValue(handle, out nextOrder) &&
+            Game.GameTime < nextOrder)
+        {
+            return;
+        }
+
+        _cartelNextVehicleOrderAt[handle] = Game.GameTime + CartelVehicleOrderIntervalMs;
+
+        bool playerOnFoot = Entity.Exists(player) && !player.IsInVehicle();
+
+        /*
+         * Correction comportement :
+         * avant, en combat, le conducteur allait vers la menace.
+         * Si le joueur était à pied, ça maintenait tout le monde en drive-by
+         * et le convoi pouvait partir combattre au lieu de se déployer autour du joueur.
+         *
+         * Maintenant :
+         * - joueur à pied : le véhicule va d'abord vers le joueur pour permettre la descente ;
+         * - joueur en véhicule : comportement combat véhicule conservé.
+         */
+        Vector3 driveTarget = playerOnFoot && Entity.Exists(player)
+            ? player.Position
+            : threat.Position;
+
+        float distanceToTarget = vehicle.Position.DistanceTo(driveTarget);
+        float combatDriveSpeed = ClampFloat(CartelArrivalDriveSpeed * 0.75f, 20.0f, 34.0f);
+
+        float stoppingRange = playerOnFoot
+            ? 16.0f
+            : (distanceToTarget > 45.0f ? 18.0f : 28.0f);
+
+        try
+        {
+            Function.Call(
+                Hash.TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE,
+                driver.Handle,
+                vehicle.Handle,
+                driveTarget.X,
+                driveTarget.Y,
+                driveTarget.Z,
+                combatDriveSpeed,
+                CartelRapidDrivingStyle,
+                stoppingRange);
+        }
+        catch
+        {
+            try
+            {
+                if (Entity.Exists(player))
+                {
+                    Function.Call(
+                        Hash.TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE,
+                        driver.Handle,
+                        vehicle.Handle,
+                        player.Position.X,
+                        player.Position.Y,
+                        player.Position.Z,
+                        combatDriveSpeed,
+                        CartelRapidDrivingStyle,
+                        22.0f);
+                }
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private void IssueCartelFastFollowOrder(Vehicle vehicle, Ped player, bool force)
+    {
+        if (!Entity.Exists(vehicle) || !Entity.Exists(player))
+        {
+            return;
+        }
+
+        Ped driver = GetDriverOfVehicle(vehicle);
+
+        if (!Entity.Exists(driver))
+        {
+            return;
+        }
+
+        int handle = vehicle.Handle;
+
+        /*
+         * Si le véhicule est déjà proche et quasiment arrêté, on ne renvoie pas
+         * sans arrêt des ordres de conduite. Sinon GTA relance la tâche régulièrement
+         * et ça peut produire un micro-mouvement visuel, surtout à l'arrêt.
+         */
+        if (!force && IsCartelVehicleSettledNearPlayer(vehicle, player))
+        {
+            return;
+        }
+
+        int nextOrder;
+        if (!force &&
+            _cartelNextVehicleOrderAt.TryGetValue(handle, out nextOrder) &&
+            Game.GameTime < nextOrder)
+        {
+            return;
+        }
+
+        _cartelNextVehicleOrderAt[handle] = Game.GameTime + CartelVehicleOrderIntervalMs;
+
+        ConfigureCartelDriver(driver);
+
+        float cruiseSpeed = CalculateCartelCruiseSpeed(player);
+        float distance = vehicle.Position.DistanceTo(player.Position);
+        Vector3 targetPosition = player.Position;
+
+        if (player.IsInVehicle() && Entity.Exists(player.CurrentVehicle))
+        {
+            targetPosition = player.CurrentVehicle.Position;
+        }
+
+        /*
+         * Si la dernière cible d'ordre est presque identique et que le véhicule
+         * roule déjà correctement, on ne spam pas l'IA.
+         */
+        Vector3 lastTarget;
+
+        if (!force &&
+            _cartelLastVehicleOrderTarget.TryGetValue(handle, out lastTarget) &&
+            lastTarget.DistanceTo(targetPosition) < 8.0f &&
+            vehicle.Speed > 3.0f &&
+            distance < 95.0f)
+        {
+            return;
+        }
+
+        _cartelLastVehicleOrderTarget[handle] = targetPosition;
+
+        try
+        {
+            Function.Call(Hash.SET_VEHICLE_ENGINE_ON, vehicle.Handle, true, true, false);
+            Function.Call(Hash.SET_DRIVE_TASK_CRUISE_SPEED, driver.Handle, cruiseSpeed);
+            Function.Call(Hash.SET_DRIVE_TASK_DRIVING_STYLE, driver.Handle, CartelRapidDrivingStyle);
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            /*
+             * IMPORTANT :
+             * Aucune vitesse forcée ici.
+             * Aucune remise au sol ici.
+             * Le véhicule est contrôlé uniquement par le conducteur PNJ.
+             */
+            if (player.IsInVehicle() && Entity.Exists(player.CurrentVehicle))
+            {
+                Function.Call(
+                    Hash.TASK_VEHICLE_ESCORT,
+                    driver.Handle,
+                    vehicle.Handle,
+                    player.CurrentVehicle.Handle,
+                    -1,
+                    cruiseSpeed,
+                    CartelRapidDrivingStyle,
+                    9.0f,
+                    0,
+                    20.0f);
+            }
+            else
+            {
+                float stoppingRange = distance > 55.0f ? 14.0f : 22.0f;
+
+                Function.Call(
+                    Hash.TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE,
+                    driver.Handle,
+                    vehicle.Handle,
+                    player.Position.X,
+                    player.Position.Y,
+                    player.Position.Z,
+                    cruiseSpeed,
+                    CartelRapidDrivingStyle,
+                    stoppingRange);
+            }
+        }
+        catch
+        {
+            // L'IA peut refuser temporairement une tâche si le conducteur change d'état.
+        }
+    }
+
+    private bool IsCartelVehicleSettledNearPlayer(Vehicle vehicle, Ped player)
+    {
+        if (!Entity.Exists(vehicle) || !Entity.Exists(player))
+        {
+            return false;
+        }
+
+        float distance = vehicle.Position.DistanceTo(player.Position);
+
+        /*
+         * Joueur à pied :
+         * Si le véhicule est déjà arrivé autour du joueur et qu'il est presque arrêté,
+         * on ne renvoie plus d'ordre. Ça évite les micro-redémarrages / pulsations.
+         */
+        if (!player.IsInVehicle())
+        {
+            return distance <= 24.0f && vehicle.Speed <= 1.8f;
+        }
+
+        if (!Entity.Exists(player.CurrentVehicle))
+        {
+            return distance <= 24.0f && vehicle.Speed <= 1.8f;
+        }
+
+        /*
+         * Joueur en véhicule mais à l'arrêt ou lent :
+         * Si l'escorte est proche, on ne relance pas l'ordre à chaque tick.
+         */
+        float playerSpeed = player.CurrentVehicle.Speed;
+
+        if (playerSpeed <= 3.0f)
+        {
+            return distance <= 18.0f && vehicle.Speed <= 2.2f;
+        }
+
+        return false;
+    }
+
+    private float CalculateCartelCruiseSpeed(Ped player)
+    {
+        /*
+         * Vitesse naturelle :
+         * - assez rapide pour donner l'impression de renforts efficaces ;
+         * - pas assez haute pour transformer la voiture en projectile ;
+         * - adaptée à la vitesse du joueur si le joueur conduit.
+         */
+        if (Entity.Exists(player) && player.IsInVehicle() && Entity.Exists(player.CurrentVehicle))
+        {
+            float playerSpeed = player.CurrentVehicle.Speed;
+
+            return ClampFloat(playerSpeed * 1.15f + 8.0f, 22.0f, 44.0f);
+        }
+
+        return CartelArrivalDriveSpeed;
+    }
+
+    private void RescueCartelVehicleIfNeeded(Vehicle vehicle, Ped player, int seedIndex)
+    {
+        if (!Entity.Exists(vehicle) || !Entity.Exists(player))
+        {
+            return;
+        }
+
+        int handle = vehicle.Handle;
+
+        bool tooFar = vehicle.Position.DistanceTo(player.Position) > CartelTooFarVehicleDistance;
+        bool criticallyFar = vehicle.Position.DistanceTo(player.Position) > CartelCriticalVehicleDistance;
+        bool stuck = IsCartelVehicleStuck(vehicle, player);
+
+        if (!tooFar && !stuck)
+        {
+            return;
+        }
+
+        int lastRescue;
+
+        if (_cartelLastVehicleRescueAt.TryGetValue(handle, out lastRescue) &&
+            Game.GameTime - lastRescue < CartelRescueCooldownMs)
+        {
+            return;
+        }
+
+        bool visible = IsEntityLikelyVisibleToPlayer(vehicle);
+
+        if (visible && !criticallyFar)
+        {
+            return;
+        }
+
+        Vector3 point;
+
+        if (!TryFindHiddenRoadPointNearPlayer(
+            player,
+            seedIndex,
+            CartelRelocationMinDistance,
+            CartelRelocationMaxDistance,
+            out point))
+        {
+            return;
+        }
+
+        TeleportCartelVehicleToRoad(vehicle, player, point);
+        _cartelLastVehicleRescueAt[handle] = Game.GameTime;
+        InitializeCartelVehicleTracking(vehicle);
+
+        IssueCartelFastFollowOrder(vehicle, player, true);
+    }
+
+    private bool IsCartelVehicleStuck(Vehicle vehicle, Ped player)
+    {
+        if (!Entity.Exists(vehicle) || !Entity.Exists(player))
+        {
+            return false;
+        }
+
+        int handle = vehicle.Handle;
+        Vector3 lastPosition;
+        int lastMoveAt;
+
+        if (!_cartelLastVehiclePositions.TryGetValue(handle, out lastPosition) ||
+            !_cartelLastVehicleMoveAt.TryGetValue(handle, out lastMoveAt))
+        {
+            InitializeCartelVehicleTracking(vehicle);
+            return false;
+        }
+
+        float moved = vehicle.Position.DistanceTo(lastPosition);
+
+        if (moved > 4.0f || vehicle.Speed > 2.0f)
+        {
+            _cartelLastVehiclePositions[handle] = vehicle.Position;
+            _cartelLastVehicleMoveAt[handle] = Game.GameTime;
+            return false;
+        }
+
+        float distanceToPlayer = vehicle.Position.DistanceTo(player.Position);
+
+        return distanceToPlayer > 55.0f &&
+               Game.GameTime - lastMoveAt >= CartelStuckTimeoutMs;
+    }
+
+    private void InitializeCartelVehicleTracking(Vehicle vehicle)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return;
+        }
+
+        _cartelLastVehiclePositions[vehicle.Handle] = vehicle.Position;
+        _cartelLastVehicleMoveAt[vehicle.Handle] = Game.GameTime;
+        _cartelNextVehicleOrderAt[vehicle.Handle] = 0;
+    }
+
+    private void ClearCartelVehicleTracking(int handle)
+    {
+        _cartelLastVehiclePositions.Remove(handle);
+        _cartelLastVehicleMoveAt.Remove(handle);
+        _cartelLastVehicleRescueAt.Remove(handle);
+        _cartelNextVehicleOrderAt.Remove(handle);
+
+        _cartelFullyUpgradedVehicleHandles.Remove(handle);
+        _cartelLastVehicleSoftMaintenanceAt.Remove(handle);
+        _cartelLastVehicleOrderTarget.Remove(handle);
+
+        /*
+         * Securite :
+         * normalement _cartelNextCombatOrderAt est indexe par handle de ped,
+         * mais on nettoie aussi ce handle pour eviter toute reference morte.
+         */
+        _cartelNextCombatOrderAt.Remove(handle);
+    }
+
+    private void TeleportCartelVehicleToRoad(Vehicle vehicle, Ped player, Vector3 point)
+    {
+        if (!Entity.Exists(vehicle) || !Entity.Exists(player))
+        {
+            return;
+        }
+
+        float heading = HeadingFromTo(point, player.Position);
+        Ped driver = GetDriverOfVehicle(vehicle);
+
+        try
+        {
+            /*
+             * La TP de secours reste autorisée uniquement quand le véhicule est bloqué
+             * ou trop loin. On coupe les tâches avant de replacer le véhicule pour éviter
+             * une ancienne tâche incohérente après la TP.
+             */
+            if (Entity.Exists(driver))
+            {
+                Function.Call(Hash.CLEAR_PED_TASKS, driver.Handle);
+            }
+
+            vehicle.Position = point;
+            vehicle.Heading = heading;
+
+            /*
+             * Autorisé ici, car c'est une vraie téléportation de secours.
+             * Cette méthode ne doit surtout pas être appelée en boucle.
+             */
+            Function.Call(Hash.SET_VEHICLE_ON_GROUND_PROPERLY, vehicle.Handle);
+            Function.Call(Hash.SET_VEHICLE_ENGINE_ON, vehicle.Handle, true, true, false);
+
+            /*
+             * On annule l'inertie résiduelle après TP.
+             * Ce n'est pas une propulsion, c'est une remise à zéro de sécurité.
+             */
+            Function.Call(Hash.SET_ENTITY_VELOCITY, vehicle.Handle, 0.0f, 0.0f, 0.0f);
+        }
+        catch
+        {
+        }
+
+        if (Entity.Exists(driver))
+        {
+            ConfigureCartelDriver(driver);
+        }
+
+        /*
+         * Après une TP, on force un nouvel ordre de conduite propre,
+         * puis on remet à jour les trackers anti-blocage.
+         */
+        InitializeCartelVehicleTracking(vehicle);
+        _cartelLastVehicleOrderTarget.Remove(vehicle.Handle);
+    }
+
+    private void RescueCartelGuardIfNeeded(SpawnedNpc npc, Ped player, int seedIndex)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || !Entity.Exists(player))
+        {
+            return;
+        }
+
+        if (npc.Ped.IsInVehicle())
+        {
+            return;
+        }
+
+        float distance = npc.Ped.Position.DistanceTo(player.Position);
+
+        if (distance < CartelTooFarGuardDistance)
+        {
+            return;
+        }
+
+        if (IsEntityLikelyVisibleToPlayer(npc.Ped))
+        {
+            return;
+        }
+
+        int lastRescue;
+
+        if (_cartelLastGuardRescueAt.TryGetValue(npc.Ped.Handle, out lastRescue) &&
+            Game.GameTime - lastRescue < CartelGuardRescueCooldownMs)
+        {
+            return;
+        }
+
+        Vehicle assignedVehicle = FindVehicleByHandle(npc.BodyguardAssignedVehicleHandle);
+
+        if (Entity.Exists(assignedVehicle) &&
+            assignedVehicle.Position.DistanceTo(player.Position) < CartelTooFarVehicleDistance)
+        {
+            int freeSeat = FindAnyFreeSeatForCartel(assignedVehicle);
+
+            if (freeSeat != 999)
+            {
+                PutPedIntoVehicleSafe(npc.Ped, assignedVehicle, freeSeat);
+                _cartelLastGuardRescueAt[npc.Ped.Handle] = Game.GameTime;
+                return;
+            }
+        }
+
+        Vector3 point;
+
+        if (TryFindHiddenRoadPointNearPlayer(
+            player,
+            seedIndex + 6,
+            CartelRelocationMinDistance * 0.75f,
+            CartelRelocationMaxDistance,
+            out point))
+        {
+            try
+            {
+                npc.Ped.Position = point;
+                Function.Call((Hash)PlaceEntityOnGroundProperlyNative, npc.Ped.Handle);
+                _cartelLastGuardRescueAt[npc.Ped.Handle] = Game.GameTime;
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private bool IsPedDriverOfAnyCartelVehicle(Ped ped)
+    {
+        if (!Entity.Exists(ped) || !ped.IsInVehicle() || !Entity.Exists(ped.CurrentVehicle))
+        {
+            return false;
+        }
+
+        Vehicle currentVehicle = ped.CurrentVehicle;
+
+        /*
+         * Ancien comportement : boucle sur les handles véhicules Cartel puis
+         * FindVehicleByHandle(), qui appelle World.GetAllVehicles(). Avec 11
+         * gardes et 3 véhicules, cette vérification pouvait déclencher des
+         * dizaines de scans de véhicules à cadence fixe.
+         *
+         * Ici, on vérifie directement le véhicule courant du ped : même résultat
+         * logique, sans scan mondial.
+         */
+        if (!_cartelVehicleHandles.Contains(currentVehicle.Handle) &&
+            !_cartelDismissingVehicleHandles.Contains(currentVehicle.Handle))
+        {
+            return false;
+        }
+
+        return IsPedDriverOfVehicle(ped, currentVehicle);
+    }
+
+    private void TrySelectPedWeapon(Ped ped, WeaponHash weapon)
+    {
+        if (!Entity.Exists(ped))
+        {
+            return;
+        }
+
+        try
+        {
+            ped.Weapons.Select(weapon, true);
+        }
+        catch
+        {
+        }
+    }
+
+    private void DismissCartelTeam(bool announce)
+    {
+        CleanupCartelHandleSets();
+
+        if (_cartelNpcHandles.Count == 0 && _cartelVehicleHandles.Count == 0)
+        {
+            if (announce)
+            {
+                ShowStatus("Cartel : aucune équipe active à rappeler.", 3000);
+            }
+
+            return;
+        }
+
+        _cartelDismissStartedAt = Game.GameTime;
+        _cartelDismissCleanupAt = Game.GameTime + CartelDismissForceCleanupMs;
+        _nextCartelDismissOrderAt = 0;
+
+        List<int> activeNpcHandles = new List<int>(_cartelNpcHandles);
+        List<int> activeVehicleHandles = new List<int>(_cartelVehicleHandles);
+
+        _cartelNpcHandles.Clear();
+        _cartelVehicleHandles.Clear();
+        _cartelConvoyActive = false;
+
+        for (int i = 0; i < activeNpcHandles.Count; i++)
+        {
+            SpawnedNpc npc = FindSpawnedNpcByHandle(activeNpcHandles[i]);
+
+            if (npc == null || !Entity.Exists(npc.Ped))
+            {
+                continue;
+            }
+
+            /*
+             * On détache les hommes en repli de la liste IA standard.
+             * Sinon UpdateBodyguard() leur redonnerait l'ordre de suivre le joueur.
+             */
+            _spawnedNpcs.Remove(npc);
+            _cartelDismissingNpcRecords[npc.Ped.Handle] = npc;
+
+            npc.Activated = false;
+            npc.IsReturningHome = false;
+            npc.Behavior = NpcBehavior.Ally;
+            npc.BaseBehavior = NpcBehavior.Ally;
+
+            npc.Ped.IsEnemy = false;
+            npc.Ped.BlockPermanentEvents = false;
+            npc.Ped.AlwaysKeepTask = true;
+
+            try
+            {
+                Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, npc.Ped.Handle, _allyGroupHash);
+                Function.Call(Hash.CLEAR_PED_TASKS, npc.Ped.Handle);
+            }
+            catch
+            {
+            }
+
+            TrySendCartelPedBackToVehicle(npc);
+        }
+
+        for (int i = 0; i < activeVehicleHandles.Count; i++)
+        {
+            Vehicle vehicle = FindVehicleByHandle(activeVehicleHandles[i]);
+
+            if (!Entity.Exists(vehicle))
+            {
+                continue;
+            }
+
+            _cartelDismissingVehicleHandles.Add(vehicle.Handle);
+            UpgradeCartelVehicle(vehicle);
+        }
+
+        _cartelConvoyDismissing = _cartelDismissingNpcRecords.Count > 0 || _cartelDismissingVehicleHandles.Count > 0;
+
+        Ped player = Game.Player.Character;
+
+        if (Entity.Exists(player))
+        {
+            UpdateCartelDismissal(player, true);
+        }
+
+        if (announce)
+        {
+            ShowStatus("Cartel rappelé : les hommes restent alliés et quittent rapidement le secteur.", 5500);
+        }
+    }
+
+    private void TrySendCartelPedBackToVehicle(SpawnedNpc npc)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped))
+        {
+            return;
+        }
+
+        if (npc.Ped.IsInVehicle())
+        {
+            return;
+        }
+
+        Vehicle assignedVehicle = FindVehicleByHandle(npc.BodyguardAssignedVehicleHandle);
+
+        if (!Entity.Exists(assignedVehicle))
+        {
+            assignedVehicle = FindNearestCartelDismissingVehicle(npc.Ped.Position);
+        }
+
+        if (!Entity.Exists(assignedVehicle))
+        {
+            try
+            {
+                Function.Call(Hash.TASK_WANDER_STANDARD, npc.Ped.Handle, 10.0f, 10);
+            }
+            catch
+            {
+            }
+
+            return;
+        }
+
+        int seat = npc.BodyguardAssignedSeat;
+
+        if (seat == 999 || !IsSeatFreeSafe(assignedVehicle, seat))
+        {
+            seat = FindAnyFreeSeatForCartel(assignedVehicle);
+        }
+
+        if (seat == 999)
+        {
+            try
+            {
+                Function.Call(Hash.TASK_GO_TO_ENTITY, npc.Ped.Handle, assignedVehicle.Handle, -1, 6.0f, 1.8f, 1073741824, 0);
+            }
+            catch
+            {
+            }
+
+            return;
+        }
+
+        npc.BodyguardAssignedVehicleHandle = assignedVehicle.Handle;
+        npc.BodyguardAssignedSeat = seat;
+        npc.BodyguardIsDriver = seat == -1;
+
+        try
+        {
+            Function.Call(
+                Hash.TASK_ENTER_VEHICLE,
+                npc.Ped.Handle,
+                assignedVehicle.Handle,
+                5000,
+                seat,
+                2.0f,
+                1,
+                0);
+        }
+        catch
+        {
+        }
+    }
+
+    private Vehicle FindNearestCartelDismissingVehicle(Vector3 position)
+    {
+        Vehicle best = null;
+        float bestDistance = float.MaxValue;
+
+        foreach (int handle in _cartelDismissingVehicleHandles)
+        {
+            Vehicle vehicle = FindVehicleByHandle(handle);
+
+            if (!Entity.Exists(vehicle))
+            {
+                continue;
+            }
+
+            float distance = vehicle.Position.DistanceTo(position);
+
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = vehicle;
+            }
+        }
+
+        return best;
+    }
+
+    private int FindAnyFreeSeatForCartel(Vehicle vehicle)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return 999;
+        }
+
+        if (IsSeatFreeSafe(vehicle, -1))
+        {
+            return -1;
+        }
+
+        int passengers = 3;
+
+        try
+        {
+            passengers = Function.Call<int>(Hash.GET_VEHICLE_MAX_NUMBER_OF_PASSENGERS, vehicle.Handle);
+        }
+        catch
+        {
+            passengers = 3;
+        }
+
+        for (int seat = 0; seat < passengers; seat++)
+        {
+            if (IsSeatFreeSafe(vehicle, seat))
+            {
+                return seat;
+            }
+        }
+
+        return 999;
+    }
+
+    private void UpdateCartelDismissal(Ped player, bool latePass)
+    {
+        if (!_cartelConvoyDismissing)
+        {
+            return;
+        }
+
+        /*
+         * Même en late pass, on ne spam pas les ordres véhicule.
+         * Les suppressions restent évaluées, mais les ordres de conduite sont espacés.
+         */
+        bool canIssueDriveOrders = Game.GameTime >= _nextCartelDismissOrderAt;
+
+        if (canIssueDriveOrders)
+        {
+            _nextCartelDismissOrderAt = Game.GameTime + CartelDismissOrderIntervalMs;
+        }
+
+        Vector3 referencePosition = Entity.Exists(player) ? player.Position : Vector3.Zero;
+
+        List<int> npcHandlesToDelete = new List<int>();
+        List<int> vehicleHandlesToDelete = new List<int>();
+
+        foreach (KeyValuePair<int, SpawnedNpc> pair in _cartelDismissingNpcRecords)
+        {
+            SpawnedNpc npc = pair.Value;
+
+            if (npc == null || !Entity.Exists(npc.Ped))
+            {
+                npcHandlesToDelete.Add(pair.Key);
+                continue;
+            }
+
+            try
+            {
+                Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, npc.Ped.Handle, _allyGroupHash);
+                npc.Ped.IsEnemy = false;
+            }
+            catch
+            {
+            }
+
+            if (canIssueDriveOrders)
+            {
+                TrySendCartelPedBackToVehicle(npc);
+            }
+
+            bool vehicleVisible = Entity.Exists(npc.Ped.CurrentVehicle) && IsEntityLikelyVisibleToPlayer(npc.Ped.CurrentVehicle);
+            bool pedVisible = IsEntityLikelyVisibleToPlayer(npc.Ped);
+            bool oldEnough = Game.GameTime - _cartelDismissStartedAt >= CartelDismissMinLifeMs;
+            bool forceCleanup = Game.GameTime >= _cartelDismissCleanupAt;
+            bool farEnough = npc.Ped.Position.DistanceTo(referencePosition) >= CartelDismissDeleteDistance;
+
+            if (forceCleanup || (oldEnough && farEnough && !pedVisible && !vehicleVisible))
+            {
+                DeleteEntitySafe(npc.Ped);
+                npcHandlesToDelete.Add(pair.Key);
+            }
+        }
+
+        foreach (int handle in _cartelDismissingVehicleHandles)
+        {
+            Vehicle vehicle = FindVehicleByHandle(handle);
+
+            if (!Entity.Exists(vehicle))
+            {
+                vehicleHandlesToDelete.Add(handle);
+                continue;
+            }
+
+            if (canIssueDriveOrders)
+            {
+                Ped driver = GetDriverOfVehicle(vehicle);
+
+                if (Entity.Exists(driver))
+                {
+                    ConfigureCartelDriver(driver);
+
+                    Vector3 retreatPoint = CalculateCartelRetreatPoint(referencePosition, vehicle.Position);
+
+                    try
+                    {
+                        Function.Call(
+                            Hash.TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE,
+                            driver.Handle,
+                            vehicle.Handle,
+                            retreatPoint.X,
+                            retreatPoint.Y,
+                            retreatPoint.Z,
+                            CartelRetreatDriveSpeed,
+                            CartelRapidDrivingStyle,
+                            22.0f);
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+
+            bool oldEnough = Game.GameTime - _cartelDismissStartedAt >= CartelDismissMinLifeMs;
+            bool forceCleanup = Game.GameTime >= _cartelDismissCleanupAt;
+            bool visible = IsEntityLikelyVisibleToPlayer(vehicle);
+            bool farEnough = vehicle.Position.DistanceTo(referencePosition) >= CartelDismissDeleteDistance;
+
+            if (forceCleanup || (oldEnough && farEnough && !visible))
+            {
+                DeleteDismissedVehicleAndOccupants(vehicle);
+                vehicleHandlesToDelete.Add(handle);
+            }
+        }
+
+        for (int i = 0; i < npcHandlesToDelete.Count; i++)
+        {
+            _cartelDismissingNpcRecords.Remove(npcHandlesToDelete[i]);
+            _cartelNextCombatOrderAt.Remove(npcHandlesToDelete[i]);
+            _cartelLastGuardRescueAt.Remove(npcHandlesToDelete[i]);
+            _cartelNextGuardPassiveMaintenanceAt.Remove(npcHandlesToDelete[i]);
+            _cartelNextGuardMobilityOrderAt.Remove(npcHandlesToDelete[i]);
+        }
+
+        for (int i = 0; i < vehicleHandlesToDelete.Count; i++)
+        {
+            _cartelDismissingVehicleHandles.Remove(vehicleHandlesToDelete[i]);
+            ClearCartelVehicleTracking(vehicleHandlesToDelete[i]);
+        }
+
+        _cartelConvoyDismissing = _cartelDismissingNpcRecords.Count > 0 || _cartelDismissingVehicleHandles.Count > 0;
+
+        if (!_cartelConvoyDismissing)
+        {
+            ShowStatus("Cartel : l'ancienne équipe a quitté le secteur.", 3000);
+        }
+    }
+
+    private void DeleteDismissedVehicleAndOccupants(Vehicle vehicle)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return;
+        }
+
+        List<int> occupantsToDelete = new List<int>();
+
+        foreach (KeyValuePair<int, SpawnedNpc> pair in _cartelDismissingNpcRecords)
+        {
+            SpawnedNpc npc = pair.Value;
+
+            if (npc == null || !Entity.Exists(npc.Ped))
+            {
+                occupantsToDelete.Add(pair.Key);
+                continue;
+            }
+
+            if (Entity.Exists(npc.Ped.CurrentVehicle) && npc.Ped.CurrentVehicle.Handle == vehicle.Handle)
+            {
+                DeleteEntitySafe(npc.Ped);
+                occupantsToDelete.Add(pair.Key);
+            }
+        }
+
+        for (int i = 0; i < occupantsToDelete.Count; i++)
+        {
+            _cartelDismissingNpcRecords.Remove(occupantsToDelete[i]);
+            _cartelNextCombatOrderAt.Remove(occupantsToDelete[i]);
+            _cartelLastGuardRescueAt.Remove(occupantsToDelete[i]);
+            _cartelNextGuardPassiveMaintenanceAt.Remove(occupantsToDelete[i]);
+            _cartelNextGuardMobilityOrderAt.Remove(occupantsToDelete[i]);
+        }
+
+        PlacedVehicle placed = FindPlacedVehicleByHandle(vehicle.Handle);
+
+        if (placed != null)
+        {
+            RemovePlacedVehicleBlip(placed);
+        }
+
+        DeleteEntitySafe(vehicle);
+    }
+
+    private Vector3 CalculateCartelRetreatPoint(Vector3 playerPosition, Vector3 vehiclePosition)
+    {
+        Vector3 away = Normalize(vehiclePosition - playerPosition);
+
+        if (away.Length() < 0.001f)
+        {
+            away = new Vector3(0.0f, -1.0f, 0.0f);
+        }
+
+        Vector3 point = vehiclePosition + away * 420.0f;
+
+        Vector3 node;
+
+        if (TryGetClosestVehicleNode(point, 0, out node))
+        {
+            return node + new Vector3(0.0f, 0.0f, 0.45f);
+        }
+
+        float ground = World.GetGroundHeight(new Vector3(point.X, point.Y, point.Z + 1000.0f));
+
+        if (Math.Abs(ground) > 0.001f)
+        {
+            point.Z = ground + 0.5f;
+        }
+
+        return point;
+    }
+
+    private SpawnedNpc FindSpawnedNpcByHandle(int handle)
+    {
+        if (handle == 0)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            SpawnedNpc npc = _spawnedNpcs[i];
+
+            if (npc != null && Entity.Exists(npc.Ped) && npc.Ped.Handle == handle)
+            {
+                return npc;
+            }
+        }
+
+        SpawnedNpc dismissingNpc;
+
+        if (_cartelDismissingNpcRecords.TryGetValue(handle, out dismissingNpc))
+        {
+            return dismissingNpc;
+        }
+
+        return null;
+    }
+
+    private Ped FindNpcPedByHandle(int handle)
+    {
+        SpawnedNpc npc = FindSpawnedNpcByHandle(handle);
+        return npc == null ? null : npc.Ped;
+    }
+
+    private PlacedVehicle FindPlacedVehicleByHandle(int handle)
+    {
+        if (handle == 0)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < _placedVehicles.Count; i++)
+        {
+            PlacedVehicle placed = _placedVehicles[i];
+
+            if (placed != null && Entity.Exists(placed.Vehicle) && placed.Vehicle.Handle == handle)
+            {
+                return placed;
+            }
+        }
+
+        return null;
+    }
+}
