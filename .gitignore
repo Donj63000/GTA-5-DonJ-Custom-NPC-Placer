@@ -3,6 +3,8 @@ obj/
 .vs/
 TestResults/
 AGENTS.md
+mod.zip
+src.zip
 *.user
 *.suo
 *.cache
