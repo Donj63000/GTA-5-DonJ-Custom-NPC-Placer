@@ -244,14 +244,23 @@ Vous pouvez le modifier depuis le menu du mod.
 Avant d’installer le mod, vous devez avoir :
 
 - GTA V Enhanced sur Windows x64 ;
-- ScriptHookV installé ;
+- [ScriptHookV](https://www.dev-c.com/gtav/scripthookv/) installé ;
 - `dinput8.dll` dans le dossier principal du jeu ;
 - `ScriptHookV.dll` dans le dossier principal du jeu ;
-- `NIBScriptHookVDotNet.asi` installé ;
-- `NIBScriptHookVDotNet2.dll` installé ;
+- [`NIBScriptHookVDotNet.asi`](https://www.patreon.com/posts/nibmods-menu-and-22783974) installé ;
+- [`NIBScriptHookVDotNet2.dll`](https://www.patreon.com/posts/nibmods-menu-and-22783974) installé ;
 - un dossier `Scripts` dans le dossier principal du jeu.
 
 Le mod cible l’API v2 de ScriptHookVDotNet via NIBScriptHookVDotNet.
+
+Liens utiles :
+
+| Prérequis | Lien de téléchargement | Où copier les fichiers |
+|---|---|---|
+| `ScriptHookV.dll` et `dinput8.dll` | [Script Hook V officiel - Alexander Blade](https://www.dev-c.com/gtav/scripthookv/) | Dossier principal de GTA V Enhanced, au même niveau que `GTA5_Enhanced.exe` |
+| `NIBScriptHookVDotNet.asi` et `NIBScriptHookVDotNet2.dll` | [NIBMods Menu and .Net plugins - GTA Legacy and Enhanced - JulioNIB](https://www.patreon.com/posts/nibmods-menu-and-22783974) | Dossier principal de GTA V Enhanced, au même niveau que `GTA5_Enhanced.exe` |
+
+Pour GTA V Enhanced, téléchargez l’archive **GTA Enhanced** du post JulioNIB, puis suivez le fichier d’aide inclus dans l’archive.
 
 Configuration testée :
 
