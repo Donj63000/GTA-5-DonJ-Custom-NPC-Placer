@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Outil de création de scènes solo pour GTA V Enhanced</strong><br>
-  <sub>PNJ, gardes, patrouilles, Cartel, véhicules, objets, intérieurs et sauvegardes XML.</sub>
+  <sub>PNJ, gardes, patrouilles, respawn, Cartel, véhicules, objets, intérieurs et sauvegardes XML.</sub>
 </p>
 
 <p align="center">
@@ -56,9 +56,9 @@
       <br><br>
       <ul>
         <li><strong>Placement précis</strong> avec caméra libre et aperçu transparent.</li>
-        <li><strong>PNJ configurables</strong> avec armes, santé, armure et comportements.</li>
+        <li><strong>PNJ configurables</strong> avec armes, santé, armure, comportements et respawn.</li>
         <li><strong>Renforts Cartel</strong> depuis le téléphone avec la touche <code>C</code>.</li>
-        <li><strong>Setups rejouables</strong> grâce aux sauvegardes XML.</li>
+        <li><strong>Scènes durables</strong> avec réapparition automatique et sauvegardes XML.</li>
       </ul>
     </td>
   </tr>
@@ -74,12 +74,12 @@
 <table>
   <tr>
     <td width="33%"><strong>Base ou checkpoint</strong><br>Placement précis de PNJ, véhicules, objets et couvertures.</td>
-    <td width="33%"><strong>Zone gardée</strong><br>PNJ alliés, neutres, hostiles, patrouilles et comportements de défense.</td>
+    <td width="33%"><strong>Zone gardée</strong><br>PNJ alliés, neutres, hostiles, patrouilles, défense et respawn.</td>
     <td width="33%"><strong>Renforts rapides</strong><br>Contact téléphone <code>Cartel</code>, convoi allié, Baller6 blindées et repli contrôlé.</td>
   </tr>
   <tr>
     <td width="33%"><strong>Placement propre</strong><br>Caméra libre, aperçu transparent, rotation et placement direct.</td>
-    <td width="33%"><strong>Scènes réutilisables</strong><br>Sauvegarde et chargement XML des setups complets.</td>
+    <td width="33%"><strong>Scènes persistantes</strong><br>Respawn automatique et chargement XML des setups complets.</td>
     <td width="33%"><strong>Intérieurs</strong><br>Entrées/sorties, catalogue étendu et chargement IPL automatique.</td>
   </tr>
 </table>
@@ -111,6 +111,7 @@
 ## Sommaire
 
 - [Fonctionnalités principales](#fonctionnalités-principales)
+- [Respawn / réapparition automatique](#respawn--réapparition-automatique)
 - [Installation](#installation)
 - [Utilisation](#utilisation)
 - [Exemple rapide](#exemple-rapide)
@@ -171,6 +172,44 @@ Chaque PNJ peut recevoir un comportement différent :
 | Neutre patrouille | Le PNJ patrouille dans une zone sans attaquer immédiatement. |
 | Hostile patrouille | Le PNJ patrouille et agit comme ennemi. |
 | Allié patrouille | Le PNJ patrouille et aide le joueur en cas de combat. |
+
+---
+
+### Respawn / réapparition automatique
+
+> [!TIP]
+> Le **respawn automatique** est l’une des fonctions les plus pratiques pour créer une base, un checkpoint ou une scène de combat qui reste utilisable longtemps.
+
+Le respawn permet à un élément placé de **réapparaître automatiquement** après avoir été tué, détruit ou supprimé par le jeu.
+
+Il peut servir pour :
+
+- remettre en place des **gardes** après un combat ;
+- recréer des **patrouilles ennemies ou alliées** ;
+- faire revenir un **véhicule placé** s’il explose ou disparaît ;
+- remettre un **objet de décor ou de couverture** si le jeu le supprime ;
+- garder une base ou un checkpoint vivant même après plusieurs attaques.
+
+Pour l’utiliser :
+
+1. Ouvrez le menu avec `F10`.
+2. Activez l’option **Réapparition auto** avant de placer l’élément.
+3. Placez votre PNJ, véhicule ou objet normalement.
+4. Sauvegardez votre setup si vous voulez conserver cette option dans le fichier XML.
+
+Quand le respawn est activé, le mod retient la **position d’origine**, la **rotation**, le **modèle**, l’équipement et les réglages importants de l’élément placé.
+
+Ensuite, si l’élément disparaît :
+
+- le mod attend un court délai avant de le recréer ;
+- le joueur doit s’être éloigné de la zone ;
+- le mod évite de faire apparaître l’élément directement sous les yeux du joueur ;
+- si le jeu refuse le spawn à ce moment-là, le mod réessaie automatiquement plus tard.
+
+En pratique, ça donne une scène plus propre : les gardes, véhicules et objets ne réapparaissent pas brutalement devant vous. Ils reviennent surtout quand vous avez quitté la zone ou quand le point de respawn n’est plus visible, ce qui garde l’immersion.
+
+> [!NOTE]
+> Le respawn n’est pas fait pour remplacer un combat en direct seconde par seconde. Si vous restez au même endroit en regardant le point de spawn, le mod peut attendre avant de recréer l’élément pour éviter une apparition trop visible.
 
 ---
 
