@@ -1,240 +1,326 @@
 Licence DonJ Custom NPC Placer
-Version 1.0 — 25 avril 2026
+Source ouverte non commerciale avec attribution obligatoire
+Version 2.0 - 26 avril 2026
 
 Copyright (c) 2026 DonJ.
-Tous droits réservés.
+Createur original : DonJ.
 
-Cette licence encadre l’utilisation, la consultation, la modification et la distribution du mod
-« DonJ Custom NPC Placer », ci-après désigné « le Mod ».
+Cette licence encadre l'utilisation, la copie, le partage, la modification et la distribution du mod
+"DonJ Custom NPC Placer", ci-apres designe "le Mod".
 
-Le Mod comprend notamment, sans s’y limiter :
-- le code source ;
-- les fichiers compilés ;
-- les scripts ;
-- les fichiers de configuration ;
-- la documentation ;
-- les fichiers README ;
-- les exemples ;
-- tout élément fourni dans ce dépôt ou dans les releases officielles.
-
-En téléchargeant, copiant, installant, utilisant, modifiant ou consultant le Mod, vous acceptez les conditions de cette licence.
+En telechargeant, copiant, installant, utilisant, modifiant, partageant ou distribuant le Mod,
+vous acceptez les conditions de cette licence.
 
 ────────────────────────────────────────
-1. AUTORISATIONS ACCORDÉES
+0. NATURE DE LA LICENCE
 ────────────────────────────────────────
 
-Sous réserve du respect de cette licence, le titulaire des droits vous accorde une autorisation limitée, personnelle, révocable, non exclusive et non transférable permettant de :
+Le Mod est publie avec son code source ouvert au public.
 
-1. Télécharger le Mod depuis le dépôt GitHub officiel ou depuis une release officielle.
+Cela signifie que vous pouvez :
+- consulter le code source ;
+- telecharger le Mod ;
+- partager le Mod gratuitement ;
+- modifier le Mod ;
+- publier une version modifiee gratuitement ;
+- proposer des contributions via GitHub.
 
-2. Installer et utiliser le Mod à titre personnel, uniquement en mode solo / histoire de Grand Theft Auto V Enhanced.
+Cette licence est une licence personnalisee, non commerciale, avec attribution obligatoire.
 
-3. Consulter le code source publié dans le dépôt GitHub officiel.
+Le terme "source ouverte" signifie ici que le code source est accessible et que les modifications
+et redistributions gratuites sont autorisees sous conditions.
 
-4. Modifier le code source pour un usage strictement personnel et privé.
+Comme la vente et l'usage commercial sont limites, cette licence n'est pas une licence open source
+standard certifiee OSI. Elle correspond a une licence source ouverte non commerciale personnalisee.
 
-5. Créer un fork GitHub dans le but :
-   - de proposer une contribution ;
-   - de corriger un bug ;
-   - de préparer une pull request ;
-   - d’effectuer des tests personnels.
-
-6. Partager des captures d’écran, vidéos ou démonstrations du Mod, à condition de ne pas redistribuer le Mod lui-même en dehors des sources officielles.
+Cette licence n'autorise pas la vente du Mod sans autorisation ecrite prealable de DonJ.
 
 ────────────────────────────────────────
-2. RESTRICTIONS
+1. AUTEUR ET ATTRIBUTION OBLIGATOIRE
 ────────────────────────────────────────
 
-Sauf autorisation écrite préalable du titulaire des droits, vous n’êtes pas autorisé à :
+DonJ est le createur original du Mod.
 
-1. Vendre, louer, monétiser, commercialiser ou inclure le Mod dans une offre payante.
+Vous n'avez pas le droit de vous approprier le Mod, de le presenter comme votre creation originale,
+ni de masquer le nom de DonJ.
 
-2. Redistribuer le Mod, en totalité ou en partie, sur un autre site, forum, plateforme, launcher, pack de mods, archive, dépôt GitHub ou service de téléchargement.
+Toute copie, redistribution, fork, version modifiee, archive, release, page de telechargement,
+documentation ou presentation publique du Mod doit conserver une attribution claire a DonJ.
 
-3. Redistribuer une version modifiée du Mod, que ce soit gratuitement ou contre paiement.
+Mention minimale obligatoire :
 
-4. Intégrer le Mod dans un modpack, un launcher, une collection, un installateur automatique ou tout autre bundle public.
+DonJ Custom NPC Placer - cree par DonJ
 
-5. Supprimer, modifier ou masquer les mentions de copyright, crédits, avertissements ou informations de licence.
+Si vous publiez une version modifiee, vous devez indiquer clairement :
+- que votre version est modifiee ;
+- qu'elle n'est pas la version officielle originale, sauf validation explicite de DonJ ;
+- que le Mod original a ete cree par DonJ ;
+- un lien vers le depot officiel GitHub quand c'est possible.
 
-6. Présenter le Mod comme étant votre création si vous n’en êtes pas l’auteur.
+Vous pouvez etre credite pour vos propres modifications, mais vous ne pouvez pas vous presenter
+comme le createur du Mod original.
 
-7. Utiliser le Mod, son code ou ses fonctionnalités pour créer, faciliter ou distribuer :
+────────────────────────────────────────
+2. AUTORISATIONS ACCORDEES
+────────────────────────────────────────
+
+Sous reserve du respect de cette licence, vous etes autorise a :
+
+1. Telecharger le Mod depuis le depot GitHub officiel ou depuis une release officielle.
+
+2. Installer et utiliser le Mod gratuitement, uniquement en mode solo / histoire de Grand Theft Auto V Enhanced.
+
+3. Consulter, lire et etudier le code source.
+
+4. Copier et partager le Mod gratuitement, a condition de conserver cette licence, les credits,
+   les mentions de copyright et l'attribution a DonJ.
+
+5. Modifier le code source pour un usage personnel.
+
+6. Publier gratuitement une version modifiee, a condition de respecter toutes les conditions suivantes :
+   - conserver l'attribution obligatoire a DonJ ;
+   - conserver cette licence ou une mention claire renvoyant vers elle ;
+   - indiquer clairement que la version est modifiee ;
+   - ne pas faire croire que la version modifiee est officielle si elle ne l'est pas ;
+   - ne pas vendre, louer, monetiser ou mettre la version modifiee derriere un acces payant ;
+   - ne pas retirer les credits, avertissements ou informations de licence.
+
+7. Creer un fork GitHub pour :
+   - proposer une contribution ;
+   - corriger un bug ;
+   - preparer une pull request ;
+   - effectuer des tests ;
+   - publier une variante gratuite respectant cette licence.
+
+8. Partager des captures d'ecran, videos, lives ou demonstrations du Mod.
+
+9. Partager des liens vers :
+   - le depot GitHub officiel ;
+   - les releases GitHub officielles ;
+   - la documentation officielle ;
+   - les pages officielles du projet.
+
+────────────────────────────────────────
+3. INTERDICTION DE VENTE ET D'USAGE COMMERCIAL SANS ACCORD
+────────────────────────────────────────
+
+Le Mod est gratuit.
+
+Il est strictement interdit de vendre le Mod, une copie du Mod, une version modifiee du Mod,
+ou un acces au Mod sans autorisation ecrite prealable de DonJ.
+
+Sans autorisation ecrite prealable de DonJ, vous n'etes pas autorise a :
+
+1. Vendre le Mod.
+
+2. Vendre une version modifiee du Mod.
+
+3. Louer le Mod.
+
+4. Mettre le Mod derriere un paywall, un abonnement, une inscription payante ou un acces reserve aux clients.
+
+5. Inclure le Mod dans une offre payante, un pack payant, un modpack payant, un launcher payant,
+   une collection payante ou un installateur commercial.
+
+6. Monetiser directement le telechargement, l'installation, l'acces ou la redistribution du Mod.
+
+7. Presenter le Mod comme un produit commercial vous appartenant.
+
+8. Revendre le Mod sur un autre site, forum, reseau social, marketplace, launcher, depot ou service de telechargement.
+
+Toute vente, exploitation commerciale ou redistribution payante non autorisee constitue une violation de cette licence
+et une utilisation non autorisee du Mod.
+
+Pour toute demande commerciale, vous devez contacter DonJ avant toute publication, vente, integration ou distribution payante.
+
+Les dons volontaires lies a une video, un live ou un contenu personnel sont autorises uniquement si :
+- le Mod lui-meme reste gratuit ;
+- le telechargement du Mod n'est pas conditionne a un paiement ;
+- l'attribution a DonJ reste claire.
+
+────────────────────────────────────────
+4. RESTRICTIONS SUPPLEMENTAIRES
+────────────────────────────────────────
+
+Vous n'etes pas autorise a :
+
+1. Supprimer, modifier ou masquer les mentions de copyright, credits, avertissements ou informations de licence.
+
+2. Presenter le Mod original comme etant votre creation.
+
+3. Utiliser le nom "DonJ", "DonJ Custom NPC Placer" ou un nom similaire pour publier une version concurrente,
+   modifiee ou derivee pouvant preter a confusion.
+
+4. Utiliser le Mod, son code ou ses fonctionnalites pour creer, faciliter ou distribuer :
    - des cheats multijoueur ;
    - des outils de triche en ligne ;
-   - des contournements anti-détection ;
+   - des contournements anti-detection ;
    - des logiciels malveillants ;
-   - des loaders non autorisés ;
-   - des systèmes portant atteinte à l’expérience d’autres joueurs.
+   - des loaders non autorises ;
+   - des systemes portant atteinte a l'experience d'autres joueurs.
 
-8. Utiliser le Mod dans GTA Online ou dans tout environnement multijoueur officiel de Rockstar Games.
+5. Utiliser le Mod dans GTA Online ou dans tout environnement multijoueur officiel de Rockstar Games.
 
-9. Utiliser le Mod d’une manière contraire aux conditions d’utilisation de Rockstar Games, Take-Two Interactive, Steam, Epic Games Store ou toute autre plateforme concernée.
-
-10. Utiliser le nom « DonJ », « DonJ Custom NPC Placer » ou tout nom similaire pour publier une version concurrente, modifiée ou dérivée pouvant prêter à confusion.
-
-────────────────────────────────────────
-3. UTILISATION EN MODE SOLO UNIQUEMENT
-────────────────────────────────────────
-
-Le Mod est conçu exclusivement pour une utilisation en mode solo / histoire de Grand Theft Auto V Enhanced.
-
-Le Mod ne doit pas être utilisé dans GTA Online.
-
-L’auteur décline toute responsabilité en cas de sanction, bannissement, suspension de compte, perte de progression, corruption de sauvegarde ou tout autre problème résultant d’une utilisation inappropriée du Mod.
+6. Utiliser le Mod d'une maniere contraire aux conditions d'utilisation de Rockstar Games,
+   Take-Two Interactive, Steam, Epic Games Store ou toute autre plateforme concernee.
 
 ────────────────────────────────────────
-4. CONTRIBUTIONS
+5. UTILISATION EN MODE SOLO UNIQUEMENT
 ────────────────────────────────────────
 
-Les contributions sont les bienvenues via pull request sur le dépôt GitHub officiel.
+Le Mod est concu exclusivement pour une utilisation en mode solo / histoire de Grand Theft Auto V Enhanced.
+
+Le Mod ne doit pas etre utilise dans GTA Online.
+
+DonJ decline toute responsabilite en cas de sanction, bannissement, suspension de compte,
+perte de progression, corruption de sauvegarde ou tout autre probleme resultant d'une utilisation
+inappropriee du Mod.
+
+────────────────────────────────────────
+6. CONTRIBUTIONS
+────────────────────────────────────────
+
+Les contributions sont les bienvenues via pull request sur le depot GitHub officiel.
 
 En soumettant une contribution, vous confirmez que :
 
-1. Vous êtes l’auteur de la contribution ou vous disposez des droits nécessaires pour la proposer.
+1. Vous etes l'auteur de la contribution ou vous disposez des droits necessaires pour la proposer.
 
-2. Votre contribution ne contient pas de code volé, malveillant, obfusqué volontairement ou soumis à une licence incompatible.
+2. Votre contribution ne contient pas de code vole, malveillant, obfusque volontairement ou soumis a une licence incompatible.
 
-3. Vous acceptez que votre contribution soit intégrée au Mod.
+3. Vous acceptez que votre contribution soit integree au Mod.
 
-4. Vous accordez au titulaire des droits une licence mondiale, gratuite, irrévocable, non exclusive et transférable permettant d’utiliser, modifier, intégrer, publier, distribuer et maintenir votre contribution dans le cadre du Mod.
+4. Vous accordez a DonJ une licence mondiale, gratuite, irrevocable, non exclusive et transmissible permettant
+   d'utiliser, modifier, integrer, publier, distribuer et maintenir votre contribution dans le cadre du Mod.
 
-5. Une contribution acceptée reste soumise à la présente licence, sauf accord écrit contraire.
+5. Une contribution acceptee reste soumise a la presente licence, sauf accord ecrit contraire.
 
-L’acceptation d’une contribution ne donne aucun droit de propriété sur le Mod dans son ensemble.
+L'acceptation d'une contribution ne donne aucun droit de propriete sur le Mod dans son ensemble.
 
 ────────────────────────────────────────
-5. DÉPENDANCES ET OUTILS TIERS
+7. DEPENDANCES ET OUTILS TIERS
 ────────────────────────────────────────
 
-Le Mod peut nécessiter ou utiliser des outils, bibliothèques ou composants tiers, notamment :
+Le Mod peut necessiter ou utiliser des outils, bibliotheques ou composants tiers, notamment :
 
 - Grand Theft Auto V Enhanced ;
 - ScriptHookV ;
 - NIBScriptHookVDotNet ;
 - .NET Framework ;
 - Steam ;
-- tout autre composant externe nécessaire au fonctionnement du Mod.
+- tout autre composant externe necessaire au fonctionnement du Mod.
 
-Ces éléments restent la propriété de leurs auteurs, éditeurs ou ayants droit respectifs.
+Ces elements restent la propriete de leurs auteurs, editeurs ou ayants droit respectifs.
 
 Cette licence ne vous accorde aucun droit sur ces composants tiers.
 
-Vous êtes responsable de respecter les licences, conditions d’utilisation et règles applicables à ces outils et logiciels.
+Vous etes responsable de respecter les licences, conditions d'utilisation et regles applicables a ces outils et logiciels.
 
 ────────────────────────────────────────
-6. MARQUES ET PROPRIÉTÉS TIERCES
+8. MARQUES ET PROPRIETES TIERCES
 ────────────────────────────────────────
 
-Grand Theft Auto, Grand Theft Auto V, GTA V, GTA Online, Rockstar Games, Take-Two Interactive, Steam et les noms associés sont des marques ou propriétés de leurs détenteurs respectifs.
+Grand Theft Auto, Grand Theft Auto V, GTA V, GTA Online, Rockstar Games, Take-Two Interactive,
+Steam et les noms associes sont des marques ou proprietes de leurs detenteurs respectifs.
 
 Le Mod est un projet communautaire non officiel.
 
-Le Mod n’est pas affilié, approuvé, sponsorisé ou soutenu par Rockstar Games, Take-Two Interactive, Steam, Valve ou tout autre ayant droit lié à Grand Theft Auto V.
+Le Mod n'est pas affilie, approuve, sponsorise ou soutenu par Rockstar Games, Take-Two Interactive,
+Steam, Valve ou tout autre ayant droit lie a Grand Theft Auto V.
 
-Aucun élément de cette licence ne doit être interprété comme accordant un droit sur les marques, logos, contenus ou propriétés intellectuelles de tiers.
+Aucun element de cette licence ne doit etre interprete comme accordant un droit sur les marques,
+logos, contenus ou proprietes intellectuelles de tiers.
 
 ────────────────────────────────────────
-7. ABSENCE DE GARANTIE
+9. ABSENCE DE GARANTIE
 ────────────────────────────────────────
 
-Le Mod est fourni « tel quel », sans aucune garantie d’aucune sorte.
+Le Mod est fourni "tel quel", sans aucune garantie d'aucune sorte.
 
-L’auteur ne garantit pas que le Mod :
-
+DonJ ne garantit pas que le Mod :
 - fonctionnera sur toutes les versions du jeu ;
 - sera compatible avec tous les autres mods ;
 - sera exempt de bugs ;
 - ne causera pas de crash ;
 - ne corrompra pas de sauvegarde ;
-- restera compatible après une mise à jour du jeu ;
-- répondra à vos besoins spécifiques.
+- restera compatible apres une mise a jour du jeu ;
+- repondra a vos besoins specifiques.
 
-Vous utilisez le Mod à vos propres risques.
+Vous utilisez le Mod a vos propres risques.
 
-Il est recommandé de sauvegarder vos fichiers et sauvegardes de jeu avant toute installation ou utilisation.
+Il est recommande de sauvegarder vos fichiers et sauvegardes de jeu avant toute installation ou utilisation.
 
 ────────────────────────────────────────
-8. LIMITATION DE RESPONSABILITÉ
+10. LIMITATION DE RESPONSABILITE
 ────────────────────────────────────────
 
-Dans toute la mesure permise par la loi applicable, l’auteur ne pourra être tenu responsable d’aucun dommage direct, indirect, spécial, accidentel, consécutif ou punitif résultant de l’utilisation ou de l’impossibilité d’utiliser le Mod.
+Dans toute la mesure permise par la loi applicable, DonJ ne pourra etre tenu responsable d'aucun dommage
+direct, indirect, special, accidentel, consecutif ou punitif resultant de l'utilisation ou de l'impossibilite
+d'utiliser le Mod.
 
-Cela inclut notamment, sans s’y limiter :
-
+Cela inclut notamment, sans s'y limiter :
 - les crashs du jeu ;
 - les pertes de sauvegardes ;
 - les pertes de fichiers ;
-- les conflits avec d’autres mods ;
+- les conflits avec d'autres mods ;
 - les sanctions de compte ;
-- les pertes financières ;
+- les pertes financieres ;
 - les interruptions de service ;
-- les erreurs d’installation ;
-- les dommages causés par une mauvaise utilisation.
+- les erreurs d'installation ;
+- les dommages causes par une mauvaise utilisation.
 
 ────────────────────────────────────────
-9. RÉSILIATION
+11. RESILIATION
 ────────────────────────────────────────
 
-Les droits accordés par cette licence prennent fin automatiquement si vous ne respectez pas l’une de ses conditions.
+Les droits accordes par cette licence prennent fin automatiquement si vous ne respectez pas l'une de ses conditions.
 
-En cas de résiliation, vous devez immédiatement :
+En cas de resiliation, vous devez immediatement :
 
-1. Cesser d’utiliser le Mod.
+1. Cesser d'utiliser le Mod d'une maniere contraire a cette licence.
 
-2. Supprimer toute copie du Mod en votre possession, sauf copie strictement privée nécessaire à la conservation d’un historique personnel non publié.
+2. Supprimer toute redistribution non autorisee.
 
-3. Supprimer toute redistribution non autorisée.
+3. Supprimer toute version vendue, monetisee ou publiee sans autorisation si elle viole cette licence.
 
-La résiliation ne limite pas les autres recours possibles du titulaire des droits.
-
-────────────────────────────────────────
-10. AUTORISATION SPÉCIALE DE PARTAGE DE LIENS
-────────────────────────────────────────
-
-Vous êtes autorisé à partager des liens vers :
-
-- le dépôt GitHub officiel ;
-- les releases GitHub officielles ;
-- la documentation officielle ;
-- les pages officielles du projet.
-
-Vous n’êtes pas autorisé à héberger ou republier directement les fichiers du Mod ailleurs sans autorisation écrite préalable.
-
-────────────────────────────────────────
-11. MODIFICATIONS DE LA LICENCE
-────────────────────────────────────────
-
-Le titulaire des droits se réserve le droit de publier de nouvelles versions de cette licence pour les versions futures du Mod.
-
-Une version déjà publiée du Mod reste soumise à la licence qui l’accompagnait au moment de sa publication, sauf mention contraire explicite.
+La resiliation ne limite pas les autres recours possibles de DonJ.
 
 ────────────────────────────────────────
 12. CONTACT
 ────────────────────────────────────────
 
-Pour toute demande d’autorisation, de redistribution, d’intégration dans un projet, de partenariat ou d’utilisation spéciale, veuillez contacter l’auteur via le dépôt GitHub officiel du projet.
+Pour toute demande d'autorisation commerciale, de partenariat, d'integration dans un projet payant,
+de redistribution speciale ou d'utilisation non couverte par cette licence, contactez DonJ via le depot GitHub officiel.
 
 ────────────────────────────────────────
-13. RÉSUMÉ NON JURIDIQUE
+13. RESUME NON JURIDIQUE
 ────────────────────────────────────────
 
 Vous pouvez :
 - utiliser le Mod gratuitement en solo ;
 - regarder le code source ;
-- modifier le Mod pour vous-même ;
+- partager le Mod gratuitement ;
+- modifier le Mod ;
+- publier une version modifiee gratuitement ;
 - proposer des contributions via GitHub ;
 - partager le lien officiel du projet ;
-- faire des vidéos ou captures d’écran du Mod.
+- faire des videos, lives ou captures d'ecran du Mod.
+
+Vous devez :
+- garder le nom de DonJ associe au Mod ;
+- indiquer que DonJ est le createur original ;
+- conserver les credits et la licence ;
+- signaler clairement les versions modifiees comme non officielles si elles ne sont pas validees par DonJ.
 
 Vous ne pouvez pas :
-- vendre le Mod ;
-- republier le Mod ailleurs ;
-- redistribuer une version modifiée ;
-- l’inclure dans un modpack ;
-- l’utiliser dans GTA Online ;
-- retirer les crédits ;
-- vous faire passer pour l’auteur ;
-- utiliser le Mod pour créer des cheats multijoueur.
+- vendre le Mod sans contacter DonJ et obtenir son accord ecrit ;
+- vendre une version modifiee sans contacter DonJ et obtenir son accord ecrit ;
+- mettre le Mod derriere un acces payant ;
+- retirer les credits ;
+- vous faire passer pour le createur original ;
+- faire croire qu'une version modifiee est officielle sans accord ;
+- utiliser le Mod dans GTA Online ;
+- utiliser le Mod pour creer des cheats multijoueur.
 
-Ce résumé est fourni pour faciliter la compréhension. En cas de contradiction, les sections complètes de la licence prévalent.
+Ce resume est fourni pour faciliter la comprehension. En cas de contradiction,
+les sections completes de la licence prevalent.

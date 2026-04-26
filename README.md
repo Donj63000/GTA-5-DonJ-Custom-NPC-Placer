@@ -35,7 +35,7 @@
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET%20Framework-4.8-512bd4">
   <img alt="NIBScriptHookVDotNet API v2" src="https://img.shields.io/badge/NIBScriptHookVDotNet-API%20v2-blue">
   <img alt="Statut fonctionnel, développement actif" src="https://img.shields.io/badge/statut-fonctionnel%20%2F%20dev%20actif-brightgreen">
-  <img alt="Licence propriétaire non commerciale" src="https://img.shields.io/badge/licence-propri%C3%A9taire%20non%20commerciale-lightgrey">
+  <img alt="Licence source ouverte non commerciale" src="https://img.shields.io/badge/licence-source%20ouverte%20non%20commerciale-lightgrey">
 </p>
 
 > [!IMPORTANT]
@@ -956,8 +956,10 @@ Projet C# / .NET Framework 4.8 pour GTA V Enhanced, basé sur ScriptHookV et NIB
 
 ## Licence
 
-Ce projet est distribué sous une licence personnalisée propriétaire et non commerciale.
+Ce projet est distribué sous une licence personnalisée **source ouverte, non commerciale, avec attribution obligatoire**.
 
-Vous pouvez utiliser le mod gratuitement en mode solo, consulter le code source et proposer des contributions, mais vous n’êtes pas autorisé à revendre, republier, redistribuer ou intégrer le mod dans un modpack sans autorisation écrite.
+Vous pouvez utiliser le mod gratuitement en mode solo, consulter le code source, partager le mod gratuitement, le modifier et publier une version modifiée gratuite, à condition de garder le nom de **DonJ** associé au projet original.
+
+Vous n’êtes pas autorisé à vendre le mod, vendre une version modifiée, retirer les crédits, vous présenter comme le créateur original ou mettre le mod derrière un accès payant sans autorisation écrite préalable de DonJ.
 
 Voir le fichier [`LICENSE`](LICENSE) pour les conditions complètes.
