@@ -445,6 +445,10 @@ Vous pouvez le modifier depuis le menu du mod.
 
 ## Installation
 
+<p align="center">
+  <img src="Images/trevor.png" alt="DonJ Custom NPC Placer - image d'installation du mod" width="100%">
+</p>
+
 > [!TIP]
 > Pour aller au plus simple, le dépôt contient un dossier direct **`Mode-pour-jeu-ici`**.
 > C’est le dossier “mode pour jeu” : il contient les fichiers du mod prêts à placer dans GTA V Enhanced et le guide [`INSTALLATION_SIMPLE.txt`](Mode-pour-jeu-ici/INSTALLATION_SIMPLE.txt).
