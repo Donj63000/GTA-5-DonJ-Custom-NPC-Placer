@@ -816,6 +816,13 @@ NIBScriptHookVDotNet API v2
 .NET Framework 4.8
 ```
 
+Compatibilité testée avec d’autres mods :
+
+- **JulioNIB Iron Man** ;
+- **JulioNIB Superman**.
+
+Ces tests indiquent que **DonJ Custom NPC Placer** peut cohabiter avec ces mods en mode histoire quand les dépendances sont correctement installées. La compatibilité peut quand même dépendre des versions de GTA V Enhanced, ScriptHookV, NIBScriptHookVDotNet et des mods JulioNIB installés.
+
 Non garanti pour :
 
 - GTA Online ;
