@@ -1,7 +1,7 @@
 # DonJ Custom NPC Placer
 
 <p align="center">
-  <img src="Images/20260426005313_1.jpg" alt="DonJ Custom NPC Placer - contact téléphone Cartel dans GTA V Enhanced" width="100%">
+  <img src="Images/20260426005345_1.jpg" alt="DonJ Custom NPC Placer - scène GTA V Enhanced avec véhicules et zone placée" width="100%">
 </p>
 
 <p align="center">
