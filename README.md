@@ -140,6 +140,12 @@ Chaque PNJ peut recevoir un comportement différent :
 
 ### Appel du Cartel
 
+<p align="center">
+  <img src="Images/20260426005313_1.jpg" alt="Appel du Cartel depuis le téléphone du joueur" width="100%">
+  <br>
+  <sub>Appel du Cartel depuis le téléphone du joueur : ouvrez le téléphone, puis appuyez sur <code>C</code> quand le contact <code>Cartel</code> est affiché.</sub>
+</p>
+
 Le mod ajoute un contact téléphone **Cartel** utilisable directement en jeu.
 
 Quand le téléphone du joueur est ouvert, une interface `Contact téléphone` apparaît avec le contact `Cartel`. Appuyez sur `C` pour appeler une équipe de protection.
