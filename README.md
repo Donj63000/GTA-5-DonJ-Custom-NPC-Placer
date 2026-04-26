@@ -59,19 +59,19 @@ Le mod est pensé comme un outil de placement propre, pratique et immersif pour 
 
 <table>
   <tr>
-    <td width="33%"><img src="Images/20260426005313_1.jpg" alt="Contact téléphone Cartel"><br><sub>Contact téléphone Cartel</sub></td>
-    <td width="33%"><img src="Images/20260426030249_1.jpg" alt="Placement caméra précis de PNJ"><br><sub>Placement caméra précis</sub></td>
-    <td width="33%"><img src="Images/20260426030321_1.jpg" alt="Scène gardée avec PNJ"><br><sub>Scènes gardées</sub></td>
+    <td width="33%"><img src="Images/20260426005313_1.jpg" alt="Contact téléphone Cartel"></td>
+    <td width="33%"><img src="Images/20260426030249_1.jpg" alt="Placement caméra précis de PNJ"></td>
+    <td width="33%"><img src="Images/20260426030321_1.jpg" alt="Scène gardée avec PNJ"></td>
   </tr>
   <tr>
-    <td width="33%"><img src="Images/20260426030418_1.jpg" alt="PNJ armés en intérieur"><br><sub>Contrôle des PNJ</sub></td>
-    <td width="33%"><img src="Images/20260426005305_1.jpg" alt="Décor et sécurité"><br><sub>Décors et sécurité</sub></td>
-    <td width="33%"><img src="Images/20260426005345_1.jpg" alt="Véhicules et zone placée"><br><sub>Véhicules et zones</sub></td>
+    <td width="33%"><img src="Images/20260426030418_1.jpg" alt="PNJ armés en intérieur"></td>
+    <td width="33%"><img src="Images/20260426005305_1.jpg" alt="Décor et sécurité"></td>
+    <td width="33%"><img src="Images/20260426005345_1.jpg" alt="Véhicules et zone placée"></td>
   </tr>
   <tr>
-    <td width="33%"><img src="Images/20260426005350_1.jpg" alt="Installation de scène"><br><sub>Setups réutilisables</sub></td>
-    <td width="33%"><img src="Images/20260426005354_1.jpg" alt="Aperçu de scène GTA V Enhanced"><br><sub>Ambiance roleplay</sub></td>
-    <td width="33%"><img src="Images/20260425013205_1.jpg" alt="DonJ Custom NPC Placer en jeu"><br><sub>Mode histoire GTA V Enhanced</sub></td>
+    <td width="33%"><img src="Images/20260426005350_1.jpg" alt="Installation de scène"></td>
+    <td width="33%"><img src="Images/20260426005354_1.jpg" alt="Aperçu de scène GTA V Enhanced"></td>
+    <td width="33%"><img src="Images/20260425013205_1.jpg" alt="DonJ Custom NPC Placer en jeu"></td>
   </tr>
 </table>
 
