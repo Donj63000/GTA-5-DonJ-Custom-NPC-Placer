@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <img src="Images/principale.png" alt="DonJ Custom NPC Placer - image d'accueil du mod" width="100%">
+  <img src="Images/principale2.png" alt="DonJ Custom NPC Placer - image d'accueil du mod" width="100%">
 </p>
 
 <p align="center">
