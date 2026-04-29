@@ -331,3 +331,48 @@ Ce fichier conserve une trace ecrite de tous les crashs, erreurs, regressions et
 - Action menee: J'ai remplace le cas `bad:name` par `bad*name` pour tester la sanitisation d'un vrai caractere invalide conserve dans le nom de fichier.
 - Verification: Correction appliquee ; verification complete relancee juste apres cette entree.
 - Resolution: Resolue. Incident de test uniquement.
+
+## 2026-04-28 20:25:23 +02:00 - Echec transitoire de test apres refonte compacte du menu
+- Statut: Ferme
+- Contexte: Verification Release apres application du nouveau rendu compact du menu principal dans `src\DonJEnemySpawner\DonJEnemySpawner.cs`.
+- Symptome: Le premier `dotnet test GTA5modDEV.sln -c Release` a echoue sur `SourceFile_MainMenuUsesCustomNpcPlacerVisualFrame`.
+- Sources verifiees:
+  - `console dotnet test GTA5modDEV.sln -c Release`
+  - `C:\Users\nodig\GTA5modDEV\tests\DonJEnemySpawner.Tests\DonJEnemySpawnerTests.cs`
+  - `C:\Users\nodig\GTA5modDEV\src\DonJEnemySpawner\DonJEnemySpawner.cs`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\ScriptHookVDotNet.log`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\ScriptHookV.log`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\asiloader.log`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\scripts\*.log`
+- Extraits utiles:
+  - `console dotnet test GTA5modDEV.sln -c Release`: `Echoue SourceFile_MainMenuUsesCustomNpcPlacerVisualFrame` puis `La chaine ... ne contient pas la chaine 'DrawText(TrainerSubtitle, x + 24, y + 42'.`
+  - `C:\Users\nodig\GTA5modDEV\tests\DonJEnemySpawner.Tests\DonJEnemySpawnerTests.cs`: le test verifiait encore les coordonnees et dimensions de l'ancien rendu.
+  - Logs GTA verifies par presence/date: les logs existants sont anciens et sans lien exploitable avec cet incident de test hors jeu.
+- Analyse / hypothese: L'echec venait d'une assertion source obsolette apres remplacement volontaire du rendu UI, pas d'une regression de compilation ni d'un incident runtime GTA.
+- Action menee: J'ai mis a jour le test pour proteger le nouveau contrat compact: `MainMenuCompactVisibleRowLimit`, clamp compact, panneau resume compact, carte de l'option selectionnee et metriques NPC/vehicules/objets/interieurs.
+- Verification: `dotnet build GTA5modDEV.sln -c Release` a reussi sans avertissement, puis `dotnet test GTA5modDEV.sln -c Release` a reussi avec `119` tests verts.
+- Resolution: Resolue. Incident de test uniquement.
+
+## 2026-04-30 00:26:27 +02:00 - Echec transitoire de verification apres ajout de la vague ennemie Ballas
+- Statut: Ferme
+- Contexte: Verification Release apres integration de la deuxieme couche IA telephone pour appeler une vague ennemie Ballas dans `src\DonJEnemySpawner\DonJEnemySpawner.cs`.
+- Symptome: Un lancement parallele de `dotnet build GTA5modDEV.sln -c Release` et `dotnet test GTA5modDEV.sln -c Release` a d'abord verrouille `tests\DonJEnemySpawner.Tests\obj\Release\DonJEnemySpawner.Tests.dll`. Le test a ensuite echoue sur `SourceFile_CartelGroundingCallsStayLimitedToPlacementUpgradeAndRescueTeleport`, car il comptait globalement `SET_VEHICLE_ON_GROUND_PROPERLY` et ne distinguait pas encore les deux nouveaux appels vehicule Ballas.
+- Sources verifiees:
+  - `console dotnet build .\src\DonJEnemySpawner\DonJEnemySpawner.csproj -c Release`
+  - `console dotnet build GTA5modDEV.sln -c Release`
+  - `console dotnet test GTA5modDEV.sln -c Release`
+  - `C:\Users\nodig\GTA5modDEV\src\DonJEnemySpawner\DonJEnemySpawner.cs`
+  - `C:\Users\nodig\GTA5modDEV\tests\DonJEnemySpawner.Tests\DonJEnemySpawnerTests.cs`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\ScriptHookVDotNet.log`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\ScriptHookV.log`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\asiloader.log`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\scripts\*.log`
+- Extraits utiles:
+  - `console dotnet build GTA5modDEV.sln -c Release`: `CS2012 ... DonJEnemySpawner.Tests.dll ... because it is being used by another process`.
+  - `console dotnet test GTA5modDEV.sln -c Release`: `Attendu : <3>, Reel : <5>. Le projet doit limiter SET_VEHICLE_ON_GROUND_PROPERLY...`.
+  - `C:\Users\nodig\GTA5modDEV\src\DonJEnemySpawner\DonJEnemySpawner.cs`: la vague ennemie ajoute volontairement un grounding a la configuration initiale du vehicule Ballas et un grounding a sa relocalisation de secours.
+  - Logs GTA verifies par presence/date: les logs existants datent de 2025 et ne contiennent pas d'information exploitable pour cet incident de build/test hors jeu.
+- Analyse / hypothese: Le verrouillage venait de ma verification locale lancee en parallele. L'echec de test venait d'une assertion source trop globale apres l'ajout volontaire de la couche vehicule Ballas, pas d'une regression du Cartel.
+- Action menee: J'ai relance les validations en sequence, puis j'ai ajuste le test pour compter separement le placement initial, l'upgrade Cartel, la TP secours Cartel, la configuration vehicule Ballas et la relocalisation secours Ballas. J'ai aussi ajoute des tests du contrat Ballas: constantes, touche R telephone, bypass de l'IA generique, groupe hostile, blips rouges et SMG/drive-by.
+- Verification: `dotnet build GTA5modDEV.sln -c Release` a reussi sans avertissement, puis `dotnet test GTA5modDEV.sln -c Release` a reussi avec `123` tests verts.
+- Resolution: Resolue. Incident d'outillage et de test uniquement.

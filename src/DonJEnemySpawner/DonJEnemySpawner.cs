@@ -73,6 +73,11 @@ private const int MenuItemCount = 9;
 // Le nouveau menu principal est maintenant dynamique avec sections deroulantes.
 private const int MainMenuItemCount = 24;
 private const int MainMenuVisibleRowLimit = 24;
+
+// Limite visuelle du nouveau menu compact.
+// MainMenuVisibleRowLimit reste a 24 pour les contrats/tests historiques,
+// mais le rendu et le scroll utilisent cette limite plus confortable.
+private const int MainMenuCompactVisibleRowLimit = 16;
 private const int WeaponEditorItemCount = 12;
 
     private const int RelationshipCompanion = 0;
@@ -858,6 +863,8 @@ private void HandleMainMenuKey(KeyEventArgs e)
         return;
     }
 
+    int pageSize = GetMainMenuCompactVisibleRowCount(entries.Count);
+
     switch (e.KeyCode)
     {
         case Keys.Up:
@@ -875,13 +882,13 @@ private void HandleMainMenuKey(KeyEventArgs e)
             break;
 
         case Keys.PageUp:
-            _mainMenuIndex = Clamp(_mainMenuIndex - MainMenuVisibleRowLimit, 0, entries.Count - 1);
+            _mainMenuIndex = Clamp(_mainMenuIndex - pageSize, 0, entries.Count - 1);
             EnsureMainMenuSelectionVisible(entries.Count);
             e.Handled = true;
             break;
 
         case Keys.PageDown:
-            _mainMenuIndex = Clamp(_mainMenuIndex + MainMenuVisibleRowLimit, 0, entries.Count - 1);
+            _mainMenuIndex = Clamp(_mainMenuIndex + pageSize, 0, entries.Count - 1);
             EnsureMainMenuSelectionVisible(entries.Count);
             e.Handled = true;
             break;
@@ -899,39 +906,39 @@ private void HandleMainMenuKey(KeyEventArgs e)
             break;
 
         case Keys.Left:
-            case Keys.NumPad4:
-                ChangeMainMenuValue(-1);
-                e.Handled = true;
-                break;
+        case Keys.NumPad4:
+            ChangeMainMenuValue(-1);
+            e.Handled = true;
+            break;
 
-            case Keys.Right:
-            case Keys.NumPad6:
-                ChangeMainMenuValue(1);
-                e.Handled = true;
-                break;
+        case Keys.Right:
+        case Keys.NumPad6:
+            ChangeMainMenuValue(1);
+            e.Handled = true;
+            break;
 
-            case Keys.Enter:
-            case Keys.NumPad5:
-                ActivateMainMenuItem();
-                e.Handled = true;
-                break;
+        case Keys.Enter:
+        case Keys.NumPad5:
+            ActivateMainMenuItem();
+            e.Handled = true;
+            break;
 
         case Keys.T:
             if (GetSelectedMainMenuAction() == MainMenuAction.NpcModel && CurrentModelOption().IsCustom)
             {
                 _customModelInputRequested = true;
                 e.Handled = true;
-                }
-                break;
+            }
+            break;
 
-            case Keys.Escape:
-            case Keys.Back:
-            case Keys.NumPad0:
-                _menuVisible = false;
-                e.Handled = true;
-                break;
-        }
+        case Keys.Escape:
+        case Keys.Back:
+        case Keys.NumPad0:
+            _menuVisible = false;
+            e.Handled = true;
+            break;
     }
+}
 
     private void HandleWeaponEditorKey(KeyEventArgs e)
     {
@@ -1320,7 +1327,7 @@ private void NormalizeMainMenuSelection(List<MainMenuEntry> entries)
 
 private void EnsureMainMenuSelectionVisible(int entryCount)
 {
-    int visibleRows = GetMainMenuVisibleRowCount(entryCount);
+    int visibleRows = GetMainMenuCompactVisibleRowCount(entryCount);
 
     if (_mainMenuIndex < _mainMenuScrollOffset)
     {
@@ -1345,27 +1352,25 @@ private static int GetMainMenuVisibleRowCount(int entryCount)
     return Math.Min(MainMenuVisibleRowLimit, entryCount);
 }
 
+private static int GetMainMenuCompactVisibleRowCount(int entryCount)
+{
+    if (entryCount <= 0)
+    {
+        return 1;
+    }
+
+    return Math.Min(MainMenuCompactVisibleRowLimit, entryCount);
+}
+
 private void OpenMainMenuSectionForPlacementType(PlacementEntityType placementType)
 {
-    switch (placementType)
-    {
-        case PlacementEntityType.Npc:
-            _mainMenuNpcExpanded = true;
-            break;
-
-        case PlacementEntityType.Vehicle:
-            _mainMenuVehicleExpanded = true;
-            break;
-
-        case PlacementEntityType.Object:
-            _mainMenuObjectExpanded = true;
-            break;
-
-        case PlacementEntityType.Entrance:
-        case PlacementEntityType.Exit:
-            _mainMenuInteriorExpanded = true;
-            break;
-    }
+    // Focus automatique : quand on change de type, on ouvre uniquement
+    // la section utile. Le joueur peut toujours rouvrir les autres sections
+    // manuellement avec Entree, mais le premier regard reste propre.
+    _mainMenuNpcExpanded = placementType == PlacementEntityType.Npc;
+    _mainMenuVehicleExpanded = placementType == PlacementEntityType.Vehicle;
+    _mainMenuObjectExpanded = placementType == PlacementEntityType.Object;
+    _mainMenuInteriorExpanded = placementType == PlacementEntityType.Entrance || placementType == PlacementEntityType.Exit;
 }
 
 private void ToggleMainMenuSection(MainMenuAction action)
@@ -1460,60 +1465,74 @@ private void DrawMainMenu()
     List<MainMenuEntry> entries = BuildMainMenuEntries();
     NormalizeMainMenuSelection(entries);
 
-    int visibleRows = GetMainMenuVisibleRowCount(entries.Count);
-    int x = 22;
-    int y = 12;
-    int width = 850;
-    int titleHeight = 86;
-    int rowHeight = 22;
-    int footerHeight = 62;
+    int visibleRows = GetMainMenuCompactVisibleRowCount(entries.Count);
+
+    // Base 1280x720 SHVDN: panneau compact, lisible, mais moins envahissant.
+    int x = 34;
+    int y = 24;
+    int width = 704;
+    int titleHeight = 96;
+    int rowHeight = 28;
+    int footerHeight = 96;
     int rowAreaHeight = visibleRows * rowHeight;
     int totalHeight = titleHeight + rowAreaHeight + footerHeight;
 
-    Color accent = Color.FromArgb(245, 182, 26, 32);
-    Color accentDark = Color.FromArgb(245, 72, 8, 14);
+    Color accent = GetPlacementTypeColor(_selectedPlacementType);
+    Color panelBackground = Color.FromArgb(224, 7, 8, 12);
+    Color headerBackground = Color.FromArgb(232, 14, 15, 20);
+    Color listBackground = Color.FromArgb(168, 8, 9, 12);
+    Color lineColor = Color.FromArgb(54, 255, 255, 255);
 
     DrawPanelFrame(x, y, width, totalHeight, accent);
+    DrawRect(x + 1, y + 1, width - 2, totalHeight - 2, panelBackground);
 
-    DrawRect(x, y, width, titleHeight, Color.FromArgb(240, 45, 4, 9));
-    DrawRect(x, y, width, 9, accentDark);
-    DrawRect(x, y + 9, width, 2, Color.FromArgb(175, 255, 255, 255));
-    DrawRect(x, y + titleHeight - 4, width, 4, accent);
-    DrawRect(x, y + titleHeight, width, 1, Color.FromArgb(180, 0, 0, 0));
+    // Header plus calme : le rouge n'est plus un gros bloc permanent.
+    DrawRect(x, y, width, titleHeight, headerBackground);
+    DrawRect(x, y, width, 4, Color.FromArgb(235, accent.R, accent.G, accent.B));
+    DrawRect(x, y + titleHeight - 1, width, 1, Color.FromArgb(135, accent.R, accent.G, accent.B));
+    DrawRect(x + 18, y + 17, 4, 42, Color.FromArgb(230, accent.R, accent.G, accent.B));
 
-    DrawText(TrainerTitle, x + 22, y + 12, 0.47f, Color.White, false, true);
-    DrawText(TrainerSubtitle, x + 24, y + 42, 0.275f, Color.FromArgb(232, 232, 232), false, false);
+    DrawText(TrainerTitle, x + 30, y + 12, 0.425f, Color.White, false, true);
+    DrawText(TrainerSubtitle, x + 31, y + 42, 0.252f, Color.FromArgb(202, 204, 211), false, false);
 
-    DrawBadge(
-        x + width - 376,
-        y + 18,
-        160,
-        "TYPE " + PlacementTypeDisplayName(_selectedPlacementType).ToUpperInvariant(),
-        Color.FromArgb(178, 18, 18, 21),
-        GetPlacementTypeColor(_selectedPlacementType));
-
-    DrawBadge(
-        x + width - 207,
-        y + 18,
-        110,
-        entries.Count.ToString(CultureInfo.InvariantCulture) + " LIGNES",
-        Color.FromArgb(145, 18, 18, 21),
-        Color.FromArgb(220, 210, 210, 210));
-
-    DrawBadge(
-        x + width - 88,
-        y + 18,
-        68,
-        MenuToggleKeyLabel,
-        Color.FromArgb(145, 18, 18, 21),
+    DrawHeaderStat(
+        x + width - 342,
+        y + 17,
+        124,
+        "TYPE",
+        PlacementTypeDisplayName(_selectedPlacementType).ToUpperInvariant(),
         accent);
 
-    int helperY = y + 63;
-    DrawText("Entree = ouvrir/valider | Gauche/Droite = modifier | PageUp/PageDown = defiler vite", x + 24, helperY, 0.245f, Color.FromArgb(202, 202, 202), false, false);
+    DrawHeaderStat(
+        x + width - 210,
+        y + 17,
+        104,
+        "LIGNES",
+        (_mainMenuIndex + 1).ToString(CultureInfo.InvariantCulture) + "/" + entries.Count.ToString(CultureInfo.InvariantCulture),
+        Color.FromArgb(210, 210, 218));
+
+    DrawHeaderStat(
+        x + width - 98,
+        y + 17,
+        72,
+        "MENU",
+        MenuToggleKeyLabel,
+        accent);
+
+    DrawText(
+        "Entree valider  |  Fleches naviguer  |  Gauche/Droite modifier  |  PageUp/PageDown defiler",
+        x + 31,
+        y + 70,
+        0.225f,
+        Color.FromArgb(168, 170, 178),
+        false,
+        false);
 
     int rowY = y + titleHeight;
 
-    DrawRect(x + 8, rowY + 4, width - 16, rowAreaHeight - 8, Color.FromArgb(64, 255, 255, 255));
+    DrawRect(x, rowY, width, rowAreaHeight, listBackground);
+    DrawRect(x + 12, rowY + 8, width - 24, rowAreaHeight - 16, Color.FromArgb(42, 255, 255, 255));
+    DrawRect(x + 326, rowY + 10, 1, rowAreaHeight - 20, lineColor);
 
     int startIndex = _mainMenuScrollOffset;
     int endIndex = Math.Min(entries.Count, startIndex + visibleRows);
@@ -1525,24 +1544,17 @@ private void DrawMainMenu()
 
     if (entries.Count > visibleRows)
     {
-        DrawMainMenuScrollbar(x + width - 15, rowY + 8, 7, rowAreaHeight - 16, entries.Count, visibleRows);
+        DrawMainMenuScrollbar(x + width - 13, rowY + 10, 5, rowAreaHeight - 20, entries.Count, visibleRows);
     }
 
     int footerY = y + titleHeight + rowAreaHeight;
+    MainMenuEntry selectedEntry = GetSelectedMainMenuEntry();
 
-    DrawRect(x, footerY, width, footerHeight, Color.FromArgb(224, 10, 10, 12));
-    DrawRect(x, footerY, width, 1, Color.FromArgb(120, 255, 255, 255));
+    DrawRect(x, footerY, width, footerHeight, Color.FromArgb(232, 8, 9, 13));
+    DrawRect(x, footerY, width, 1, Color.FromArgb(80, 255, 255, 255));
+    DrawSelectedMainMenuCard(x, footerY, width, footerHeight, selectedEntry);
 
-        DrawBadge(x + 18, footerY + 10, 78, MenuToggleKeyLabel, Color.FromArgb(150, 60, 60, 64), accent);
-        DrawBadge(x + 105, footerY + 10, 112, "FLECHES", Color.FromArgb(130, 60, 60, 64), Color.FromArgb(210, 190, 190, 190));
-    DrawBadge(x + 226, footerY + 10, 154, "GAUCHE/DROITE", Color.FromArgb(130, 60, 60, 64), Color.FromArgb(210, 190, 190, 190));
-    DrawBadge(x + 389, footerY + 10, 90, "ENTREE", Color.FromArgb(130, 60, 60, 64), Color.FromArgb(210, 190, 190, 190));
-
-    string positionText = (_mainMenuIndex + 1).ToString(CultureInfo.InvariantCulture) + "/" + entries.Count.ToString(CultureInfo.InvariantCulture);
-    DrawText("Position " + positionText + " | Sections deroulantes organisees par usage", x + 494, footerY + 16, 0.272f, Color.FromArgb(232, 232, 232), false, false);
-    DrawText("Astuce : ouvre seulement la section utile. Sur Modele NPC Custom, appuie sur T pour saisir un modele.", x + 18, footerY + 39, 0.268f, Color.FromArgb(205, 205, 205), false, false);
-
-    DrawMainSummaryPanel(x + width + 18, y, 338, 286);
+    DrawMainSummaryPanel(x + width + 16, y, 298, 310);
 
     /*
      * Contrats source historiques conserves volontairement pour les tests anti-regression
@@ -1558,78 +1570,92 @@ private void DrawMainMenu()
 
 private void DrawWeaponEditorMenu()
 {
-    int x = 32;
-    int y = 44;
-        int width = 735;
-        int titleHeight = 62;
-        int rowHeight = 30;
-        int footerHeight = 58;
-        int totalHeight = titleHeight + WeaponEditorItemCount * rowHeight + footerHeight;
+    int x = 46;
+    int y = 38;
+    int width = 688;
+    int titleHeight = 82;
+    int rowHeight = 30;
+    int footerHeight = 70;
+    int totalHeight = titleHeight + WeaponEditorItemCount * rowHeight + footerHeight;
 
-        Color accent = Color.FromArgb(245, 202, 150, 34);
+    Color accent = Color.FromArgb(245, 202, 150, 34);
 
-        DrawPanelFrame(x, y, width, totalHeight, accent);
+    DrawPanelFrame(x, y, width, totalHeight, accent);
+    DrawRect(x + 1, y + 1, width - 2, totalHeight - 2, Color.FromArgb(224, 7, 8, 12));
 
-        DrawRect(x, y, width, titleHeight, Color.FromArgb(238, 55, 43, 10));
-        DrawRect(x, y, width, 8, Color.FromArgb(230, 132, 88, 12));
-        DrawRect(x, y + titleHeight - 3, width, 3, accent);
+    DrawRect(x, y, width, titleHeight, Color.FromArgb(232, 15, 15, 19));
+    DrawRect(x, y, width, 4, Color.FromArgb(235, accent.R, accent.G, accent.B));
+    DrawRect(x, y + titleHeight - 1, width, 1, Color.FromArgb(135, accent.R, accent.G, accent.B));
+    DrawRect(x + 18, y + 17, 4, 40, Color.FromArgb(230, accent.R, accent.G, accent.B));
 
-        DrawText("Atelier arme", x + 22, y + 11, 0.46f, Color.White, false, true);
-        DrawText(FitText(CurrentWeaponDisplayName(), 58), x + 24, y + 40, 0.275f, Color.FromArgb(232, 232, 232), false, false);
+    DrawText("Atelier arme", x + 30, y + 12, 0.425f, Color.White, false, true);
+    DrawText(FitText(CurrentWeaponDisplayName(), 54), x + 31, y + 42, 0.252f, Color.FromArgb(202, 204, 211), false, false);
 
-        DrawBadge(
-            x + width - 150,
-            y + 17,
-            122,
-            "EDITION",
-            Color.FromArgb(165, 16, 16, 18),
-            accent);
+    DrawHeaderStat(
+        x + width - 132,
+        y + 18,
+        104,
+        "MODE",
+        "EDITION",
+        accent);
 
-        int rowY = y + titleHeight;
+    int rowY = y + titleHeight;
 
-        DrawRect(x + 8, rowY + 4, width - 16, WeaponEditorItemCount * rowHeight - 8, Color.FromArgb(65, 255, 255, 255));
-        DrawRect(x + 286, rowY + 7, 1, WeaponEditorItemCount * rowHeight - 14, Color.FromArgb(75, 255, 255, 255));
+    DrawRect(x, rowY, width, WeaponEditorItemCount * rowHeight, Color.FromArgb(168, 8, 9, 12));
+    DrawRect(x + 12, rowY + 8, width - 24, WeaponEditorItemCount * rowHeight - 16, Color.FromArgb(42, 255, 255, 255));
+    DrawRect(x + 292, rowY + 10, 1, WeaponEditorItemCount * rowHeight - 20, Color.FromArgb(54, 255, 255, 255));
 
-        DrawMenuRow(x, width, rowY + rowHeight * 0, "Retour", "Revenir au menu principal", _weaponEditorIndex == 0, rowHeight, 320, accent);
-        DrawMenuRow(x, width, rowY + rowHeight * 1, "Preset", WeaponPresetDisplayName(_selectedWeaponLoadout.Preset), _weaponEditorIndex == 1, rowHeight, 320, accent);
-        DrawMenuRow(x, width, rowY + rowHeight * 2, "Chargeur etendu", BoolText(_selectedWeaponLoadout.ExtendedClip), _weaponEditorIndex == 2, rowHeight, 320, accent);
-        DrawMenuRow(x, width, rowY + rowHeight * 3, "Silencieux", BoolText(_selectedWeaponLoadout.Suppressor), _weaponEditorIndex == 3, rowHeight, 320, accent);
-        DrawMenuRow(x, width, rowY + rowHeight * 4, "Lampe", BoolText(_selectedWeaponLoadout.Flashlight), _weaponEditorIndex == 4, rowHeight, 320, accent);
-        DrawMenuRow(x, width, rowY + rowHeight * 5, "Poignee", BoolText(_selectedWeaponLoadout.Grip), _weaponEditorIndex == 5, rowHeight, 320, accent);
-        DrawMenuRow(x, width, rowY + rowHeight * 6, "Lunette", ScopeDisplayName(_selectedWeaponLoadout.Scope), _weaponEditorIndex == 6, rowHeight, 320, accent);
-        DrawMenuRow(x, width, rowY + rowHeight * 7, "Compensateur / bouche", BoolText(_selectedWeaponLoadout.Muzzle), _weaponEditorIndex == 7, rowHeight, 320, accent);
-        DrawMenuRow(x, width, rowY + rowHeight * 8, "Canon ameliore", BoolText(_selectedWeaponLoadout.ImprovedBarrel), _weaponEditorIndex == 8, rowHeight, 320, accent);
-        DrawMenuRow(x, width, rowY + rowHeight * 9, "Munitions MK2", Mk2AmmoDisplayName(_selectedWeaponLoadout.Mk2Ammo), _weaponEditorIndex == 9, rowHeight, 320, accent);
-        DrawMenuRow(x, width, rowY + rowHeight * 10, "Teinte", _selectedWeaponLoadout.Tint.ToString(CultureInfo.InvariantCulture), _weaponEditorIndex == 10, rowHeight, 320, accent);
-        DrawMenuRow(x, width, rowY + rowHeight * 11, "Appliquer aux NPC poses", "Mettre a jour les PNJ existants", _weaponEditorIndex == 11, rowHeight, 320, accent);
+    DrawMenuRow(x, width, rowY + rowHeight * 0, "Retour", "Revenir au menu principal", _weaponEditorIndex == 0, rowHeight, 324, accent);
+    DrawMenuRow(x, width, rowY + rowHeight * 1, "Preset", WeaponPresetDisplayName(_selectedWeaponLoadout.Preset), _weaponEditorIndex == 1, rowHeight, 324, accent);
+    DrawMenuRow(x, width, rowY + rowHeight * 2, "Chargeur etendu", BoolText(_selectedWeaponLoadout.ExtendedClip), _weaponEditorIndex == 2, rowHeight, 324, accent);
+    DrawMenuRow(x, width, rowY + rowHeight * 3, "Silencieux", BoolText(_selectedWeaponLoadout.Suppressor), _weaponEditorIndex == 3, rowHeight, 324, accent);
+    DrawMenuRow(x, width, rowY + rowHeight * 4, "Lampe", BoolText(_selectedWeaponLoadout.Flashlight), _weaponEditorIndex == 4, rowHeight, 324, accent);
+    DrawMenuRow(x, width, rowY + rowHeight * 5, "Poignee", BoolText(_selectedWeaponLoadout.Grip), _weaponEditorIndex == 5, rowHeight, 324, accent);
+    DrawMenuRow(x, width, rowY + rowHeight * 6, "Lunette", ScopeDisplayName(_selectedWeaponLoadout.Scope), _weaponEditorIndex == 6, rowHeight, 324, accent);
+    DrawMenuRow(x, width, rowY + rowHeight * 7, "Compensateur / bouche", BoolText(_selectedWeaponLoadout.Muzzle), _weaponEditorIndex == 7, rowHeight, 324, accent);
+    DrawMenuRow(x, width, rowY + rowHeight * 8, "Canon ameliore", BoolText(_selectedWeaponLoadout.ImprovedBarrel), _weaponEditorIndex == 8, rowHeight, 324, accent);
+    DrawMenuRow(x, width, rowY + rowHeight * 9, "Munitions MK2", Mk2AmmoDisplayName(_selectedWeaponLoadout.Mk2Ammo), _weaponEditorIndex == 9, rowHeight, 324, accent);
+    DrawMenuRow(x, width, rowY + rowHeight * 10, "Teinte", _selectedWeaponLoadout.Tint.ToString(CultureInfo.InvariantCulture), _weaponEditorIndex == 10, rowHeight, 324, accent);
+    DrawMenuRow(x, width, rowY + rowHeight * 11, "Appliquer aux NPC poses", "Mettre a jour les PNJ existants", _weaponEditorIndex == 11, rowHeight, 324, accent);
 
-        int footerY = y + titleHeight + WeaponEditorItemCount * rowHeight;
+    int footerY = y + titleHeight + WeaponEditorItemCount * rowHeight;
 
-        DrawRect(x, footerY, width, footerHeight, Color.FromArgb(224, 10, 10, 12));
-        DrawRect(x, footerY, width, 1, Color.FromArgb(120, 255, 255, 255));
+    DrawRect(x, footerY, width, footerHeight, Color.FromArgb(232, 8, 9, 13));
+    DrawRect(x, footerY, width, 1, Color.FromArgb(80, 255, 255, 255));
 
-        DrawText("Gauche/Droite modifier | Entree appliquer/retour | Echap retour", x + 18, footerY + 10, 0.285f, Color.FromArgb(232, 232, 232), false, false);
-    DrawText("Les composants incompatibles avec l'arme sont ignores proprement.", x + 18, footerY + 34, 0.272f, Color.FromArgb(205, 205, 205), false, false);
+    DrawKeyHint(x + 18, footerY + 14, 92, "FLECHES", Color.FromArgb(210, 210, 218));
+    DrawKeyHint(x + 118, footerY + 14, 126, "G/D", accent);
+    DrawKeyHint(x + 252, footerY + 14, 92, "ENTREE", Color.FromArgb(210, 210, 218));
+    DrawKeyHint(x + 352, footerY + 14, 92, "ECHAP", Color.FromArgb(210, 210, 218));
+
+    DrawText(
+        "Composants incompatibles ignores proprement.",
+        x + 18,
+        footerY + 44,
+        0.238f,
+        Color.FromArgb(178, 180, 188),
+        false,
+        false);
 }
 
 private void DrawMainMenuEntryRow(int x, int width, int y, int rowHeight, MainMenuEntry entry, bool selected)
 {
-    int innerX = x + 8;
-    int innerW = width - 16;
-    int rowY = y + 1;
-    int rowH = rowHeight - 2;
-    int indent = Math.Max(0, entry.Level) * 20;
-    int labelX = x + 18 + indent;
-    int valueX = x + 395;
-    int valueRight = x + width - 42;
+    int innerX = x + 12;
+    int innerW = width - 24;
+    int rowY = y + 2;
+    int rowH = rowHeight - 4;
+    int indent = Math.Max(0, entry.Level) * 18;
+    int labelX = x + 30 + indent;
+    int valueX = x + 344;
+    int valueRight = x + width - 38;
     int valueMaxLength = Math.Max(10, (valueRight - valueX) / 7);
-    int textOffset = 5;
-    float textScale = entry.Kind == MainMenuRowKind.SectionHeader ? 0.282f : 0.268f;
+    int textOffset = 7;
+    float textScale = entry.Kind == MainMenuRowKind.SectionHeader ? 0.270f : 0.252f;
 
     Color accent = GetMainMenuEntryAccent(entry);
     Color background = GetMainMenuEntryBackground(entry, selected);
-    Color labelColor = entry.Enabled ? Color.FromArgb(232, 232, 232) : Color.FromArgb(145, 145, 145);
-    Color valueColor = entry.Enabled ? Color.FromArgb(205, 205, 205) : Color.FromArgb(128, 128, 128);
+    Color labelColor = entry.Enabled ? Color.FromArgb(220, 222, 228) : Color.FromArgb(132, 134, 142);
+    Color valueColor = entry.Enabled ? Color.FromArgb(185, 187, 196) : Color.FromArgb(116, 118, 126);
 
     if (selected)
     {
@@ -1641,40 +1667,55 @@ private void DrawMainMenuEntryRow(int x, int width, int y, int rowHeight, MainMe
 
     if (entry.Kind == MainMenuRowKind.SectionHeader)
     {
-        DrawRect(innerX, rowY, innerW, 1, Color.FromArgb(82, 255, 255, 255));
-        DrawRect(innerX, rowY + rowH - 1, innerW, 1, Color.FromArgb(145, 0, 0, 0));
-        DrawRect(innerX, rowY, 7, rowH, Color.FromArgb(235, accent.R, accent.G, accent.B));
+        DrawRect(innerX, rowY, innerW, 1, Color.FromArgb(48, 255, 255, 255));
+        DrawRect(innerX, rowY + rowH - 1, innerW, 1, Color.FromArgb(130, 0, 0, 0));
+        DrawRect(innerX, rowY, 5, rowH, Color.FromArgb(232, accent.R, accent.G, accent.B));
 
         if (entry.Active)
         {
-            DrawRect(innerX + 7, rowY, 4, rowH, Color.FromArgb(190, 255, 255, 255));
+            DrawRect(innerX + 5, rowY, 3, rowH, Color.FromArgb(185, 255, 255, 255));
         }
 
         string arrow = entry.Expanded ? "v" : ">";
-        DrawText(arrow + " " + entry.Label, labelX, y + textOffset, textScale, labelColor, false, true);
+        DrawText(arrow + "  " + entry.Label, labelX, y + textOffset, textScale, labelColor, false, true);
         DrawText(FitText(entry.Value, valueMaxLength), valueX, y + textOffset, textScale, valueColor, false, false);
         return;
     }
 
-    DrawRect(innerX, rowY, 4, rowH, Color.FromArgb(185, accent.R, accent.G, accent.B));
+    DrawRect(innerX, rowY, 3, rowH, Color.FromArgb(168, accent.R, accent.G, accent.B));
 
     if (entry.Level > 0)
     {
-        DrawRect(x + 25, rowY + 5, 8, 1, Color.FromArgb(105, accent.R, accent.G, accent.B));
-        DrawRect(x + 25, rowY + 5, 1, rowH - 9, Color.FromArgb(95, accent.R, accent.G, accent.B));
+        DrawRect(x + 40, rowY + 6, 10, 1, Color.FromArgb(72, accent.R, accent.G, accent.B));
+        DrawRect(x + 40, rowY + 6, 1, rowH - 11, Color.FromArgb(62, accent.R, accent.G, accent.B));
     }
 
     if (entry.Kind == MainMenuRowKind.Primary || entry.Kind == MainMenuRowKind.PrimaryAction)
     {
-        DrawRect(innerX + 4, rowY, 3, rowH, Color.FromArgb(175, 255, 255, 255));
+        DrawRect(innerX + 3, rowY, 3, rowH, Color.FromArgb(130, 255, 255, 255));
     }
 
-    DrawText(entry.Label ?? string.Empty, labelX, y + textOffset, textScale, labelColor, false, selected || entry.Kind == MainMenuRowKind.Primary || entry.Kind == MainMenuRowKind.PrimaryAction);
-    DrawText(FitText(entry.Value, valueMaxLength), valueX, y + textOffset, textScale, valueColor, false, false);
+    DrawText(
+        entry.Label ?? string.Empty,
+        labelX,
+        y + textOffset,
+        textScale,
+        labelColor,
+        false,
+        selected || entry.Kind == MainMenuRowKind.Primary || entry.Kind == MainMenuRowKind.PrimaryAction);
+
+    DrawText(
+        FitText(entry.Value, valueMaxLength),
+        valueX,
+        y + textOffset,
+        textScale,
+        valueColor,
+        false,
+        false);
 
     if (selected)
     {
-        DrawText(">", x + width - 31, y + textOffset, textScale, Color.White, false, true);
+        DrawText(">", x + width - 31, y + textOffset - 1, 0.292f, Color.White, false, true);
     }
 }
 
@@ -1685,46 +1726,51 @@ private Color GetMainMenuEntryBackground(MainMenuEntry entry, bool selected)
         switch (entry.Kind)
         {
             case MainMenuRowKind.PrimaryAction:
-                return Color.FromArgb(226, 18, 118, 84);
+                return Color.FromArgb(224, 18, 102, 74);
 
             case MainMenuRowKind.Primary:
-                return Color.FromArgb(226, 138, 20, 26);
+                return Color.FromArgb(220, 55, 58, 70);
 
             case MainMenuRowKind.Danger:
-                return Color.FromArgb(224, 135, 22, 22);
+                return Color.FromArgb(224, 112, 34, 34);
 
             case MainMenuRowKind.SectionHeader:
-                return Color.FromArgb(224, 55, 55, 62);
+                return entry.Active
+                    ? Color.FromArgb(220, 58, 60, 72)
+                    : Color.FromArgb(214, 45, 47, 57);
+
+            case MainMenuRowKind.Info:
+                return Color.FromArgb(205, 43, 46, 56);
 
             default:
-                return Color.FromArgb(214, 124, 22, 28);
+                return Color.FromArgb(214, 48, 51, 62);
         }
     }
 
     switch (entry.Kind)
     {
         case MainMenuRowKind.PrimaryAction:
-            return Color.FromArgb(150, 10, 95, 67);
+            return Color.FromArgb(128, 12, 72, 54);
 
         case MainMenuRowKind.Primary:
-            return Color.FromArgb(148, 85, 12, 18);
+            return Color.FromArgb(88, 24, 27, 36);
 
         case MainMenuRowKind.Action:
-            return Color.FromArgb(108, 22, 22, 28);
+            return Color.FromArgb(76, 22, 25, 34);
 
         case MainMenuRowKind.Info:
-            return Color.FromArgb(76, 15, 15, 18);
+            return Color.FromArgb(60, 18, 21, 28);
 
         case MainMenuRowKind.Danger:
-            return Color.FromArgb(96, 72, 13, 13);
+            return Color.FromArgb(74, 68, 24, 24);
 
         case MainMenuRowKind.SectionHeader:
             return entry.Active
-                ? Color.FromArgb(145, 42, 42, 48)
-                : Color.FromArgb(112, 20, 20, 24);
+                ? Color.FromArgb(118, 34, 38, 48)
+                : Color.FromArgb(92, 21, 24, 32);
 
         default:
-            return Color.FromArgb(82, 14, 14, 16);
+            return Color.FromArgb(62, 18, 21, 29);
     }
 }
 
@@ -1753,7 +1799,7 @@ private Color GetMainMenuEntryAccent(MainMenuEntry entry)
         case MainMenuAction.NpcBehavior:
         case MainMenuAction.NpcPatrolRadius:
         case MainMenuAction.NpcAutoRespawn:
-            return Color.FromArgb(230, 185, 32, 40);
+            return Color.FromArgb(230, 190, 58, 64);
 
         case MainMenuAction.SectionVehicle:
         case MainMenuAction.VehicleCategory:
@@ -1805,7 +1851,7 @@ private Color GetPlacementTypeColor(PlacementEntityType placementType)
 
         case PlacementEntityType.Npc:
         default:
-            return Color.FromArgb(230, 185, 32, 40);
+            return Color.FromArgb(230, 190, 58, 64);
     }
 }
 
@@ -1818,12 +1864,13 @@ private void DrawMainMenuScrollbar(int x, int y, int width, int height, int entr
 
     int trackHeight = Math.Max(1, height);
     int maxScroll = Math.Max(1, entryCount - visibleRows);
-    int thumbHeight = Math.Max(24, (int)Math.Round(trackHeight * (visibleRows / (double)entryCount)));
+    int thumbHeight = Math.Max(28, (int)Math.Round(trackHeight * (visibleRows / (double)entryCount)));
     int thumbTravel = Math.Max(1, trackHeight - thumbHeight);
     int thumbY = y + (int)Math.Round(thumbTravel * (_mainMenuScrollOffset / (double)maxScroll));
+    Color accent = GetPlacementTypeColor(_selectedPlacementType);
 
-    DrawRect(x, y, width, height, Color.FromArgb(95, 0, 0, 0));
-    DrawRect(x, thumbY, width, thumbHeight, Color.FromArgb(190, 210, 210, 210));
+    DrawRect(x, y, width, height, Color.FromArgb(82, 0, 0, 0));
+    DrawRect(x, thumbY, width, thumbHeight, Color.FromArgb(205, accent.R, accent.G, accent.B));
 }
 
 private void DrawMainMenuRow(int x, int width, int y, int index, string label, string value)
@@ -1831,113 +1878,323 @@ private void DrawMainMenuRow(int x, int width, int y, int index, string label, s
     DrawMenuRow(x, width, y, label, value, _mainMenuIndex == index, 23, 330, GetMainMenuAccent(index));
 }
 
-    private void DrawMenuRow(int x, int width, int y, string label, string value, bool selected)
+private void DrawMenuRow(int x, int width, int y, string label, string value, bool selected)
+{
+    DrawMenuRow(x, width, y, label, value, selected, 25, 270, Color.FromArgb(220, 180, 40, 40));
+}
+
+private void DrawMenuRow(int x, int width, int y, string label, string value, bool selected, int rowHeight, int valueX, Color accentColor)
+{
+    int innerX = x + 12;
+    int innerW = width - 24;
+    int rowY = y + 2;
+    int rowH = rowHeight - 4;
+    int textOffset = rowHeight <= 24 ? 6 : 8;
+    float textScale = rowHeight <= 24 ? 0.258f : 0.268f;
+    int valueMaxLength = Math.Max(18, (innerW - valueX + 16) / 7);
+
+    if (selected)
     {
-        DrawMenuRow(x, width, y, label, value, selected, 25, 270, Color.FromArgb(220, 180, 40, 40));
+        DrawRect(innerX, rowY, innerW, rowH, Color.FromArgb(216, 48, 51, 62));
+        DrawRect(innerX, rowY, 5, rowH, Color.FromArgb(232, accentColor.R, accentColor.G, accentColor.B));
+        DrawRect(innerX, rowY, innerW, 1, Color.FromArgb(55, 255, 255, 255));
+        DrawRect(innerX, rowY + rowH - 1, innerW, 1, Color.FromArgb(130, 0, 0, 0));
+    }
+    else
+    {
+        DrawRect(innerX, rowY, innerW, rowH, Color.FromArgb(62, 18, 21, 29));
+        DrawRect(innerX, rowY, 3, rowH, Color.FromArgb(150, accentColor.R, accentColor.G, accentColor.B));
     }
 
-    private void DrawMenuRow(int x, int width, int y, string label, string value, bool selected, int rowHeight, int valueX, Color accentColor)
+    DrawText(label ?? string.Empty, x + 30, y + textOffset, textScale, selected ? Color.White : Color.FromArgb(220, 222, 228), false, selected);
+    DrawText(FitText(value, valueMaxLength), x + valueX, y + textOffset, textScale, selected ? Color.White : Color.FromArgb(185, 187, 196), false, false);
+
+    if (selected)
     {
-        int innerX = x + 8;
-        int innerW = width - 16;
-        int rowY = y + 1;
-        int rowH = rowHeight - 2;
-        int textOffset = rowHeight <= 24 ? 5 : 7;
-        float textScale = rowHeight <= 24 ? 0.276f : 0.296f;
-        int valueMaxLength = Math.Max(18, (innerW - valueX + 18) / 7);
+        DrawText(">", x + width - 31, y + textOffset - 1, 0.292f, Color.White, false, true);
+    }
+}
 
-        if (selected)
-        {
-            DrawRect(innerX, rowY, innerW, rowH, Color.FromArgb(222, 132, 18, 24));
-            DrawRect(innerX, rowY, innerW, 1, Color.FromArgb(95, 255, 255, 255));
-            DrawRect(innerX, rowY + rowH - 1, innerW, 1, Color.FromArgb(155, 30, 0, 0));
-            DrawRect(innerX, rowY, 6, rowH, Color.FromArgb(245, accentColor.R, accentColor.G, accentColor.B));
-            DrawRect(innerX + 6, rowY, 2, rowH, Color.FromArgb(145, 255, 255, 255));
-        }
-        else
-        {
-            DrawRect(innerX, rowY, innerW, rowH, Color.FromArgb(88, 14, 14, 16));
-            DrawRect(innerX, rowY, 3, rowH, Color.FromArgb(150, accentColor.R, accentColor.G, accentColor.B));
-        }
+private void DrawPanelFrame(int x, int y, int width, int height, Color accentColor)
+{
+    DrawRect(x + 10, y + 12, width, height, Color.FromArgb(72, 0, 0, 0));
+    DrawRect(x + 5, y + 6, width, height, Color.FromArgb(58, 0, 0, 0));
 
-        DrawText(label ?? string.Empty, x + 18, y + textOffset, textScale, selected ? Color.White : Color.FromArgb(220, 220, 220), false, selected);
-        DrawText(FitText(value, valueMaxLength), x + valueX, y + textOffset, textScale, selected ? Color.White : Color.FromArgb(198, 198, 198), false, false);
+    DrawRect(x, y, width, height, Color.FromArgb(212, 6, 7, 10));
+    DrawRect(x, y, width, 1, Color.FromArgb(160, accentColor.R, accentColor.G, accentColor.B));
+    DrawRect(x, y + height - 1, width, 1, Color.FromArgb(95, accentColor.R, accentColor.G, accentColor.B));
+    DrawRect(x, y, 1, height, Color.FromArgb(115, accentColor.R, accentColor.G, accentColor.B));
+    DrawRect(x + width - 1, y, 1, height, Color.FromArgb(55, 255, 255, 255));
+}
 
-        if (selected)
-        {
-            DrawText(">", x + width - 31, y + textOffset, textScale, Color.White, false, true);
-        }
+private void DrawBadge(int x, int y, int width, string text, Color background, Color accentColor)
+{
+    DrawRect(x, y, width, 24, background);
+    DrawRect(x, y, 3, 24, Color.FromArgb(225, accentColor.R, accentColor.G, accentColor.B));
+    DrawRect(x, y, width, 1, Color.FromArgb(62, 255, 255, 255));
+
+    DrawText(
+        FitText(text, Math.Max(6, width / 7)),
+        x + 10,
+        y + 6,
+        0.235f,
+        Color.FromArgb(232, 234, 238),
+        false,
+        false);
+}
+
+private void DrawHeaderStat(int x, int y, int width, string label, string value, Color accentColor)
+{
+    DrawRect(x, y, width, 40, Color.FromArgb(126, 20, 22, 29));
+    DrawRect(x, y, width, 1, Color.FromArgb(54, 255, 255, 255));
+    DrawRect(x, y, 3, 40, Color.FromArgb(225, accentColor.R, accentColor.G, accentColor.B));
+
+    DrawText(label, x + 10, y + 6, 0.190f, Color.FromArgb(148, 151, 160), false, false);
+    DrawText(FitText(value, Math.Max(6, (width - 16) / 7)), x + 10, y + 20, 0.230f, Color.FromArgb(235, 236, 240), false, false);
+}
+
+private void DrawKeyHint(int x, int y, int width, string label, Color accentColor)
+{
+    DrawRect(x, y, width, 24, Color.FromArgb(122, 21, 23, 30));
+    DrawRect(x, y, 3, 24, Color.FromArgb(215, accentColor.R, accentColor.G, accentColor.B));
+    DrawText(FitText(label, Math.Max(5, width / 7)), x + 10, y + 6, 0.225f, Color.FromArgb(232, 234, 238), false, false);
+}
+
+private void DrawSelectedMainMenuCard(int x, int y, int width, int height, MainMenuEntry entry)
+{
+    Color accent = GetMainMenuEntryAccent(entry);
+
+    DrawRect(x + 18, y + 13, width - 36, height - 26, Color.FromArgb(76, 255, 255, 255));
+    DrawRect(x + 18, y + 13, 4, height - 26, Color.FromArgb(230, accent.R, accent.G, accent.B));
+
+    DrawText(
+        MainMenuActionTag(entry),
+        x + 32,
+        y + 18,
+        0.198f,
+        Color.FromArgb(160, 163, 172),
+        false,
+        false);
+
+    DrawText(
+        FitText(entry.Label, 34),
+        x + 32,
+        y + 36,
+        0.282f,
+        Color.White,
+        false,
+        true);
+
+    DrawText(
+        FitText(entry.Value, 48),
+        x + 302,
+        y + 36,
+        0.250f,
+        Color.FromArgb(218, 220, 226),
+        false,
+        false);
+
+    DrawText(
+        FitText(MainMenuActionHint(entry), 100),
+        x + 32,
+        y + 66,
+        0.224f,
+        Color.FromArgb(168, 170, 178),
+        false,
+        false);
+
+    DrawKeyHint(x + width - 262, y + 17, 62, "G/D", IsMainMenuValueEditable(entry.Action) ? accent : Color.FromArgb(120, 122, 130));
+    DrawKeyHint(x + width - 193, y + 17, 76, "ENTREE", accent);
+    DrawKeyHint(x + width - 110, y + 17, 70, MenuToggleKeyLabel, Color.FromArgb(210, 210, 218));
+}
+
+private string MainMenuActionTag(MainMenuEntry entry)
+{
+    if (entry.Kind == MainMenuRowKind.Danger)
+    {
+        return "DANGER";
     }
 
-    private void DrawPanelFrame(int x, int y, int width, int height, Color accentColor)
+    if (entry.Kind == MainMenuRowKind.PrimaryAction || entry.Kind == MainMenuRowKind.Action)
     {
-        DrawRect(x + 9, y + 10, width, height, Color.FromArgb(80, 0, 0, 0));
-        DrawRect(x + 5, y + 6, width, height, Color.FromArgb(70, 0, 0, 0));
-
-        DrawRect(x, y, width, height, Color.FromArgb(214, 6, 6, 8));
-
-        DrawRect(x, y, width, 1, Color.FromArgb(170, accentColor.R, accentColor.G, accentColor.B));
-        DrawRect(x, y + height - 1, width, 1, Color.FromArgb(105, accentColor.R, accentColor.G, accentColor.B));
-        DrawRect(x, y, 1, height, Color.FromArgb(120, accentColor.R, accentColor.G, accentColor.B));
-        DrawRect(x + width - 1, y, 1, height, Color.FromArgb(80, 255, 255, 255));
+        return "ACTION";
     }
 
-    private void DrawBadge(int x, int y, int width, string text, Color background, Color accentColor)
+    if (entry.Kind == MainMenuRowKind.SectionHeader)
     {
-        DrawRect(x, y, width, 24, background);
-        DrawRect(x, y, 3, 24, Color.FromArgb(230, accentColor.R, accentColor.G, accentColor.B));
-        DrawRect(x, y, width, 1, Color.FromArgb(70, 255, 255, 255));
-
-        DrawText(
-            FitText(text, Math.Max(6, width / 7)),
-            x + 10,
-            y + 6,
-            0.245f,
-            Color.FromArgb(238, 238, 238),
-            false,
-            false);
+        return entry.Expanded ? "SECTION OUVERTE" : "SECTION FERMEE";
     }
+
+    if (entry.Kind == MainMenuRowKind.Info)
+    {
+        return "INFO";
+    }
+
+    return "REGLAGE";
+}
+
+private string MainMenuActionHint(MainMenuEntry entry)
+{
+    switch (entry.Action)
+    {
+        case MainMenuAction.PlacementType:
+            return "Change le type a placer. La section utile s'ouvre automatiquement.";
+
+        case MainMenuAction.PrecisePlacement:
+            return "Ouvre la camera de placement fin avec apercu transparent.";
+
+        case MainMenuAction.DistancePlacement:
+            return "Pose rapidement l'element devant le joueur avec la distance reglee.";
+
+        case MainMenuAction.PlacementDistance:
+            return "Gauche/Droite ajuste la distance. Shift accelere le changement.";
+
+        case MainMenuAction.NpcModel:
+            return CurrentModelOption().IsCustom
+                ? "Modele custom actif : appuie sur T pour saisir le nom exact."
+                : "Choisis le ped a placer dans la categorie NPC active.";
+
+        case MainMenuAction.NpcWeaponEditor:
+            return "Entree ouvre l'atelier; Gauche/Droite change le preset rapide.";
+
+        case MainMenuAction.NpcHealth:
+        case MainMenuAction.NpcArmor:
+        case MainMenuAction.NpcPatrolRadius:
+            return "Gauche/Droite ajuste la valeur. Shift accelere le changement.";
+
+        case MainMenuAction.NpcBehavior:
+            return "Selectionne le comportement IA applique au prochain NPC place.";
+
+        case MainMenuAction.NpcAutoRespawn:
+            return "Active la reapparition automatique quand le joueur quitte la zone.";
+
+        case MainMenuAction.Save:
+            return "Sauvegarde la scene courante dans le fichier XML actif.";
+
+        case MainMenuAction.Load:
+            return "Recharge NPC, vehicules, objets et portails depuis le XML actif.";
+
+        case MainMenuAction.CleanNpcs:
+        case MainMenuAction.CleanVehicles:
+        case MainMenuAction.CleanObjects:
+        case MainMenuAction.CleanInteriorPortals:
+            return "Nettoyage immediat. Utilise cette action seulement si tu es sur.";
+
+        case MainMenuAction.ExitActiveInfo:
+        case MainMenuAction.ExitDestinationInfo:
+            return "Place une entree, entre dedans, puis pose une sortie dans l'interieur.";
+
+        default:
+            if (entry.Kind == MainMenuRowKind.SectionHeader)
+            {
+                return "Entree ouvre/ferme la section. Droite ouvre, Gauche ferme.";
+            }
+
+            return "Gauche/Droite modifie la valeur selectionnee.";
+    }
+}
+
+private static bool IsMainMenuValueEditable(MainMenuAction action)
+{
+    switch (action)
+    {
+        case MainMenuAction.PlacementType:
+        case MainMenuAction.PlacementDistance:
+        case MainMenuAction.SectionNpc:
+        case MainMenuAction.SectionVehicle:
+        case MainMenuAction.SectionObject:
+        case MainMenuAction.SectionInterior:
+        case MainMenuAction.SectionSave:
+        case MainMenuAction.SectionCleanup:
+        case MainMenuAction.NpcCategory:
+        case MainMenuAction.NpcModel:
+        case MainMenuAction.NpcWeaponCategory:
+        case MainMenuAction.NpcWeapon:
+        case MainMenuAction.NpcWeaponEditor:
+        case MainMenuAction.NpcHealth:
+        case MainMenuAction.NpcArmor:
+        case MainMenuAction.NpcBehavior:
+        case MainMenuAction.NpcPatrolRadius:
+        case MainMenuAction.NpcAutoRespawn:
+        case MainMenuAction.VehicleCategory:
+        case MainMenuAction.VehicleModel:
+        case MainMenuAction.ObjectCategory:
+        case MainMenuAction.ObjectModel:
+        case MainMenuAction.InteriorCategory:
+        case MainMenuAction.InteriorModel:
+            return true;
+
+        default:
+            return false;
+    }
+}
 
 private void DrawMainSummaryPanel(int x, int y, int width, int height)
 {
     Color accent = GetPlacementTypeColor(_selectedPlacementType);
 
     DrawPanelFrame(x, y, width, height, accent);
+    DrawRect(x + 1, y + 1, width - 2, height - 2, Color.FromArgb(214, 7, 8, 12));
 
-        DrawRect(x, y, width, 42, Color.FromArgb(224, 24, 24, 28));
-        DrawRect(x, y + 40, width, 2, accent);
+    DrawRect(x, y, width, 48, Color.FromArgb(228, 14, 15, 20));
+    DrawRect(x, y, width, 4, Color.FromArgb(230, accent.R, accent.G, accent.B));
+    DrawRect(x, y + 47, width, 1, Color.FromArgb(120, accent.R, accent.G, accent.B));
 
-        DrawText("Resume actif", x + 16, y + 10, 0.335f, Color.White, false, true);
+    DrawText("Resume actif", x + 16, y + 13, 0.315f, Color.White, false, true);
 
-        int lineY = y + 54;
+    int lineY = y + 62;
 
-    DrawSummaryLine(x, width, lineY + 0, "Type", PlacementTypeDisplayName(_selectedPlacementType));
-    DrawSummaryLine(x, width, lineY + 26, "NPC", CurrentModelDisplayName());
-    DrawSummaryLine(x, width, lineY + 52, "Arme", CurrentWeaponDisplayName());
-    DrawSummaryLine(x, width, lineY + 78, "Vehicule", CurrentVehicleDisplayName());
-    DrawSummaryLine(x, width, lineY + 104, "Objet", CurrentObjectDisplayName());
-    DrawSummaryLine(x, width, lineY + 130, "Interieur", CurrentInteriorOption().DisplayName);
-    DrawSummaryLine(x, width, lineY + 156, "Comportement", NpcBehaviorDisplayName(_selectedBehavior));
+    DrawSummaryLine(x, width, lineY + 0, "Type", PlacementTypeDisplayName(_selectedPlacementType), accent);
+    DrawSummaryLine(x, width, lineY + 25, "NPC", CurrentModelDisplayName(), Color.FromArgb(230, 190, 58, 64));
+    DrawSummaryLine(x, width, lineY + 50, "Arme", CurrentWeaponDisplayName(), Color.FromArgb(230, 190, 58, 64));
+    DrawSummaryLine(x, width, lineY + 75, "Vehicule", CurrentVehicleDisplayName(), Color.FromArgb(230, 70, 145, 220));
+    DrawSummaryLine(x, width, lineY + 100, "Objet", CurrentObjectDisplayName(), Color.FromArgb(230, 210, 158, 46));
+    DrawSummaryLine(x, width, lineY + 125, "Interieur", CurrentInteriorOption().DisplayName, Color.FromArgb(230, 150, 95, 220));
+    DrawSummaryLine(x, width, lineY + 150, "IA", NpcBehaviorDisplayName(_selectedBehavior), Color.FromArgb(230, 80, 190, 120));
 
-        string saveName = string.IsNullOrEmpty(_lastSaveFileName) ? "Aucun fichier" : _lastSaveFileName;
+    int metricY = y + height - 78;
+    int metricW = (width - 48) / 4;
 
-        DrawText(
-            "Sauvegarde : " + FitText(saveName, 38),
-            x + 16,
-            y + height - 29,
-            0.255f,
-            Color.FromArgb(205, 205, 205),
-            false,
-            false);
-    }
+    DrawSummaryMetric(x + 12, metricY, metricW, "NPC", _spawnedNpcs.Count.ToString(CultureInfo.InvariantCulture), Color.FromArgb(230, 190, 58, 64));
+    DrawSummaryMetric(x + 18 + metricW, metricY, metricW, "VEH", _placedVehicles.Count.ToString(CultureInfo.InvariantCulture), Color.FromArgb(230, 70, 145, 220));
+    DrawSummaryMetric(x + 24 + metricW * 2, metricY, metricW, "OBJ", _placedObjects.Count.ToString(CultureInfo.InvariantCulture), Color.FromArgb(230, 210, 158, 46));
+    DrawSummaryMetric(x + 30 + metricW * 3, metricY, metricW, "INT", _placedInteriorPortals.Count.ToString(CultureInfo.InvariantCulture), Color.FromArgb(230, 150, 95, 220));
 
-    private void DrawSummaryLine(int x, int width, int y, string label, string value)
-    {
-        DrawRect(x + 12, y, width - 24, 22, Color.FromArgb(85, 12, 12, 14));
+    string saveName = string.IsNullOrEmpty(_lastSaveFileName) ? "Aucun fichier" : _lastSaveFileName;
 
-        DrawText(label, x + 20, y + 5, 0.245f, Color.FromArgb(180, 180, 180), false, false);
-        DrawText(FitText(value, 28), x + 126, y + 5, 0.245f, Color.FromArgb(235, 235, 235), false, false);
-    }
+    DrawRect(x + 12, y + height - 33, width - 24, 22, Color.FromArgb(76, 255, 255, 255));
+    DrawRect(x + 12, y + height - 33, 3, 22, Color.FromArgb(210, 80, 190, 120));
+    DrawText(
+        "Save: " + FitText(saveName, 33),
+        x + 22,
+        y + height - 28,
+        0.218f,
+        Color.FromArgb(204, 206, 214),
+        false,
+        false);
+}
+
+private void DrawSummaryLine(int x, int width, int y, string label, string value)
+{
+    DrawSummaryLine(x, width, y, label, value, Color.FromArgb(170, 180, 184, 194));
+}
+
+private void DrawSummaryLine(int x, int width, int y, string label, string value, Color accentColor)
+{
+    DrawRect(x + 12, y, width - 24, 21, Color.FromArgb(62, 255, 255, 255));
+    DrawRect(x + 12, y, 3, 21, Color.FromArgb(155, accentColor.R, accentColor.G, accentColor.B));
+
+    DrawText(label, x + 21, y + 5, 0.214f, Color.FromArgb(150, 153, 162), false, false);
+    DrawText(FitText(value, 24), x + 100, y + 5, 0.218f, Color.FromArgb(228, 230, 236), false, false);
+}
+
+private void DrawSummaryMetric(int x, int y, int width, string label, string value, Color accentColor)
+{
+    DrawRect(x, y, width, 34, Color.FromArgb(70, 255, 255, 255));
+    DrawRect(x, y, width, 2, Color.FromArgb(190, accentColor.R, accentColor.G, accentColor.B));
+    DrawText(label, x + 8, y + 6, 0.182f, Color.FromArgb(148, 151, 160), false, false);
+    DrawText(FitText(value, 5), x + 8, y + 18, 0.228f, Color.White, false, true);
+}
 
     private Color GetMainMenuAccent(int index)
     {
@@ -3943,6 +4200,17 @@ private void DrawMainSummaryPanel(int x, int y, int width, int height)
             }
 
             RefreshNpcBlipIfNeeded(npc, now, ref blipBudget);
+
+            /*
+             * Les vagues ennemies appelées au téléphone ont leur propre couche IA :
+             * conduite véhicule, drive-by, descente véhicule, combat à pied.
+             * On évite donc que le comportement Attacker générique remplace
+             * les ordres de conduite sur la frame suivante.
+             */
+            if (_enemyRaidNpcHandles.Contains(npc.Ped.Handle))
+            {
+                continue;
+            }
 
             if (now < npc.NextThinkAt)
             {
@@ -6954,8 +7222,18 @@ private void DrawMainSummaryPanel(int x, int y, int width, int height)
 
         try
         {
-            placed.Blip.Color = BlipColor.Blue;
-            placed.Blip.IsFriendly = true;
+            if (_enemyRaidVehicleHandles.Contains(placed.Vehicle.Handle))
+            {
+                placed.Blip.Color = BlipColor.Red;
+                placed.Blip.IsFriendly = false;
+                placed.Blip.Name = "Ballas Véhicule";
+            }
+            else
+            {
+                placed.Blip.Color = BlipColor.Blue;
+                placed.Blip.IsFriendly = true;
+                placed.Blip.Name = "DonJ Vehicule";
+            }
         }
         catch
         {
@@ -10320,6 +10598,7 @@ private void DrawMainSummaryPanel(int x, int y, int width, int height)
     private const ulong NativeIsPedRunningMobilePhoneTask = 0x2AFE52F782F25775UL;
 
     private bool _cartelPhoneKeyLatch;
+    private bool _enemyRaidPhoneKeyLatch;
     private bool _cartelConvoyActive;
     private bool _cartelConvoyDismissing;
 
@@ -10442,6 +10721,7 @@ private void DrawMainSummaryPanel(int x, int y, int width, int height)
 
         UpdateCartelPhoneContact(player);
         UpdateCartelConvoyState(player);
+        UpdateEnemyRaidState(player);
     }
 
     /*
@@ -10480,6 +10760,7 @@ private void DrawMainSummaryPanel(int x, int y, int width, int height)
         if (!phoneOpen)
         {
             _cartelPhoneKeyLatch = false;
+            _enemyRaidPhoneKeyLatch = false;
             return;
         }
 
@@ -10490,16 +10771,24 @@ private void DrawMainSummaryPanel(int x, int y, int width, int height)
         if (!cPressed)
         {
             _cartelPhoneKeyLatch = false;
-            return;
         }
-
-        if (_cartelPhoneKeyLatch)
+        else if (!_cartelPhoneKeyLatch)
         {
-            return;
+            _cartelPhoneKeyLatch = true;
+            ToggleCartelCall();
         }
 
-        _cartelPhoneKeyLatch = true;
-        ToggleCartelCall();
+        bool rPressed = Game.IsKeyPressed(Keys.R);
+
+        if (!rPressed)
+        {
+            _enemyRaidPhoneKeyLatch = false;
+        }
+        else if (!_enemyRaidPhoneKeyLatch)
+        {
+            _enemyRaidPhoneKeyLatch = true;
+            CallEnemyRaid();
+        }
     }
 
     private bool IsPlayerPhoneOpen(Ped player)
@@ -10522,32 +10811,55 @@ private void DrawMainSummaryPanel(int x, int y, int width, int height)
     private void DrawCartelPhoneContactOverlay()
     {
         int x = 845;
-        int y = 445;
-        int width = 430;
-        int height = 118;
+        int y = 420;
+        int width = 455;
+        int height = 178;
 
-        DrawRect(x, y, width, height, Color.FromArgb(190, 0, 0, 0));
+        DrawRect(x, y, width, height, Color.FromArgb(192, 0, 0, 0));
         DrawRect(x, y, width, 34, Color.FromArgb(230, 110, 15, 15));
 
-        DrawText("Contact téléphone", x + 14, y + 8, 0.31f, Color.White, false, true);
-        DrawText(CartelContactName, x + 18, y + 45, 0.45f, Color.White, false, true);
+        DrawText("Contacts téléphone", x + 14, y + 8, 0.31f, Color.White, false, true);
 
-        string status;
+        DrawText(CartelContactName, x + 18, y + 45, 0.42f, Color.White, false, true);
+
+        string cartelStatus;
 
         if (HasActiveCartelTeam())
         {
-            status = "C : rappeler / faire replier l'équipe active";
+            cartelStatus = "C : rappeler / faire replier l'équipe active";
         }
         else if (_cartelConvoyDismissing)
         {
-            status = "C : appeler une nouvelle équipe";
+            cartelStatus = "C : appeler une nouvelle équipe";
         }
         else
         {
-            status = "C : appeler les hommes de main";
+            cartelStatus = "C : appeler les hommes de main alliés";
         }
 
-        DrawText(status, x + 18, y + 82, 0.30f, Color.FromArgb(230, 230, 230), false, false);
+        DrawText(cartelStatus, x + 18, y + 76, 0.285f, Color.FromArgb(230, 230, 230), false, false);
+
+        int liveEnemies = CountLiveEnemyRaidMembers();
+        int enemyCooldownRemaining = Math.Max(0, (_nextEnemyRaidCallAllowedAt - Game.GameTime + 999) / 1000);
+
+        DrawText(EnemyRaidContactName, x + 18, y + 106, 0.42f, Color.FromArgb(235, 190, 235), false, true);
+
+        string enemyStatus;
+
+        if (enemyCooldownRemaining > 0)
+        {
+            enemyStatus = "R : ennemis disponibles dans " + enemyCooldownRemaining.ToString(CultureInfo.InvariantCulture) + " s";
+        }
+        else if (liveEnemies > 0)
+        {
+            enemyStatus = "R : appeler une autre vague ennemie (" + liveEnemies.ToString(CultureInfo.InvariantCulture) + " actifs)";
+        }
+        else
+        {
+            enemyStatus = "R : appeler des ennemis armés en véhicules";
+        }
+
+        DrawText(enemyStatus, x + 18, y + 137, 0.285f, Color.FromArgb(230, 230, 230), false, false);
     }
 
     private void ToggleCartelCall()
@@ -14121,5 +14433,1167 @@ private void DrawMainSummaryPanel(int x, int y, int width, int height)
         }
 
         return null;
+    }
+
+    // ---------------------------------------------------------------------
+    // Contact téléphone : vague ennemie Ballas
+    // ---------------------------------------------------------------------
+    /*
+     * Touche R avec le téléphone ouvert :
+     * - crée une vague ennemie indépendante du Cartel allié ;
+     * - 4 à 12 ennemis aléatoires ;
+     * - Ballas armés au SMG ;
+     * - arrivée en véhicules depuis une route cachée hors champ ;
+     * - conduite vers le joueur, tirs depuis les passagers, puis descente et combat à pied ;
+     * - 100 vie + 100 armure exactement comme demandé.
+     *
+     * La vague utilise le groupe hostile déjà existant du mod. Les bodyguards Cartel
+     * et les alliés du joueur la considéreront donc naturellement comme une menace.
+     */
+
+    private const string EnemyRaidContactName = "Ballas";
+
+    private const int EnemyRaidMinMembers = 4;
+    private const int EnemyRaidMaxMembers = 12;
+    private const int EnemyRaidMaxActiveMembers = 36;
+    private const int EnemyRaidMaxVehicleCount = 4;
+
+    private const int EnemyRaidHealth = 100;
+    private const int EnemyRaidArmor = 100;
+
+    private const int EnemyRaidCallCooldownMs = 2500;
+    private const int EnemyRaidThinkIntervalMs = 450;
+    private const int EnemyRaidPedOrderIntervalMs = 850;
+    private const int EnemyRaidVehicleOrderIntervalMs = 1300;
+
+    private const int EnemyRaidStuckTimeoutMs = 7000;
+    private const int EnemyRaidVehicleRescueCooldownMs = 10000;
+
+    private const float EnemyRaidSpawnMinDistance = 72.0f;
+    private const float EnemyRaidSpawnMaxDistance = 130.0f;
+    private const float EnemyRaidRelocationMinDistance = 82.0f;
+    private const float EnemyRaidRelocationMaxDistance = 135.0f;
+
+    private const float EnemyRaidArrivalDriveSpeed = 36.0f;
+    private const float EnemyRaidDriveByDistance = 105.0f;
+    private const float EnemyRaidExitVehicleDistance = 42.0f;
+    private const float EnemyRaidForcedExitVehicleDistance = 18.0f;
+    private const float EnemyRaidOnFootShootDistance = 125.0f;
+    private const float EnemyRaidTooFarVehicleDistance = 230.0f;
+
+    private const int EnemyRaidDrivingStyle = ProfessionalDrivingStyle;
+    private const int EnemyRaidFullAutoFiringPattern = unchecked((int)0xC6EE6B4C);
+
+    private bool _enemyRaidActive;
+    private int _nextEnemyRaidCallAllowedAt;
+    private int _nextEnemyRaidThinkAt;
+
+    private readonly HashSet<int> _enemyRaidNpcHandles = new HashSet<int>();
+    private readonly HashSet<int> _enemyRaidVehicleHandles = new HashSet<int>();
+
+    private readonly Dictionary<int, int> _enemyRaidNextPedOrderAt = new Dictionary<int, int>();
+    private readonly Dictionary<int, int> _enemyRaidNextVehicleOrderAt = new Dictionary<int, int>();
+    private readonly Dictionary<int, Vector3> _enemyRaidLastVehiclePositions = new Dictionary<int, Vector3>();
+    private readonly Dictionary<int, int> _enemyRaidLastVehicleMoveAt = new Dictionary<int, int>();
+    private readonly Dictionary<int, int> _enemyRaidLastVehicleRescueAt = new Dictionary<int, int>();
+
+    private static readonly string[] EnemyRaidPedModelNames =
+    {
+        "g_m_y_ballaeast_01",
+        "g_m_y_ballaorig_01",
+        "g_m_y_ballasout_01"
+    };
+
+    private static readonly string[] EnemyRaidVehicleModelNames =
+    {
+        "buccaneer",
+        "chino",
+        "faction",
+        "moonbeam",
+        "primo",
+        "manana"
+    };
+
+    private void CallEnemyRaid()
+    {
+        if (Game.GameTime < _nextEnemyRaidCallAllowedAt)
+        {
+            int remaining = Math.Max(1, (_nextEnemyRaidCallAllowedAt - Game.GameTime + 999) / 1000);
+            ShowStatus("Ballas indisponibles encore " + remaining.ToString(CultureInfo.InvariantCulture) + " seconde(s).", 3000);
+            return;
+        }
+
+        _nextEnemyRaidCallAllowedAt = Game.GameTime + EnemyRaidCallCooldownMs;
+
+        CleanupEnemyRaidHandleSets();
+
+        int liveMembers = CountLiveEnemyRaidMembers();
+
+        if (liveMembers >= EnemyRaidMaxActiveMembers)
+        {
+            ShowStatus("Ballas : limite de " + EnemyRaidMaxActiveMembers.ToString(CultureInfo.InvariantCulture) + " ennemis actifs atteinte.", 4000);
+            return;
+        }
+
+        int requestedMembers = _random.Next(EnemyRaidMinMembers, EnemyRaidMaxMembers + 1);
+        int allowedMembers = Math.Min(requestedMembers, EnemyRaidMaxActiveMembers - liveMembers);
+
+        if (allowedMembers <= 0)
+        {
+            ShowStatus("Ballas : aucune place pour une nouvelle vague.", 3500);
+            return;
+        }
+
+        SpawnEnemyRaidWave(allowedMembers, requestedMembers);
+    }
+
+    private void SpawnEnemyRaidWave(int memberCount, int originalRequestedCount)
+    {
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player) || player.IsDead)
+        {
+            ShowStatus("Impossible d'appeler les Ballas : joueur invalide.", 3500);
+            return;
+        }
+
+        EnsureRelationshipGroups();
+
+        WeaponLoadout smgLoadout = CreateEnemyRaidLoadout();
+
+        int createdMembers = 0;
+        int createdVehicles = 0;
+        int vehicleAttempt = 0;
+
+        while (createdMembers < memberCount &&
+               createdVehicles < EnemyRaidMaxVehicleCount &&
+               vehicleAttempt < EnemyRaidMaxVehicleCount + 4)
+        {
+            Vector3 spawnPosition = FindEnemyRaidVehicleSpawnPosition(player, vehicleAttempt);
+            float heading = HeadingFromTo(spawnPosition, player.Position);
+
+            VehicleIdentity vehicleIdentity = ResolveEnemyRaidVehicleIdentity(vehicleAttempt);
+            Vehicle vehicle = CreateVehicleFromIdentity(vehicleIdentity, spawnPosition, heading);
+
+            vehicleAttempt++;
+
+            if (!Entity.Exists(vehicle))
+            {
+                continue;
+            }
+
+            RegisterPlacedVehicle(vehicle, vehicleIdentity, spawnPosition, heading, false);
+            ConfigureEnemyRaidVehicle(vehicle);
+
+            _enemyRaidVehicleHandles.Add(vehicle.Handle);
+            InitializeEnemyRaidVehicleTracking(vehicle);
+            createdVehicles++;
+
+            int seatsForThisVehicle = GetVehicleSeatCapacityIncludingDriver(vehicle);
+            int seatsFilled = 0;
+
+            for (int localSeatIndex = 0; localSeatIndex < seatsForThisVehicle && createdMembers < memberCount; localSeatIndex++)
+            {
+                int seat = localSeatIndex == 0 ? -1 : localSeatIndex - 1;
+
+                if (!IsSeatFreeSafe(vehicle, seat))
+                {
+                    continue;
+                }
+
+                Vector3 pedSpawnPosition = spawnPosition + GetSpawnOffsetAroundVehicle(localSeatIndex);
+                ModelIdentity pedIdentity = ResolveEnemyRaidPedModelIdentity(createdMembers + vehicleAttempt);
+                Ped enemy = CreatePedFromModelIdentity(pedIdentity, pedSpawnPosition, heading);
+
+                if (!Entity.Exists(enemy))
+                {
+                    continue;
+                }
+
+                SpawnedNpc spawned = RegisterSpawnedNpc(
+                    enemy,
+                    NpcBehavior.Attacker,
+                    true,
+                    false,
+                    pedIdentity,
+                    smgLoadout.Clone(),
+                    EnemyRaidHealth,
+                    EnemyRaidArmor,
+                    pedSpawnPosition,
+                    heading,
+                    _selectedPatrolRadius,
+                    false);
+
+                if (spawned == null || !Entity.Exists(spawned.Ped))
+                {
+                    DeleteEntitySafe(enemy);
+                    continue;
+                }
+
+                _enemyRaidNpcHandles.Add(spawned.Ped.Handle);
+
+                ConfigureEnemyRaidPed(spawned, vehicle, seat);
+                PutPedIntoVehicleSafe(spawned.Ped, vehicle, seat);
+
+                createdMembers++;
+                seatsFilled++;
+            }
+
+            if (seatsFilled == 0)
+            {
+                _enemyRaidVehicleHandles.Remove(vehicle.Handle);
+                ClearEnemyRaidVehicleTracking(vehicle.Handle);
+                DeleteEntitySafe(vehicle);
+                createdVehicles--;
+            }
+        }
+
+        /*
+         * Secours : si un modèle véhicule échoue ou si un véhicule n'a pas assez
+         * de places, on complète la vague à pied depuis un point caché. La règle
+         * importante reste respectée : l'appel crée bien 4 à 12 ennemis, et la
+         * voie véhicule reste utilisée dès que possible.
+         */
+        int footSeed = 40;
+
+        while (createdMembers < memberCount)
+        {
+            if (SpawnEnemyRaidFootEnemy(player, smgLoadout, footSeed + createdMembers))
+            {
+                createdMembers++;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        CleanupEnemyRaidHandleSets();
+
+        if (createdMembers == 0)
+        {
+            ShowStatus("Ballas : aucun ennemi n'a pu être créé.", 5000);
+            return;
+        }
+
+        _enemyRaidActive = true;
+        _nextEnemyRaidThinkAt = 0;
+
+        OrderEnemyRaidVehiclesToPlayer(true);
+
+        string cappedText = memberCount < originalRequestedCount
+            ? " (limite active atteinte)"
+            : string.Empty;
+
+        ShowStatus(
+            "Ballas appelés : " +
+            createdMembers.ToString(CultureInfo.InvariantCulture) +
+            " ennemi(s), " +
+            createdVehicles.ToString(CultureInfo.InvariantCulture) +
+            " véhicule(s), SMG, 100 vie / 100 armure" + cappedText + ".",
+            6500);
+    }
+
+    private bool SpawnEnemyRaidFootEnemy(Ped player, WeaponLoadout loadout, int seedIndex)
+    {
+        if (!Entity.Exists(player) || loadout == null)
+        {
+            return false;
+        }
+
+        Vector3 spawnPosition = FindEnemyRaidVehicleSpawnPosition(player, seedIndex);
+        float heading = HeadingFromTo(spawnPosition, player.Position);
+        ModelIdentity pedIdentity = ResolveEnemyRaidPedModelIdentity(seedIndex);
+        Ped enemy = CreatePedFromModelIdentity(pedIdentity, spawnPosition, heading);
+
+        if (!Entity.Exists(enemy))
+        {
+            return false;
+        }
+
+        SpawnedNpc spawned = RegisterSpawnedNpc(
+            enemy,
+            NpcBehavior.Attacker,
+            true,
+            false,
+            pedIdentity,
+            loadout.Clone(),
+            EnemyRaidHealth,
+            EnemyRaidArmor,
+            spawnPosition,
+            heading,
+            _selectedPatrolRadius,
+            false);
+
+        if (spawned == null || !Entity.Exists(spawned.Ped))
+        {
+            DeleteEntitySafe(enemy);
+            return false;
+        }
+
+        _enemyRaidNpcHandles.Add(spawned.Ped.Handle);
+        ConfigureEnemyRaidPed(spawned, null, 999);
+        StartEnemyRaidOnFootCombat(spawned.Ped, player, true);
+
+        return true;
+    }
+
+    private void UpdateEnemyRaidState(Ped player)
+    {
+        CleanupEnemyRaidHandleSets();
+
+        if (!_enemyRaidActive)
+        {
+            return;
+        }
+
+        if (Game.GameTime < _nextEnemyRaidThinkAt)
+        {
+            return;
+        }
+
+        _nextEnemyRaidThinkAt = Game.GameTime + EnemyRaidThinkIntervalMs;
+
+        if (!Entity.Exists(player) || player.IsDead)
+        {
+            return;
+        }
+
+        EnsureRelationshipGroups();
+
+        List<int> activeVehicles = new List<int>(_enemyRaidVehicleHandles);
+
+        for (int i = 0; i < activeVehicles.Count; i++)
+        {
+            Vehicle vehicle = FindVehicleByHandle(activeVehicles[i]);
+
+            if (!Entity.Exists(vehicle))
+            {
+                continue;
+            }
+
+            UpdateEnemyRaidVehicle(vehicle, player, i);
+        }
+
+        List<int> activeNpcs = new List<int>(_enemyRaidNpcHandles);
+
+        for (int i = 0; i < activeNpcs.Count; i++)
+        {
+            SpawnedNpc npc = FindSpawnedNpcByHandle(activeNpcs[i]);
+
+            if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+            {
+                continue;
+            }
+
+            UpdateEnemyRaidNpc(npc, player);
+        }
+
+        CleanupEnemyRaidHandleSets();
+    }
+
+    private void UpdateEnemyRaidVehicle(Vehicle vehicle, Ped player, int seedIndex)
+    {
+        if (!Entity.Exists(vehicle) || !Entity.Exists(player))
+        {
+            return;
+        }
+
+        ConfigureEnemyRaidVehicleSoftState(vehicle);
+        RescueEnemyRaidVehicleIfNeeded(vehicle, player, seedIndex);
+
+        Ped driver = GetDriverOfVehicle(vehicle);
+        bool driverInvalid = !Entity.Exists(driver) || driver.IsDead;
+        float distanceToPlayer = vehicle.Position.DistanceTo(player.Position);
+        bool vehicleStuck = IsEnemyRaidVehicleStuck(vehicle);
+
+        if (driverInvalid ||
+            vehicleStuck ||
+            distanceToPlayer <= EnemyRaidForcedExitVehicleDistance ||
+            (!player.IsInVehicle() && distanceToPlayer <= EnemyRaidExitVehicleDistance))
+        {
+            CommandEnemyRaidOccupantsLeaveVehicle(vehicle, player, vehicleStuck || driverInvalid);
+            return;
+        }
+
+        IssueEnemyRaidVehicleAttackOrder(vehicle, player, false);
+    }
+
+    private void UpdateEnemyRaidNpc(SpawnedNpc npc, Ped player)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead || !Entity.Exists(player) || player.IsDead)
+        {
+            return;
+        }
+
+        MaintainEnemyRaidPedState(npc.Ped);
+
+        if (npc.Ped.IsInVehicle() && Entity.Exists(npc.Ped.CurrentVehicle))
+        {
+            Vehicle vehicle = npc.Ped.CurrentVehicle;
+            float distanceToPlayer = vehicle.Position.DistanceTo(player.Position);
+
+            if (IsPedDriverOfVehicle(npc.Ped, vehicle))
+            {
+                ConfigureEnemyRaidDriver(npc.Ped);
+                IssueEnemyRaidVehicleAttackOrder(vehicle, player, false);
+            }
+            else
+            {
+                StartEnemyRaidPassengerDriveBy(npc.Ped, player, false);
+            }
+
+            if (distanceToPlayer <= EnemyRaidForcedExitVehicleDistance ||
+                (!player.IsInVehicle() && distanceToPlayer <= EnemyRaidExitVehicleDistance))
+            {
+                CommandEnemyRaidPedLeaveVehicle(npc, vehicle, true);
+            }
+
+            return;
+        }
+
+        StartEnemyRaidOnFootCombat(npc.Ped, player, false);
+    }
+
+    private void CleanupEnemyRaidHandleSets()
+    {
+        List<int> deadNpcHandles = new List<int>();
+
+        foreach (int handle in _enemyRaidNpcHandles)
+        {
+            SpawnedNpc npc = FindSpawnedNpcByHandle(handle);
+
+            if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+            {
+                deadNpcHandles.Add(handle);
+            }
+        }
+
+        for (int i = 0; i < deadNpcHandles.Count; i++)
+        {
+            _enemyRaidNpcHandles.Remove(deadNpcHandles[i]);
+            _enemyRaidNextPedOrderAt.Remove(deadNpcHandles[i]);
+        }
+
+        List<int> inactiveVehicleHandles = new List<int>();
+
+        foreach (int handle in _enemyRaidVehicleHandles)
+        {
+            Vehicle vehicle = FindVehicleByHandle(handle);
+
+            /*
+             * On garde les véhicules de la vague en rouge tant qu'il reste
+             * des ennemis vivants, même s'ils sont descendus. Dès que la vague
+             * est morte ou le véhicule supprimé, on sort le handle du tracking.
+             */
+            if (!Entity.Exists(vehicle) ||
+                (_enemyRaidNpcHandles.Count == 0 && !DoesEnemyRaidVehicleHaveLiveTrackedOccupant(vehicle)))
+            {
+                inactiveVehicleHandles.Add(handle);
+            }
+        }
+
+        for (int i = 0; i < inactiveVehicleHandles.Count; i++)
+        {
+            _enemyRaidVehicleHandles.Remove(inactiveVehicleHandles[i]);
+            ClearEnemyRaidVehicleTracking(inactiveVehicleHandles[i]);
+        }
+
+        _enemyRaidActive = _enemyRaidNpcHandles.Count > 0;
+    }
+
+    private int CountLiveEnemyRaidMembers()
+    {
+        int count = 0;
+
+        foreach (int handle in _enemyRaidNpcHandles)
+        {
+            SpawnedNpc npc = FindSpawnedNpcByHandle(handle);
+
+            if (npc != null && Entity.Exists(npc.Ped) && !npc.Ped.IsDead)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private bool DoesEnemyRaidVehicleHaveLiveTrackedOccupant(Vehicle vehicle)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return false;
+        }
+
+        foreach (int handle in _enemyRaidNpcHandles)
+        {
+            SpawnedNpc npc = FindSpawnedNpcByHandle(handle);
+
+            if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+            {
+                continue;
+            }
+
+            if (npc.Ped.IsInVehicle() &&
+                Entity.Exists(npc.Ped.CurrentVehicle) &&
+                npc.Ped.CurrentVehicle.Handle == vehicle.Handle)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private ModelIdentity ResolveEnemyRaidPedModelIdentity(int seedIndex)
+    {
+        string modelName = EnemyRaidPedModelNames[Wrap(seedIndex + _random.Next(EnemyRaidPedModelNames.Length), EnemyRaidPedModelNames.Length)];
+
+        return new ModelIdentity
+        {
+            IsCustom = true,
+            Name = modelName,
+            Hash = 0,
+            DisplayName = "Ballas " + modelName
+        };
+    }
+
+    private VehicleIdentity ResolveEnemyRaidVehicleIdentity(int seedIndex)
+    {
+        string modelName = EnemyRaidVehicleModelNames[Wrap(seedIndex + _random.Next(EnemyRaidVehicleModelNames.Length), EnemyRaidVehicleModelNames.Length)];
+        int hash = 0;
+
+        try
+        {
+            hash = Game.GenerateHash(modelName);
+        }
+        catch
+        {
+            hash = 0;
+        }
+
+        return new VehicleIdentity
+        {
+            Name = modelName,
+            Hash = hash,
+            DisplayName = "Ballas " + modelName
+        };
+    }
+
+    private WeaponLoadout CreateEnemyRaidLoadout()
+    {
+        return new WeaponLoadout
+        {
+            Weapon = WeaponHash.SMG,
+            Ammo = 9999,
+            Tint = 6,
+            Preset = WeaponUpgradePreset.ChargeurEtendu,
+            ExtendedClip = true,
+            Suppressor = false,
+            Flashlight = false,
+            Grip = false,
+            Scope = WeaponScopeMode.None,
+            Muzzle = false,
+            ImprovedBarrel = false,
+            Mk2Ammo = WeaponMk2AmmoMode.Standard
+        };
+    }
+
+    private void ConfigureEnemyRaidPed(SpawnedNpc spawned, Vehicle assignedVehicle, int assignedSeat)
+    {
+        if (spawned == null || !Entity.Exists(spawned.Ped))
+        {
+            return;
+        }
+
+        spawned.BaseBehavior = NpcBehavior.Attacker;
+        spawned.Behavior = NpcBehavior.Attacker;
+        spawned.Activated = true;
+        spawned.IsReturningHome = false;
+        spawned.LastCombatActivityAt = Game.GameTime;
+        spawned.NextThinkAt = Game.GameTime + 60000;
+
+        if (Entity.Exists(assignedVehicle))
+        {
+            spawned.BodyguardAssignedVehicleHandle = assignedVehicle.Handle;
+            spawned.BodyguardAssignedSeat = assignedSeat;
+            spawned.BodyguardIsDriver = assignedSeat == -1;
+        }
+
+        spawned.Ped.MaxHealth = EnemyRaidHealth;
+        spawned.Ped.Health = EnemyRaidHealth;
+        spawned.Ped.Armor = EnemyRaidArmor;
+        spawned.Ped.Accuracy = 45;
+        spawned.Ped.ShootRate = 750;
+        spawned.Ped.IsEnemy = true;
+        spawned.Ped.BlockPermanentEvents = true;
+        spawned.Ped.AlwaysKeepTask = true;
+        spawned.Ped.CanSwitchWeapons = true;
+
+        try
+        {
+            Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, spawned.Ped.Handle, _hostileGroupHash);
+            Function.Call(Hash.SET_PED_COMBAT_ABILITY, spawned.Ped.Handle, 2);
+            Function.Call(Hash.SET_PED_COMBAT_RANGE, spawned.Ped.Handle, 2);
+            Function.Call(Hash.SET_PED_COMBAT_MOVEMENT, spawned.Ped.Handle, 2);
+            Function.Call(Hash.SET_PED_FLEE_ATTRIBUTES, spawned.Ped.Handle, 0, false);
+            Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, spawned.Ped.Handle, 0, true);
+            Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, spawned.Ped.Handle, 5, true);
+            Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, spawned.Ped.Handle, 46, true);
+            Function.Call(Hash.SET_PED_DROPS_WEAPONS_WHEN_DEAD, spawned.Ped.Handle, false);
+        }
+        catch
+        {
+        }
+
+        TryEnsureEnemyRaidWeapon(spawned.Ped);
+        CreateOrUpdateNpcBlip(spawned);
+    }
+
+    private void MaintainEnemyRaidPedState(Ped ped)
+    {
+        if (!Entity.Exists(ped) || ped.IsDead)
+        {
+            return;
+        }
+
+        ped.IsEnemy = true;
+        ped.BlockPermanentEvents = true;
+        ped.AlwaysKeepTask = true;
+
+        try
+        {
+            Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, ped.Handle, _hostileGroupHash);
+            Function.Call(Hash.SET_PED_FLEE_ATTRIBUTES, ped.Handle, 0, false);
+            Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped.Handle, 46, true);
+        }
+        catch
+        {
+        }
+    }
+
+    private void ConfigureEnemyRaidVehicle(Vehicle vehicle)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return;
+        }
+
+        try
+        {
+            vehicle.IsPersistent = true;
+            vehicle.Repair();
+            vehicle.EngineHealth = 1000.0f;
+            vehicle.BodyHealth = 1000.0f;
+            vehicle.PetrolTankHealth = 1000.0f;
+
+            Function.Call(Hash.SET_ENTITY_AS_MISSION_ENTITY, vehicle.Handle, true, true);
+            Function.Call(Hash.SET_VEHICLE_ENGINE_ON, vehicle.Handle, true, true, false);
+            Function.Call(Hash.SET_VEHICLE_DOORS_LOCKED, vehicle.Handle, 1);
+            Function.Call(Hash.SET_VEHICLE_COLOURS, vehicle.Handle, 145, 145);
+            Function.Call(Hash.SET_VEHICLE_EXTRA_COLOURS, vehicle.Handle, 145, 0);
+            Function.Call(Hash.SET_VEHICLE_DIRT_LEVEL, vehicle.Handle, 2.0f);
+            Function.Call(Hash.SET_VEHICLE_ON_GROUND_PROPERLY, vehicle.Handle);
+        }
+        catch
+        {
+            // Certains modèles ne supportent pas toutes les options, on garde le spawn valide.
+        }
+    }
+
+    private void ConfigureEnemyRaidVehicleSoftState(Vehicle vehicle)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return;
+        }
+
+        try
+        {
+            vehicle.IsPersistent = true;
+            Function.Call(Hash.SET_ENTITY_AS_MISSION_ENTITY, vehicle.Handle, true, true);
+            Function.Call(Hash.SET_VEHICLE_ENGINE_ON, vehicle.Handle, true, true, false);
+            Function.Call(Hash.SET_VEHICLE_DOORS_LOCKED, vehicle.Handle, 1);
+        }
+        catch
+        {
+        }
+    }
+
+    private void ConfigureEnemyRaidDriver(Ped driver)
+    {
+        if (!Entity.Exists(driver))
+        {
+            return;
+        }
+
+        try
+        {
+            Function.Call(Hash.SET_DRIVER_ABILITY, driver.Handle, 0.92f);
+            Function.Call(Hash.SET_DRIVER_AGGRESSIVENESS, driver.Handle, 0.78f);
+            Function.Call(Hash.SET_DRIVE_TASK_DRIVING_STYLE, driver.Handle, EnemyRaidDrivingStyle);
+            Function.Call(Hash.SET_PED_CAN_BE_DRAGGED_OUT, driver.Handle, false);
+            Function.Call(Hash.SET_PED_STAY_IN_VEHICLE_WHEN_JACKED, driver.Handle, true);
+        }
+        catch
+        {
+        }
+    }
+
+    private void TryEnsureEnemyRaidWeapon(Ped ped)
+    {
+        if (!Entity.Exists(ped))
+        {
+            return;
+        }
+
+        try
+        {
+            ped.Weapons.Select(WeaponHash.SMG, true);
+            return;
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            ped.Weapons.Give(WeaponHash.SMG, 9999, true, true);
+            ped.Weapons.Select(WeaponHash.SMG, true);
+            return;
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            ped.Weapons.Give(WeaponHash.MicroSMG, 9999, true, true);
+            ped.Weapons.Select(WeaponHash.MicroSMG, true);
+        }
+        catch
+        {
+            try
+            {
+                ped.Weapons.Select(WeaponHash.Unarmed);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private Vector3 FindEnemyRaidVehicleSpawnPosition(Ped player, int seedIndex)
+    {
+        Vector3 roadPoint;
+
+        if (TryFindHiddenRoadPointNearPlayer(
+            player,
+            seedIndex + 31,
+            EnemyRaidSpawnMinDistance,
+            EnemyRaidSpawnMaxDistance,
+            out roadPoint))
+        {
+            return roadPoint;
+        }
+
+        Vector3 playerPos = player.Position;
+        Vector3 camForward = GetGameplayCameraForwardVector();
+
+        if (camForward.Length() < 0.001f)
+        {
+            camForward = Normalize(player.ForwardVector);
+        }
+
+        if (camForward.Length() < 0.001f)
+        {
+            camForward = new Vector3(0.0f, 1.0f, 0.0f);
+        }
+
+        Vector3 baseDirection = -camForward;
+        Vector3 right = Normalize(new Vector3(baseDirection.Y, -baseDirection.X, 0.0f));
+
+        Vector3 fallback =
+            playerPos +
+            baseDirection * (EnemyRaidSpawnMinDistance + (seedIndex % 4) * 8.0f) +
+            right * (((seedIndex % 5) - 2) * 10.0f);
+
+        Vector3 safe = World.GetSafeCoordForPed(fallback, false, 16);
+
+        if (!IsZeroVector(safe) && !IsPointInPlayerView(player, safe))
+        {
+            return safe + new Vector3(0.0f, 0.0f, 0.45f);
+        }
+
+        float ground = World.GetGroundHeight(new Vector3(fallback.X, fallback.Y, fallback.Z + 1000.0f));
+
+        if (Math.Abs(ground) > 0.001f)
+        {
+            fallback.Z = ground + 0.45f;
+        }
+
+        return fallback;
+    }
+
+    private void OrderEnemyRaidVehiclesToPlayer(bool force)
+    {
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player))
+        {
+            return;
+        }
+
+        List<int> activeVehicles = new List<int>(_enemyRaidVehicleHandles);
+
+        for (int i = 0; i < activeVehicles.Count; i++)
+        {
+            Vehicle vehicle = FindVehicleByHandle(activeVehicles[i]);
+
+            if (!Entity.Exists(vehicle))
+            {
+                continue;
+            }
+
+            IssueEnemyRaidVehicleAttackOrder(vehicle, player, force);
+        }
+    }
+
+    private void IssueEnemyRaidVehicleAttackOrder(Vehicle vehicle, Ped player, bool force)
+    {
+        if (!Entity.Exists(vehicle) || !Entity.Exists(player) || player.IsDead || !IsVehicleDriveable(vehicle))
+        {
+            return;
+        }
+
+        Ped driver = GetDriverOfVehicle(vehicle);
+
+        if (!Entity.Exists(driver) || driver.IsDead)
+        {
+            return;
+        }
+
+        if (!CanIssueEnemyRaidVehicleOrder(vehicle, force))
+        {
+            return;
+        }
+
+        ConfigureEnemyRaidDriver(driver);
+
+        Vector3 target = player.Position;
+        float stoppingRange = player.IsInVehicle() ? 10.0f : 16.0f;
+
+        try
+        {
+            Function.Call(
+                Hash.TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE,
+                driver.Handle,
+                vehicle.Handle,
+                target.X,
+                target.Y,
+                target.Z,
+                EnemyRaidArrivalDriveSpeed,
+                EnemyRaidDrivingStyle,
+                stoppingRange);
+        }
+        catch
+        {
+            try
+            {
+                Function.Call(Hash.TASK_COMBAT_PED, driver.Handle, player.Handle, 0, 16);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private bool CanIssueEnemyRaidVehicleOrder(Vehicle vehicle, bool force)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return false;
+        }
+
+        int nextAt;
+
+        if (!force &&
+            _enemyRaidNextVehicleOrderAt.TryGetValue(vehicle.Handle, out nextAt) &&
+            Game.GameTime < nextAt)
+        {
+            return false;
+        }
+
+        _enemyRaidNextVehicleOrderAt[vehicle.Handle] =
+            Game.GameTime + EnemyRaidVehicleOrderIntervalMs + Math.Abs(vehicle.Handle % 260);
+
+        return true;
+    }
+
+    private bool CanIssueEnemyRaidPedOrder(Ped ped, bool force)
+    {
+        if (!Entity.Exists(ped))
+        {
+            return false;
+        }
+
+        int nextAt;
+
+        if (!force &&
+            _enemyRaidNextPedOrderAt.TryGetValue(ped.Handle, out nextAt) &&
+            Game.GameTime < nextAt)
+        {
+            return false;
+        }
+
+        _enemyRaidNextPedOrderAt[ped.Handle] =
+            Game.GameTime + EnemyRaidPedOrderIntervalMs + Math.Abs(ped.Handle % 240);
+
+        return true;
+    }
+
+    private void StartEnemyRaidPassengerDriveBy(Ped passenger, Ped player, bool force)
+    {
+        if (!Entity.Exists(passenger) || passenger.IsDead || !Entity.Exists(player) || player.IsDead)
+        {
+            return;
+        }
+
+        if (!CanIssueEnemyRaidPedOrder(passenger, force))
+        {
+            return;
+        }
+
+        TryEnsureEnemyRaidWeapon(passenger);
+
+        try
+        {
+            Function.Call(
+                Hash.TASK_DRIVE_BY,
+                passenger.Handle,
+                player.Handle,
+                0,
+                0.0f,
+                0.0f,
+                0.0f,
+                EnemyRaidDriveByDistance,
+                80,
+                true,
+                EnemyRaidFullAutoFiringPattern);
+        }
+        catch
+        {
+            try
+            {
+                Function.Call(Hash.TASK_COMBAT_PED, passenger.Handle, player.Handle, 0, 16);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private void StartEnemyRaidOnFootCombat(Ped enemy, Ped player, bool force)
+    {
+        if (!Entity.Exists(enemy) || enemy.IsDead || !Entity.Exists(player) || player.IsDead)
+        {
+            return;
+        }
+
+        if (!CanIssueEnemyRaidPedOrder(enemy, force))
+        {
+            return;
+        }
+
+        MaintainEnemyRaidPedState(enemy);
+        TryEnsureEnemyRaidWeapon(enemy);
+
+        try
+        {
+            Function.Call(Hash.TASK_COMBAT_PED, enemy.Handle, player.Handle, 0, 16);
+
+            if (enemy.Position.DistanceTo(player.Position) <= EnemyRaidOnFootShootDistance &&
+                CanPedSeeEntity(enemy, player, EnemyRaidOnFootShootDistance))
+            {
+                Function.Call(
+                    Hash.TASK_SHOOT_AT_ENTITY,
+                    enemy.Handle,
+                    player.Handle,
+                    1500,
+                    EnemyRaidFullAutoFiringPattern);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private void CommandEnemyRaidOccupantsLeaveVehicle(Vehicle vehicle, Ped player, bool force)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return;
+        }
+
+        List<int> activeNpcs = new List<int>(_enemyRaidNpcHandles);
+
+        for (int i = 0; i < activeNpcs.Count; i++)
+        {
+            SpawnedNpc npc = FindSpawnedNpcByHandle(activeNpcs[i]);
+
+            if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+            {
+                continue;
+            }
+
+            if (!npc.Ped.IsInVehicle(vehicle))
+            {
+                continue;
+            }
+
+            CommandEnemyRaidPedLeaveVehicle(npc, vehicle, force);
+        }
+    }
+
+    private void CommandEnemyRaidPedLeaveVehicle(SpawnedNpc npc, Vehicle vehicle, bool force)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead || !Entity.Exists(vehicle))
+        {
+            return;
+        }
+
+        if (!npc.Ped.IsInVehicle(vehicle))
+        {
+            return;
+        }
+
+        if (!CanIssueEnemyRaidPedOrder(npc.Ped, force))
+        {
+            return;
+        }
+
+        try
+        {
+            Function.Call(Hash.TASK_LEAVE_VEHICLE, npc.Ped.Handle, vehicle.Handle, 256);
+        }
+        catch
+        {
+            try
+            {
+                Function.Call(Hash.TASK_LEAVE_VEHICLE, npc.Ped.Handle, vehicle.Handle, 0);
+            }
+            catch
+            {
+            }
+        }
+
+        _enemyRaidNextPedOrderAt[npc.Ped.Handle] = Game.GameTime + 500 + Math.Abs(npc.Ped.Handle % 220);
+    }
+
+    private void RescueEnemyRaidVehicleIfNeeded(Vehicle vehicle, Ped player, int seedIndex)
+    {
+        if (!Entity.Exists(vehicle) || !Entity.Exists(player))
+        {
+            return;
+        }
+
+        if (vehicle.Position.DistanceTo(player.Position) < EnemyRaidTooFarVehicleDistance)
+        {
+            return;
+        }
+
+        if (IsEntityLikelyVisibleToPlayer(vehicle))
+        {
+            return;
+        }
+
+        int lastRescueAt;
+
+        if (_enemyRaidLastVehicleRescueAt.TryGetValue(vehicle.Handle, out lastRescueAt) &&
+            Game.GameTime - lastRescueAt < EnemyRaidVehicleRescueCooldownMs)
+        {
+            return;
+        }
+
+        Vector3 point;
+
+        if (!TryFindHiddenRoadPointNearPlayer(
+            player,
+            seedIndex + 70,
+            EnemyRaidRelocationMinDistance,
+            EnemyRaidRelocationMaxDistance,
+            out point))
+        {
+            point = FindEnemyRaidVehicleSpawnPosition(player, seedIndex + 70);
+        }
+
+        try
+        {
+            vehicle.Position = point;
+            vehicle.Heading = HeadingFromTo(point, player.Position);
+            Function.Call(Hash.SET_VEHICLE_ON_GROUND_PROPERLY, vehicle.Handle);
+            Function.Call(Hash.SET_VEHICLE_ENGINE_ON, vehicle.Handle, true, true, false);
+        }
+        catch
+        {
+        }
+
+        _enemyRaidLastVehicleRescueAt[vehicle.Handle] = Game.GameTime;
+        InitializeEnemyRaidVehicleTracking(vehicle);
+        IssueEnemyRaidVehicleAttackOrder(vehicle, player, true);
+    }
+
+    private void InitializeEnemyRaidVehicleTracking(Vehicle vehicle)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return;
+        }
+
+        _enemyRaidLastVehiclePositions[vehicle.Handle] = vehicle.Position;
+        _enemyRaidLastVehicleMoveAt[vehicle.Handle] = Game.GameTime;
+        _enemyRaidNextVehicleOrderAt[vehicle.Handle] = 0;
+    }
+
+    private bool IsEnemyRaidVehicleStuck(Vehicle vehicle)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return false;
+        }
+
+        Vector3 lastPosition;
+
+        if (!_enemyRaidLastVehiclePositions.TryGetValue(vehicle.Handle, out lastPosition))
+        {
+            InitializeEnemyRaidVehicleTracking(vehicle);
+            return false;
+        }
+
+        if (vehicle.Position.DistanceTo(lastPosition) > 2.4f)
+        {
+            _enemyRaidLastVehiclePositions[vehicle.Handle] = vehicle.Position;
+            _enemyRaidLastVehicleMoveAt[vehicle.Handle] = Game.GameTime;
+            return false;
+        }
+
+        int lastMoveAt;
+
+        if (!_enemyRaidLastVehicleMoveAt.TryGetValue(vehicle.Handle, out lastMoveAt))
+        {
+            _enemyRaidLastVehicleMoveAt[vehicle.Handle] = Game.GameTime;
+            return false;
+        }
+
+        return Game.GameTime - lastMoveAt >= EnemyRaidStuckTimeoutMs;
+    }
+
+    private void ClearEnemyRaidVehicleTracking(int handle)
+    {
+        _enemyRaidNextVehicleOrderAt.Remove(handle);
+        _enemyRaidLastVehiclePositions.Remove(handle);
+        _enemyRaidLastVehicleMoveAt.Remove(handle);
+        _enemyRaidLastVehicleRescueAt.Remove(handle);
     }
 }

@@ -77,6 +77,7 @@ public class DonJEnemySpawnerTests
     {
         Assert.AreEqual(24, GetStaticFieldValue<int>("MainMenuItemCount"));
         Assert.AreEqual(24, GetStaticFieldValue<int>("MainMenuVisibleRowLimit"));
+        Assert.AreEqual(16, GetStaticFieldValue<int>("MainMenuCompactVisibleRowLimit"));
         Assert.AreEqual(1000, GetStaticFieldValue<int>("AutoRespawnCheckIntervalMs"));
         Assert.AreEqual(6000, GetStaticFieldValue<int>("AutoRespawnMinDelayMs"));
         Assert.AreEqual(15000, GetStaticFieldValue<int>("AutoRespawnRetryDelayMs"));
@@ -99,6 +100,11 @@ public class DonJEnemySpawnerTests
         Assert.AreEqual(12, (int)InvokeStatic("GetMainMenuVisibleRowCount", 12));
         Assert.AreEqual(24, (int)InvokeStatic("GetMainMenuVisibleRowCount", 24));
         Assert.AreEqual(24, (int)InvokeStatic("GetMainMenuVisibleRowCount", 40));
+
+        Assert.AreEqual(1, (int)InvokeStatic("GetMainMenuCompactVisibleRowCount", 0));
+        Assert.AreEqual(12, (int)InvokeStatic("GetMainMenuCompactVisibleRowCount", 12));
+        Assert.AreEqual(16, (int)InvokeStatic("GetMainMenuCompactVisibleRowCount", 24));
+        Assert.AreEqual(16, (int)InvokeStatic("GetMainMenuCompactVisibleRowCount", 40));
     }
 
     [TestMethod]
@@ -130,6 +136,43 @@ public class DonJEnemySpawnerTests
         Assert.AreEqual(28.0f, GetStaticFieldValue<float>("CartelDismissDeleteDistance"), 0.001f);
         Assert.AreEqual(GetStaticFieldValue<int>("ProfessionalDrivingStyle"), GetStaticFieldValue<int>("CartelRapidDrivingStyle"));
         Assert.AreEqual(0x2AFE52F782F25775UL, GetStaticFieldValue<ulong>("NativeIsPedRunningMobilePhoneTask"));
+    }
+
+    [TestMethod]
+    public void EnemyRaidConstants_KeepPhoneRaidContract()
+    {
+        Assert.AreEqual("Ballas", GetStaticFieldValue<string>("EnemyRaidContactName"));
+        Assert.AreEqual(4, GetStaticFieldValue<int>("EnemyRaidMinMembers"));
+        Assert.AreEqual(12, GetStaticFieldValue<int>("EnemyRaidMaxMembers"));
+        Assert.AreEqual(36, GetStaticFieldValue<int>("EnemyRaidMaxActiveMembers"));
+        Assert.AreEqual(4, GetStaticFieldValue<int>("EnemyRaidMaxVehicleCount"));
+        Assert.AreEqual(100, GetStaticFieldValue<int>("EnemyRaidHealth"));
+        Assert.AreEqual(100, GetStaticFieldValue<int>("EnemyRaidArmor"));
+        Assert.AreEqual(2500, GetStaticFieldValue<int>("EnemyRaidCallCooldownMs"));
+        Assert.AreEqual(450, GetStaticFieldValue<int>("EnemyRaidThinkIntervalMs"));
+        Assert.AreEqual(850, GetStaticFieldValue<int>("EnemyRaidPedOrderIntervalMs"));
+        Assert.AreEqual(1300, GetStaticFieldValue<int>("EnemyRaidVehicleOrderIntervalMs"));
+        Assert.AreEqual(7000, GetStaticFieldValue<int>("EnemyRaidStuckTimeoutMs"));
+        Assert.AreEqual(10000, GetStaticFieldValue<int>("EnemyRaidVehicleRescueCooldownMs"));
+        Assert.AreEqual(72.0f, GetStaticFieldValue<float>("EnemyRaidSpawnMinDistance"), 0.001f);
+        Assert.AreEqual(130.0f, GetStaticFieldValue<float>("EnemyRaidSpawnMaxDistance"), 0.001f);
+        Assert.AreEqual(82.0f, GetStaticFieldValue<float>("EnemyRaidRelocationMinDistance"), 0.001f);
+        Assert.AreEqual(135.0f, GetStaticFieldValue<float>("EnemyRaidRelocationMaxDistance"), 0.001f);
+        Assert.AreEqual(36.0f, GetStaticFieldValue<float>("EnemyRaidArrivalDriveSpeed"), 0.001f);
+        Assert.AreEqual(105.0f, GetStaticFieldValue<float>("EnemyRaidDriveByDistance"), 0.001f);
+        Assert.AreEqual(42.0f, GetStaticFieldValue<float>("EnemyRaidExitVehicleDistance"), 0.001f);
+        Assert.AreEqual(18.0f, GetStaticFieldValue<float>("EnemyRaidForcedExitVehicleDistance"), 0.001f);
+        Assert.AreEqual(125.0f, GetStaticFieldValue<float>("EnemyRaidOnFootShootDistance"), 0.001f);
+        Assert.AreEqual(230.0f, GetStaticFieldValue<float>("EnemyRaidTooFarVehicleDistance"), 0.001f);
+        Assert.AreEqual(GetStaticFieldValue<int>("ProfessionalDrivingStyle"), GetStaticFieldValue<int>("EnemyRaidDrivingStyle"));
+        Assert.AreEqual(unchecked((int)0xC6EE6B4C), GetStaticFieldValue<int>("EnemyRaidFullAutoFiringPattern"));
+
+        CollectionAssert.AreEqual(
+            new[] { "g_m_y_ballaeast_01", "g_m_y_ballaorig_01", "g_m_y_ballasout_01" },
+            GetStaticFieldValue<string[]>("EnemyRaidPedModelNames"));
+        CollectionAssert.AreEqual(
+            new[] { "buccaneer", "chino", "faction", "moonbeam", "primo", "manana" },
+            GetStaticFieldValue<string[]>("EnemyRaidVehicleModelNames"));
     }
 
     [TestMethod]
@@ -768,11 +811,156 @@ public class DonJEnemySpawnerTests
     public void SourceFile_CartelGroundingCallsStayLimitedToPlacementUpgradeAndRescueTeleport()
     {
         string source = File.ReadAllText(GetSourceFilePath());
+        string placementVehicleBlock = ExtractSourceSection(
+            source,
+            "private void ConfigurePlacedVehicleEntity(Vehicle vehicle, float heading)",
+            "private void ConfigurePlacedObjectEntity(Prop prop, Vector3 position, float heading)");
+        string cartelUpgradeBlock = ExtractSourceSection(
+            source,
+            "private void UpgradeCartelVehicle(Vehicle vehicle)",
+            "private void MaintainCartelVehicleSoftState(Vehicle vehicle)");
+        string cartelRescueBlock = ExtractSourceSection(
+            source,
+            "private void TeleportCartelVehicleToRoad(Vehicle vehicle, Ped player, Vector3 point)",
+            "private void RescueCartelGuardIfNeeded(SpawnedNpc npc, Ped player, int seedIndex)");
+        string enemyVehicleConfigureBlock = ExtractSourceSection(
+            source,
+            "private void ConfigureEnemyRaidVehicle(Vehicle vehicle)",
+            "private void ConfigureEnemyRaidVehicleSoftState(Vehicle vehicle)");
+        string enemyVehicleRescueBlock = ExtractSourceSection(
+            source,
+            "private void RescueEnemyRaidVehicleIfNeeded(Vehicle vehicle, Ped player, int seedIndex)",
+            "private void InitializeEnemyRaidVehicleTracking(Vehicle vehicle)");
 
         Assert.AreEqual(
-            3,
+            5,
             CountOccurrences(source, "Function.Call(Hash.SET_VEHICLE_ON_GROUND_PROPERLY"),
-            "Le projet doit limiter SET_VEHICLE_ON_GROUND_PROPERLY au placement initial, à l'upgrade initial et à la téléportation de secours.");
+            "Le projet doit limiter SET_VEHICLE_ON_GROUND_PROPERLY au placement initial, au Cartel et aux deux opérations véhicule de la vague ennemie.");
+        Assert.AreEqual(
+            1,
+            CountOccurrences(placementVehicleBlock, "Function.Call(Hash.SET_VEHICLE_ON_GROUND_PROPERLY"),
+            "Le placement véhicule doit garder un seul grounding initial.");
+        Assert.AreEqual(
+            1,
+            CountOccurrences(cartelUpgradeBlock, "Function.Call(Hash.SET_VEHICLE_ON_GROUND_PROPERLY"),
+            "Le Cartel doit garder un seul grounding pendant l'upgrade initial.");
+        Assert.AreEqual(
+            1,
+            CountOccurrences(cartelRescueBlock, "Function.Call(Hash.SET_VEHICLE_ON_GROUND_PROPERLY"),
+            "Le Cartel doit garder un seul grounding pendant la téléportation de secours.");
+        Assert.AreEqual(
+            1,
+            CountOccurrences(enemyVehicleConfigureBlock, "Function.Call(Hash.SET_VEHICLE_ON_GROUND_PROPERLY"),
+            "La vague ennemie doit garder un seul grounding pendant la configuration initiale du véhicule.");
+        Assert.AreEqual(
+            1,
+            CountOccurrences(enemyVehicleRescueBlock, "Function.Call(Hash.SET_VEHICLE_ON_GROUND_PROPERLY"),
+            "La vague ennemie doit garder un seul grounding pendant la relocalisation de secours.");
+    }
+
+    [TestMethod]
+    public void SourceFile_PhoneContactKeepsCartelOnCAndEnemyRaidOnR()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string contactBlock = ExtractSourceSection(
+            source,
+            "private void UpdateCartelPhoneContact(Ped player)",
+            "private bool IsPlayerPhoneOpen(Ped player)");
+        string overlayBlock = ExtractSourceSection(
+            source,
+            "private void DrawCartelPhoneContactOverlay()",
+            "private void ToggleCartelCall()");
+
+        StringAssert.Contains(contactBlock, "_cartelPhoneKeyLatch = false;");
+        StringAssert.Contains(contactBlock, "_enemyRaidPhoneKeyLatch = false;");
+        StringAssert.Contains(contactBlock, "bool cPressed = Game.IsKeyPressed(Keys.C);");
+        StringAssert.Contains(contactBlock, "ToggleCartelCall();");
+        StringAssert.Contains(contactBlock, "bool rPressed = Game.IsKeyPressed(Keys.R);");
+        StringAssert.Contains(contactBlock, "CallEnemyRaid();");
+        StringAssert.Contains(overlayBlock, "DrawText(\"Contacts téléphone\"");
+        StringAssert.Contains(overlayBlock, "DrawText(CartelContactName");
+        StringAssert.Contains(overlayBlock, "DrawText(EnemyRaidContactName");
+        StringAssert.Contains(overlayBlock, "int liveEnemies = CountLiveEnemyRaidMembers();");
+        StringAssert.Contains(overlayBlock, "_nextEnemyRaidCallAllowedAt - Game.GameTime");
+    }
+
+    [TestMethod]
+    public void SourceFile_EnemyRaidUsesDedicatedAiAndHostileGroup()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string updateNpcsBlock = ExtractSourceSection(
+            source,
+            "private void UpdateNpcs()",
+            "private void RefreshNpcBlipIfNeeded(SpawnedNpc npc, int now, ref int blipBudget)");
+        string callBlock = ExtractSourceSection(
+            source,
+            "private void CallEnemyRaid()",
+            "private void SpawnEnemyRaidWave(int memberCount, int originalRequestedCount)");
+        string spawnBlock = ExtractSourceSection(
+            source,
+            "private void SpawnEnemyRaidWave(int memberCount, int originalRequestedCount)",
+            "private bool SpawnEnemyRaidFootEnemy(Ped player, WeaponLoadout loadout, int seedIndex)");
+        string configurePedBlock = ExtractSourceSection(
+            source,
+            "private void ConfigureEnemyRaidPed(SpawnedNpc spawned, Vehicle assignedVehicle, int assignedSeat)",
+            "private void MaintainEnemyRaidPedState(Ped ped)");
+        string updateRaidNpcBlock = ExtractSourceSection(
+            source,
+            "private void UpdateEnemyRaidNpc(SpawnedNpc npc, Ped player)",
+            "private void CleanupEnemyRaidHandleSets()");
+
+        int raidBypassIndex = updateNpcsBlock.IndexOf("_enemyRaidNpcHandles.Contains(npc.Ped.Handle)", StringComparison.Ordinal);
+        int genericThinkIndex = updateNpcsBlock.IndexOf("if (now < npc.NextThinkAt)", StringComparison.Ordinal);
+
+        Assert.IsTrue(raidBypassIndex >= 0, "UpdateNpcs doit ignorer les PNJ de vague ennemie.");
+        Assert.IsTrue(genericThinkIndex > raidBypassIndex, "Le bypass vague ennemie doit passer avant l'IA générique.");
+        StringAssert.Contains(callBlock, "_random.Next(EnemyRaidMinMembers, EnemyRaidMaxMembers + 1)");
+        StringAssert.Contains(callBlock, "EnemyRaidMaxActiveMembers");
+        StringAssert.Contains(spawnBlock, "RegisterSpawnedNpc(");
+        StringAssert.Contains(spawnBlock, "NpcBehavior.Attacker");
+        StringAssert.Contains(spawnBlock, "EnemyRaidHealth");
+        StringAssert.Contains(spawnBlock, "EnemyRaidArmor");
+        StringAssert.Contains(spawnBlock, "PutPedIntoVehicleSafe(spawned.Ped, vehicle, seat);");
+        StringAssert.Contains(configurePedBlock, "Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, spawned.Ped.Handle, _hostileGroupHash);");
+        StringAssert.Contains(configurePedBlock, "TryEnsureEnemyRaidWeapon(spawned.Ped);");
+        StringAssert.Contains(updateRaidNpcBlock, "StartEnemyRaidPassengerDriveBy(npc.Ped, player, false);");
+        StringAssert.Contains(updateRaidNpcBlock, "CommandEnemyRaidPedLeaveVehicle(npc, vehicle, true);");
+        StringAssert.Contains(updateRaidNpcBlock, "StartEnemyRaidOnFootCombat(npc.Ped, player, false);");
+    }
+
+    [TestMethod]
+    public void SourceFile_EnemyRaidVehiclesUseRedBallasBlipsAndSmgDriveBy()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string blipBlock = ExtractSourceSection(
+            source,
+            "private void CreateOrUpdatePlacedVehicleBlip(PlacedVehicle placed)",
+            "private void RemovePlacedVehicleBlip(PlacedVehicle placed)");
+        string loadoutBlock = ExtractSourceSection(
+            source,
+            "private WeaponLoadout CreateEnemyRaidLoadout()",
+            "private void ConfigureEnemyRaidPed(SpawnedNpc spawned, Vehicle assignedVehicle, int assignedSeat)");
+        string driveByBlock = ExtractSourceSection(
+            source,
+            "private void StartEnemyRaidPassengerDriveBy(Ped passenger, Ped player, bool force)",
+            "private void StartEnemyRaidOnFootCombat(Ped enemy, Ped player, bool force)");
+        string vehicleOrderBlock = ExtractSourceSection(
+            source,
+            "private void IssueEnemyRaidVehicleAttackOrder(Vehicle vehicle, Ped player, bool force)",
+            "private bool CanIssueEnemyRaidVehicleOrder(Vehicle vehicle, bool force)");
+
+        StringAssert.Contains(blipBlock, "if (_enemyRaidVehicleHandles.Contains(placed.Vehicle.Handle))");
+        StringAssert.Contains(blipBlock, "placed.Blip.Color = BlipColor.Red;");
+        StringAssert.Contains(blipBlock, "placed.Blip.IsFriendly = false;");
+        StringAssert.Contains(blipBlock, "placed.Blip.Name = \"Ballas Véhicule\";");
+        StringAssert.Contains(blipBlock, "placed.Blip.Color = BlipColor.Blue;");
+        StringAssert.Contains(blipBlock, "placed.Blip.IsFriendly = true;");
+        StringAssert.Contains(loadoutBlock, "Weapon = WeaponHash.SMG");
+        StringAssert.Contains(loadoutBlock, "Ammo = 9999");
+        StringAssert.Contains(driveByBlock, "Hash.TASK_DRIVE_BY");
+        StringAssert.Contains(driveByBlock, "EnemyRaidDriveByDistance");
+        StringAssert.Contains(vehicleOrderBlock, "Hash.TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE");
+        StringAssert.Contains(vehicleOrderBlock, "EnemyRaidArrivalDriveSpeed");
     }
 
     [TestMethod]
@@ -1384,10 +1572,13 @@ public class DonJEnemySpawnerTests
     {
         string source = File.ReadAllText(GetSourceFilePath());
 
-        StringAssert.Contains(source, "DrawText(TrainerSubtitle, x + 24, y + 42");
-        StringAssert.Contains(source, "DrawMainSummaryPanel(x + width + 18, y, 338, 212);");
+        StringAssert.Contains(source, "DrawText(TrainerSubtitle, x + 31, y + 42");
+        StringAssert.Contains(source, "DrawMainSummaryPanel(x + width + 16, y, 298, 310);");
         StringAssert.Contains(source, "private void DrawPanelFrame(int x, int y, int width, int height, Color accentColor)");
         StringAssert.Contains(source, "private void DrawBadge(int x, int y, int width, string text, Color background, Color accentColor)");
+        StringAssert.Contains(source, "private void DrawHeaderStat(int x, int y, int width, string label, string value, Color accentColor)");
+        StringAssert.Contains(source, "private void DrawSelectedMainMenuCard(int x, int y, int width, int height, MainMenuEntry entry)");
+        StringAssert.Contains(source, "private void DrawSummaryMetric(int x, int y, int width, string label, string value, Color accentColor)");
         StringAssert.Contains(source, "private Color GetMainMenuAccent(int index)");
     }
 
