@@ -4207,7 +4207,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
              * On évite donc que le comportement Attacker générique remplace
              * les ordres de conduite sur la frame suivante.
              */
-            if (_enemyRaidNpcHandles.Contains(npc.Ped.Handle))
+            if (_enemyRaidKnownNpcHandles.Contains(npc.Ped.Handle))
             {
                 continue;
             }
@@ -7129,12 +7129,15 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
             return;
         }
 
+        int pedHandle = GetPedEntityHandleSafe(npc.Ped);
+        bool isEnemyRaidNpc = pedHandle != 0 && _enemyRaidKnownNpcHandles.Contains(pedHandle);
+
         if (npc.Blip == null || !npc.Blip.Exists())
         {
             try
             {
                 npc.Blip = npc.Ped.AddBlip();
-                npc.Blip.Scale = 0.72f;
+                npc.Blip.Scale = isEnemyRaidNpc ? 0.82f : 0.72f;
                 npc.Blip.IsShortRange = false;
             }
             catch
@@ -7147,6 +7150,18 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         try
         {
             npc.Blip.Sprite = BlipSprite.Enemy2;
+            npc.Blip.IsShortRange = false;
+
+            if (isEnemyRaidNpc)
+            {
+                npc.Blip.Color = BlipColor.Red;
+                npc.Blip.IsFriendly = false;
+                npc.Blip.Name = "Ballas Ennemi";
+                npc.Blip.IsFlashing = false;
+                npc.Blip.Scale = 0.82f;
+                return;
+            }
+
             npc.Blip.Name = "DonJ NPC";
 
             if (IsAllyBehavior(npc.BaseBehavior))
@@ -7204,6 +7219,20 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
             return;
         }
 
+        int vehicleHandle = GetVehicleEntityHandleSafe(placed.Vehicle);
+
+        /*
+         * Véhicule Ballas terminé / en attente de nettoyage :
+         * on ne veut plus aucun rond/blip sur la map.
+         * Le véhicule physique sera supprimé dès que le joueur s'éloigne
+         * ou qu'il n'est plus visible.
+         */
+        if (vehicleHandle != 0 && _enemyRaidVehicleCleanupHandles.Contains(vehicleHandle))
+        {
+            RemovePlacedVehicleBlip(placed);
+            return;
+        }
+
         if (placed.Blip == null || !placed.Blip.Exists())
         {
             try
@@ -7222,11 +7251,11 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
         try
         {
-            if (_enemyRaidVehicleHandles.Contains(placed.Vehicle.Handle))
+            if (vehicleHandle != 0 && _enemyRaidVehicleHandles.Contains(vehicleHandle))
             {
                 placed.Blip.Color = BlipColor.Red;
                 placed.Blip.IsFriendly = false;
-                placed.Blip.Name = "Ballas Véhicule";
+                placed.Blip.Name = "Ballas Vehicule";
             }
             else
             {
@@ -14469,6 +14498,23 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
     private const int EnemyRaidStuckTimeoutMs = 7000;
     private const int EnemyRaidVehicleRescueCooldownMs = 10000;
 
+    /*
+     * Nettoyage post-combat :
+     * - les blips véhicules rouges disparaissent dès que tous les Ballas sont morts ;
+     * - les véhicules restent physiquement si le joueur les regarde encore ;
+     * - ils sont supprimés proprement quand le joueur part / ne les voit plus.
+     */
+    private const int EnemyRaidPostCombatVehicleCleanupGraceMs = 1800;
+    private const int EnemyRaidVisibleVehicleCleanupMaxMs = 45000;
+
+    /*
+     * Mort du joueur :
+     * GTA peut supprimer des peds pendant la séquence mort/respawn.
+     * On mémorise donc le nombre d'ennemis encore vivants avant la mort,
+     * puis on reconstruit la vague près du joueur après le respawn si nécessaire.
+     */
+    private const int EnemyRaidPlayerDeathRestoreDelayMs = 1800;
+
     private const float EnemyRaidSpawnMinDistance = 72.0f;
     private const float EnemyRaidSpawnMaxDistance = 130.0f;
     private const float EnemyRaidRelocationMinDistance = 82.0f;
@@ -14481,6 +14527,10 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
     private const float EnemyRaidOnFootShootDistance = 125.0f;
     private const float EnemyRaidTooFarVehicleDistance = 230.0f;
 
+    private const float EnemyRaidPostCombatVehicleCleanupDistance = 135.0f;
+    private const float EnemyRaidPostCombatVehicleForceCleanupDistance = 260.0f;
+    private const float EnemyRaidRebuildAfterDeathDistance = 260.0f;
+
     private const int EnemyRaidDrivingStyle = ProfessionalDrivingStyle;
     private const int EnemyRaidFullAutoFiringPattern = unchecked((int)0xC6EE6B4C);
 
@@ -14488,14 +14538,36 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
     private int _nextEnemyRaidCallAllowedAt;
     private int _nextEnemyRaidThinkAt;
 
+    private bool _enemyRaidPlayerDeathInProgress;
+    private bool _enemyRaidRestorePendingAfterPlayerDeath;
+    private int _enemyRaidRestoreMemberCountAfterDeath;
+    private int _enemyRaidRestoreAllowedAt;
+    private int _enemyRaidLastKnownLiveMemberCount;
+
+    /*
+     * _enemyRaidNpcHandles = ennemis actuellement vivants/actifs.
+     * _enemyRaidKnownNpcHandles = tous les peds Ballas créés par la vague,
+     * utile pour les blips et pour nettoyer les records morts.
+     */
     private readonly HashSet<int> _enemyRaidNpcHandles = new HashSet<int>();
+    private readonly HashSet<int> _enemyRaidKnownNpcHandles = new HashSet<int>();
+
+    /*
+     * _enemyRaidVehicleHandles = véhicules de vague encore actifs.
+     * _enemyRaidVehicleCleanupHandles = véhicules abandonnés après combat,
+     * sans blip, à supprimer quand le joueur s'éloigne.
+     */
     private readonly HashSet<int> _enemyRaidVehicleHandles = new HashSet<int>();
+    private readonly HashSet<int> _enemyRaidVehicleCleanupHandles = new HashSet<int>();
 
     private readonly Dictionary<int, int> _enemyRaidNextPedOrderAt = new Dictionary<int, int>();
     private readonly Dictionary<int, int> _enemyRaidNextVehicleOrderAt = new Dictionary<int, int>();
     private readonly Dictionary<int, Vector3> _enemyRaidLastVehiclePositions = new Dictionary<int, Vector3>();
     private readonly Dictionary<int, int> _enemyRaidLastVehicleMoveAt = new Dictionary<int, int>();
     private readonly Dictionary<int, int> _enemyRaidLastVehicleRescueAt = new Dictionary<int, int>();
+
+    private readonly Dictionary<int, int> _enemyRaidVehicleCleanupStartedAt = new Dictionary<int, int>();
+    private readonly Dictionary<int, bool> _enemyRaidNpcWasInVehicle = new Dictionary<int, bool>();
 
     private static readonly string[] EnemyRaidPedModelNames =
     {
@@ -14516,6 +14588,17 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
     private void CallEnemyRaid()
     {
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player) || player.IsDead)
+        {
+            ShowStatus("Ballas : appel impossible pendant la mort/transition du joueur.", 3000);
+            return;
+        }
+
+        UpdateEnemyRaidAbandonedVehicles(player);
+        CleanupEnemyRaidHandleSets(true);
+
         if (Game.GameTime < _nextEnemyRaidCallAllowedAt)
         {
             int remaining = Math.Max(1, (_nextEnemyRaidCallAllowedAt - Game.GameTime + 999) / 1000);
@@ -14524,8 +14607,6 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         }
 
         _nextEnemyRaidCallAllowedAt = Game.GameTime + EnemyRaidCallCooldownMs;
-
-        CleanupEnemyRaidHandleSets();
 
         int liveMembers = CountLiveEnemyRaidMembers();
 
@@ -14544,10 +14625,15 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
             return;
         }
 
-        SpawnEnemyRaidWave(allowedMembers, requestedMembers);
+        SpawnEnemyRaidWave(allowedMembers, requestedMembers, false);
     }
 
     private void SpawnEnemyRaidWave(int memberCount, int originalRequestedCount)
+    {
+        SpawnEnemyRaidWave(memberCount, originalRequestedCount, false);
+    }
+
+    private void SpawnEnemyRaidWave(int memberCount, int originalRequestedCount, bool restoredAfterPlayerDeath)
     {
         Ped player = Game.Player.Character;
 
@@ -14564,8 +14650,9 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         int createdMembers = 0;
         int createdVehicles = 0;
         int vehicleAttempt = 0;
+        int safeMemberCount = Math.Max(1, Math.Min(memberCount, EnemyRaidMaxActiveMembers));
 
-        while (createdMembers < memberCount &&
+        while (createdMembers < safeMemberCount &&
                createdVehicles < EnemyRaidMaxVehicleCount &&
                vehicleAttempt < EnemyRaidMaxVehicleCount + 4)
         {
@@ -14586,13 +14673,15 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
             ConfigureEnemyRaidVehicle(vehicle);
 
             _enemyRaidVehicleHandles.Add(vehicle.Handle);
+            _enemyRaidVehicleCleanupHandles.Remove(vehicle.Handle);
+            _enemyRaidVehicleCleanupStartedAt.Remove(vehicle.Handle);
             InitializeEnemyRaidVehicleTracking(vehicle);
             createdVehicles++;
 
             int seatsForThisVehicle = GetVehicleSeatCapacityIncludingDriver(vehicle);
             int seatsFilled = 0;
 
-            for (int localSeatIndex = 0; localSeatIndex < seatsForThisVehicle && createdMembers < memberCount; localSeatIndex++)
+            for (int localSeatIndex = 0; localSeatIndex < seatsForThisVehicle && createdMembers < safeMemberCount; localSeatIndex++)
             {
                 int seat = localSeatIndex == 0 ? -1 : localSeatIndex - 1;
 
@@ -14630,10 +14719,10 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
                     continue;
                 }
 
-                _enemyRaidNpcHandles.Add(spawned.Ped.Handle);
-
+                RegisterEnemyRaidNpc(spawned, true);
                 ConfigureEnemyRaidPed(spawned, vehicle, seat);
                 PutPedIntoVehicleSafe(spawned.Ped, vehicle, seat);
+                MarkEnemyRaidNpcVehicleState(spawned, true, true);
 
                 createdMembers++;
                 seatsFilled++;
@@ -14641,22 +14730,14 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
             if (seatsFilled == 0)
             {
-                _enemyRaidVehicleHandles.Remove(vehicle.Handle);
-                ClearEnemyRaidVehicleTracking(vehicle.Handle);
-                DeleteEntitySafe(vehicle);
+                DeleteEnemyRaidVehicleAndRecord(vehicle.Handle, true);
                 createdVehicles--;
             }
         }
 
-        /*
-         * Secours : si un modèle véhicule échoue ou si un véhicule n'a pas assez
-         * de places, on complète la vague à pied depuis un point caché. La règle
-         * importante reste respectée : l'appel crée bien 4 à 12 ennemis, et la
-         * voie véhicule reste utilisée dès que possible.
-         */
         int footSeed = 40;
 
-        while (createdMembers < memberCount)
+        while (createdMembers < safeMemberCount)
         {
             if (SpawnEnemyRaidFootEnemy(player, smgLoadout, footSeed + createdMembers))
             {
@@ -14668,7 +14749,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
             }
         }
 
-        CleanupEnemyRaidHandleSets();
+        CleanupEnemyRaidHandleSets(false);
 
         if (createdMembers == 0)
         {
@@ -14678,10 +14759,23 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
         _enemyRaidActive = true;
         _nextEnemyRaidThinkAt = 0;
+        _enemyRaidPlayerDeathInProgress = false;
+        _enemyRaidRestorePendingAfterPlayerDeath = false;
+        _enemyRaidRestoreMemberCountAfterDeath = 0;
+        _enemyRaidLastKnownLiveMemberCount = CountLiveEnemyRaidMembersWithoutCleanup();
 
         OrderEnemyRaidVehiclesToPlayer(true);
+        ForceRefreshAllEnemyRaidNpcBlips();
 
-        string cappedText = memberCount < originalRequestedCount
+        if (restoredAfterPlayerDeath)
+        {
+            ShowStatus(
+                "Ballas : " + createdMembers.ToString(CultureInfo.InvariantCulture) + " survivant(s) reprennent l'attaque après le respawn.",
+                5500);
+            return;
+        }
+
+        string cappedText = safeMemberCount < originalRequestedCount
             ? " (limite active atteinte)"
             : string.Empty;
 
@@ -14731,8 +14825,9 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
             return false;
         }
 
-        _enemyRaidNpcHandles.Add(spawned.Ped.Handle);
+        RegisterEnemyRaidNpc(spawned, false);
         ConfigureEnemyRaidPed(spawned, null, 999);
+        MarkEnemyRaidNpcVehicleState(spawned, false, true);
         StartEnemyRaidOnFootCombat(spawned.Ped, player, true);
 
         return true;
@@ -14740,7 +14835,22 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
     private void UpdateEnemyRaidState(Ped player)
     {
-        CleanupEnemyRaidHandleSets();
+        UpdateEnemyRaidAbandonedVehicles(player);
+
+        if (!Entity.Exists(player))
+        {
+            return;
+        }
+
+        if (player.IsDead)
+        {
+            HandleEnemyRaidPlayerDeath(player);
+            return;
+        }
+
+        HandleEnemyRaidPlayerAliveAfterDeath(player);
+        CleanupEnemyRaidHandleSets(true);
+        UpdateEnemyRaidAbandonedVehicles(player);
 
         if (!_enemyRaidActive)
         {
@@ -14753,11 +14863,6 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         }
 
         _nextEnemyRaidThinkAt = Game.GameTime + EnemyRaidThinkIntervalMs;
-
-        if (!Entity.Exists(player) || player.IsDead)
-        {
-            return;
-        }
 
         EnsureRelationshipGroups();
 
@@ -14779,7 +14884,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
         for (int i = 0; i < activeNpcs.Count; i++)
         {
-            SpawnedNpc npc = FindSpawnedNpcByHandle(activeNpcs[i]);
+            SpawnedNpc npc = FindEnemyRaidNpcRecordByHandle(activeNpcs[i]);
 
             if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
             {
@@ -14789,7 +14894,8 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
             UpdateEnemyRaidNpc(npc, player);
         }
 
-        CleanupEnemyRaidHandleSets();
+        CleanupEnemyRaidHandleSets(true);
+        UpdateEnemyRaidAbandonedVehicles(player);
     }
 
     private void UpdateEnemyRaidVehicle(Vehicle vehicle, Ped player, int seedIndex)
@@ -14827,6 +14933,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         }
 
         MaintainEnemyRaidPedState(npc.Ped);
+        UpdateEnemyRaidNpcBlipState(npc);
 
         if (npc.Ped.IsInVehicle() && Entity.Exists(npc.Ped.CurrentVehicle))
         {
@@ -14852,16 +14959,28 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
             return;
         }
 
+        MarkEnemyRaidNpcVehicleState(npc, false, false);
+        ForceRefreshEnemyRaidNpcBlip(npc, false);
         StartEnemyRaidOnFootCombat(npc.Ped, player, false);
     }
 
     private void CleanupEnemyRaidHandleSets()
     {
+        CleanupEnemyRaidHandleSets(true);
+    }
+
+    private void CleanupEnemyRaidHandleSets(bool allowPostCombatCleanup)
+    {
+        if (_enemyRaidPlayerDeathInProgress)
+        {
+            return;
+        }
+
         List<int> deadNpcHandles = new List<int>();
 
         foreach (int handle in _enemyRaidNpcHandles)
         {
-            SpawnedNpc npc = FindSpawnedNpcByHandle(handle);
+            SpawnedNpc npc = FindEnemyRaidNpcRecordByHandle(handle);
 
             if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
             {
@@ -14873,6 +14992,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         {
             _enemyRaidNpcHandles.Remove(deadNpcHandles[i]);
             _enemyRaidNextPedOrderAt.Remove(deadNpcHandles[i]);
+            _enemyRaidNpcWasInVehicle.Remove(deadNpcHandles[i]);
         }
 
         List<int> inactiveVehicleHandles = new List<int>();
@@ -14881,13 +15001,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         {
             Vehicle vehicle = FindVehicleByHandle(handle);
 
-            /*
-             * On garde les véhicules de la vague en rouge tant qu'il reste
-             * des ennemis vivants, même s'ils sont descendus. Dès que la vague
-             * est morte ou le véhicule supprimé, on sort le handle du tracking.
-             */
-            if (!Entity.Exists(vehicle) ||
-                (_enemyRaidNpcHandles.Count == 0 && !DoesEnemyRaidVehicleHaveLiveTrackedOccupant(vehicle)))
+            if (!Entity.Exists(vehicle))
             {
                 inactiveVehicleHandles.Add(handle);
             }
@@ -14897,26 +15011,26 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         {
             _enemyRaidVehicleHandles.Remove(inactiveVehicleHandles[i]);
             ClearEnemyRaidVehicleTracking(inactiveVehicleHandles[i]);
+            RemoveEnemyRaidPlacedVehicleRecord(inactiveVehicleHandles[i], false);
         }
 
         _enemyRaidActive = _enemyRaidNpcHandles.Count > 0;
+
+        if (_enemyRaidActive)
+        {
+            _enemyRaidLastKnownLiveMemberCount = _enemyRaidNpcHandles.Count;
+        }
+
+        if (!_enemyRaidActive && allowPostCombatCleanup)
+        {
+            BeginEnemyRaidPostCombatCleanup();
+        }
     }
 
     private int CountLiveEnemyRaidMembers()
     {
-        int count = 0;
-
-        foreach (int handle in _enemyRaidNpcHandles)
-        {
-            SpawnedNpc npc = FindSpawnedNpcByHandle(handle);
-
-            if (npc != null && Entity.Exists(npc.Ped) && !npc.Ped.IsDead)
-            {
-                count++;
-            }
-        }
-
-        return count;
+        CleanupEnemyRaidHandleSets(false);
+        return CountLiveEnemyRaidMembersWithoutCleanup();
     }
 
     private bool DoesEnemyRaidVehicleHaveLiveTrackedOccupant(Vehicle vehicle)
@@ -15013,6 +15127,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         spawned.IsReturningHome = false;
         spawned.LastCombatActivityAt = Game.GameTime;
         spawned.NextThinkAt = Game.GameTime + 60000;
+        spawned.NextBlipRefreshAt = 0;
 
         if (Entity.Exists(assignedVehicle))
         {
@@ -15027,12 +15142,14 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         spawned.Ped.Accuracy = 45;
         spawned.Ped.ShootRate = 750;
         spawned.Ped.IsEnemy = true;
+        spawned.Ped.IsPersistent = true;
         spawned.Ped.BlockPermanentEvents = true;
         spawned.Ped.AlwaysKeepTask = true;
         spawned.Ped.CanSwitchWeapons = true;
 
         try
         {
+            Function.Call(Hash.SET_ENTITY_AS_MISSION_ENTITY, spawned.Ped.Handle, true, true);
             Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, spawned.Ped.Handle, _hostileGroupHash);
             Function.Call(Hash.SET_PED_COMBAT_ABILITY, spawned.Ped.Handle, 2);
             Function.Call(Hash.SET_PED_COMBAT_RANGE, spawned.Ped.Handle, 2);
@@ -15048,7 +15165,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         }
 
         TryEnsureEnemyRaidWeapon(spawned.Ped);
-        CreateOrUpdateNpcBlip(spawned);
+        ForceRefreshEnemyRaidNpcBlip(spawned, true);
     }
 
     private void MaintainEnemyRaidPedState(Ped ped)
@@ -15059,11 +15176,13 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         }
 
         ped.IsEnemy = true;
+        ped.IsPersistent = true;
         ped.BlockPermanentEvents = true;
         ped.AlwaysKeepTask = true;
 
         try
         {
+            Function.Call(Hash.SET_ENTITY_AS_MISSION_ENTITY, ped.Handle, true, true);
             Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, ped.Handle, _hostileGroupHash);
             Function.Call(Hash.SET_PED_FLEE_ATTRIBUTES, ped.Handle, 0, false);
             Function.Call(Hash.SET_PED_COMBAT_ATTRIBUTES, ped.Handle, 46, true);
@@ -15488,6 +15607,13 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
             }
         }
 
+        /*
+         * Correction blip :
+         * GTA peut garder le blip du ped masqué après la sortie véhicule.
+         * On le retire maintenant, puis UpdateEnemyRaidNpc() le recrée dès que le ped est à pied.
+         */
+        RemoveNpcBlip(npc);
+        _enemyRaidNpcWasInVehicle[npc.Ped.Handle] = true;
         _enemyRaidNextPedOrderAt[npc.Ped.Handle] = Game.GameTime + 500 + Math.Abs(npc.Ped.Handle % 220);
     }
 
@@ -15595,5 +15721,594 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         _enemyRaidLastVehiclePositions.Remove(handle);
         _enemyRaidLastVehicleMoveAt.Remove(handle);
         _enemyRaidLastVehicleRescueAt.Remove(handle);
+    }
+
+    private void HandleEnemyRaidPlayerDeath(Ped player)
+    {
+        if (!_enemyRaidActive && _enemyRaidNpcHandles.Count == 0 && _enemyRaidLastKnownLiveMemberCount <= 0)
+        {
+            return;
+        }
+
+        int liveMembers = CountLiveEnemyRaidMembersWithoutCleanup();
+
+        if (liveMembers <= 0)
+        {
+            liveMembers = _enemyRaidLastKnownLiveMemberCount;
+        }
+
+        liveMembers = Math.Max(0, Math.Min(liveMembers, EnemyRaidMaxActiveMembers));
+
+        if (!_enemyRaidPlayerDeathInProgress)
+        {
+            _enemyRaidPlayerDeathInProgress = true;
+            _enemyRaidRestorePendingAfterPlayerDeath = liveMembers > 0;
+            _enemyRaidRestoreMemberCountAfterDeath = liveMembers;
+            _enemyRaidRestoreAllowedAt = Game.GameTime + EnemyRaidPlayerDeathRestoreDelayMs;
+        }
+        else if (liveMembers > _enemyRaidRestoreMemberCountAfterDeath)
+        {
+            _enemyRaidRestoreMemberCountAfterDeath = liveMembers;
+            _enemyRaidRestorePendingAfterPlayerDeath = true;
+        }
+
+        MaintainEnemyRaidEntitiesDuringPlayerDeath();
+    }
+
+    private void HandleEnemyRaidPlayerAliveAfterDeath(Ped player)
+    {
+        if (!_enemyRaidPlayerDeathInProgress && !_enemyRaidRestorePendingAfterPlayerDeath)
+        {
+            return;
+        }
+
+        if (Game.GameTime < _enemyRaidRestoreAllowedAt)
+        {
+            MaintainEnemyRaidEntitiesDuringPlayerDeath();
+            return;
+        }
+
+        int restoreCount = Math.Max(0, Math.Min(_enemyRaidRestoreMemberCountAfterDeath, EnemyRaidMaxActiveMembers));
+        bool shouldRestore = _enemyRaidRestorePendingAfterPlayerDeath && restoreCount > 0;
+
+        _enemyRaidPlayerDeathInProgress = false;
+        _enemyRaidRestorePendingAfterPlayerDeath = false;
+        _enemyRaidRestoreMemberCountAfterDeath = 0;
+        _enemyRaidRestoreAllowedAt = 0;
+
+        if (!shouldRestore)
+        {
+            CleanupEnemyRaidHandleSets(true);
+            return;
+        }
+
+        int liveNow = CountLiveEnemyRaidMembersWithoutCleanup();
+        bool rebuildNearPlayer = liveNow == 0 || ShouldRebuildEnemyRaidAfterPlayerDeath(player);
+
+        if (rebuildNearPlayer)
+        {
+            ForceDeleteAllEnemyRaidEntitiesAndRecords(true);
+            SpawnEnemyRaidWave(restoreCount, restoreCount, true);
+            return;
+        }
+
+        _enemyRaidActive = true;
+        _enemyRaidLastKnownLiveMemberCount = CountLiveEnemyRaidMembersWithoutCleanup();
+        ForceRefreshAllEnemyRaidNpcBlips();
+        OrderEnemyRaidVehiclesToPlayer(true);
+        ShowStatus("Ballas : les survivants reprennent l'attaque.", 4000);
+    }
+
+    private bool ShouldRebuildEnemyRaidAfterPlayerDeath(Ped player)
+    {
+        if (!Entity.Exists(player))
+        {
+            return false;
+        }
+
+        float closestDistance = float.MaxValue;
+        List<int> handles = new List<int>(_enemyRaidNpcHandles);
+
+        for (int i = 0; i < handles.Count; i++)
+        {
+            SpawnedNpc npc = FindEnemyRaidNpcRecordByHandle(handles[i]);
+
+            if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+            {
+                continue;
+            }
+
+            float distance = npc.Ped.Position.DistanceTo(player.Position);
+
+            if (distance < closestDistance)
+            {
+                closestDistance = distance;
+            }
+        }
+
+        return closestDistance == float.MaxValue || closestDistance > EnemyRaidRebuildAfterDeathDistance;
+    }
+
+    private void MaintainEnemyRaidEntitiesDuringPlayerDeath()
+    {
+        List<int> npcHandles = new List<int>(_enemyRaidKnownNpcHandles);
+
+        for (int i = 0; i < npcHandles.Count; i++)
+        {
+            SpawnedNpc npc = FindEnemyRaidNpcRecordByHandle(npcHandles[i]);
+
+            if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+            {
+                continue;
+            }
+
+            MaintainEnemyRaidPedState(npc.Ped);
+            ForceRefreshEnemyRaidNpcBlip(npc, false);
+        }
+
+        List<int> vehicleHandles = new List<int>(_enemyRaidVehicleHandles);
+
+        for (int i = 0; i < vehicleHandles.Count; i++)
+        {
+            Vehicle vehicle = FindVehicleByHandle(vehicleHandles[i]);
+
+            if (Entity.Exists(vehicle))
+            {
+                ConfigureEnemyRaidVehicleSoftState(vehicle);
+            }
+        }
+    }
+
+    private void BeginEnemyRaidPostCombatCleanup()
+    {
+        if (_enemyRaidKnownNpcHandles.Count > 0)
+        {
+            List<int> npcHandles = new List<int>(_enemyRaidKnownNpcHandles);
+
+            for (int i = 0; i < npcHandles.Count; i++)
+            {
+                RemoveEnemyRaidNpcRecord(npcHandles[i], true);
+            }
+        }
+
+        if (_enemyRaidVehicleHandles.Count > 0)
+        {
+            List<int> vehicleHandles = new List<int>(_enemyRaidVehicleHandles);
+
+            for (int i = 0; i < vehicleHandles.Count; i++)
+            {
+                QueueEnemyRaidVehicleForCleanup(vehicleHandles[i]);
+            }
+        }
+
+        _enemyRaidActive = false;
+        _enemyRaidLastKnownLiveMemberCount = 0;
+        _nextEnemyRaidThinkAt = 0;
+    }
+
+    private void UpdateEnemyRaidAbandonedVehicles(Ped player)
+    {
+        if (_enemyRaidVehicleCleanupHandles.Count == 0)
+        {
+            return;
+        }
+
+        List<int> handles = new List<int>(_enemyRaidVehicleCleanupHandles);
+
+        for (int i = 0; i < handles.Count; i++)
+        {
+            int handle = handles[i];
+            Vehicle vehicle = FindVehicleByHandle(handle);
+            PlacedVehicle placed = FindPlacedVehicleRecordByHandle(handle);
+
+            if (placed != null)
+            {
+                RemovePlacedVehicleBlip(placed);
+            }
+
+            if (!Entity.Exists(vehicle))
+            {
+                RemoveEnemyRaidPlacedVehicleRecord(handle, false);
+                _enemyRaidVehicleCleanupHandles.Remove(handle);
+                _enemyRaidVehicleCleanupStartedAt.Remove(handle);
+                ClearEnemyRaidVehicleTracking(handle);
+                continue;
+            }
+
+            if (ShouldDeleteEnemyRaidAbandonedVehicle(vehicle, player, handle))
+            {
+                DeleteEnemyRaidVehicleAndRecord(handle, true);
+            }
+        }
+    }
+
+    private bool ShouldDeleteEnemyRaidAbandonedVehicle(Vehicle vehicle, Ped player, int handle)
+    {
+        if (!Entity.Exists(vehicle))
+        {
+            return true;
+        }
+
+        int cleanupStartedAt;
+
+        if (!_enemyRaidVehicleCleanupStartedAt.TryGetValue(handle, out cleanupStartedAt))
+        {
+            cleanupStartedAt = Game.GameTime;
+            _enemyRaidVehicleCleanupStartedAt[handle] = cleanupStartedAt;
+        }
+
+        int elapsed = Game.GameTime - cleanupStartedAt;
+
+        if (elapsed < EnemyRaidPostCombatVehicleCleanupGraceMs)
+        {
+            return false;
+        }
+
+        if (!IsVehicleDriveable(vehicle))
+        {
+            return true;
+        }
+
+        if (!Entity.Exists(player))
+        {
+            return elapsed >= EnemyRaidPostCombatVehicleCleanupGraceMs;
+        }
+
+        float distance = vehicle.Position.DistanceTo(player.Position);
+        bool visible = IsEntityLikelyVisibleToPlayer(vehicle);
+
+        if (distance >= EnemyRaidPostCombatVehicleForceCleanupDistance)
+        {
+            return true;
+        }
+
+        if (distance >= EnemyRaidPostCombatVehicleCleanupDistance && !visible)
+        {
+            return true;
+        }
+
+        if (!visible && elapsed >= EnemyRaidVisibleVehicleCleanupMaxMs / 3)
+        {
+            return true;
+        }
+
+        return elapsed >= EnemyRaidVisibleVehicleCleanupMaxMs;
+    }
+
+    private void QueueEnemyRaidVehicleForCleanup(int handle)
+    {
+        if (handle == 0)
+        {
+            return;
+        }
+
+        _enemyRaidVehicleHandles.Remove(handle);
+        ClearEnemyRaidVehicleTracking(handle);
+        _enemyRaidVehicleCleanupHandles.Add(handle);
+
+        if (!_enemyRaidVehicleCleanupStartedAt.ContainsKey(handle))
+        {
+            _enemyRaidVehicleCleanupStartedAt[handle] = Game.GameTime;
+        }
+
+        PlacedVehicle placed = FindPlacedVehicleRecordByHandle(handle);
+
+        if (placed != null)
+        {
+            RemovePlacedVehicleBlip(placed);
+        }
+    }
+
+    private void ForceDeleteAllEnemyRaidEntitiesAndRecords(bool includePendingVehicles)
+    {
+        List<int> npcHandles = new List<int>(_enemyRaidKnownNpcHandles);
+
+        for (int i = 0; i < npcHandles.Count; i++)
+        {
+            RemoveEnemyRaidNpcRecord(npcHandles[i], true);
+        }
+
+        List<int> vehicleHandles = new List<int>(_enemyRaidVehicleHandles);
+
+        for (int i = 0; i < vehicleHandles.Count; i++)
+        {
+            DeleteEnemyRaidVehicleAndRecord(vehicleHandles[i], true);
+        }
+
+        if (includePendingVehicles)
+        {
+            List<int> cleanupHandles = new List<int>(_enemyRaidVehicleCleanupHandles);
+
+            for (int i = 0; i < cleanupHandles.Count; i++)
+            {
+                DeleteEnemyRaidVehicleAndRecord(cleanupHandles[i], true);
+            }
+        }
+
+        _enemyRaidActive = false;
+        _enemyRaidLastKnownLiveMemberCount = 0;
+        _nextEnemyRaidThinkAt = 0;
+    }
+
+    private void RegisterEnemyRaidNpc(SpawnedNpc spawned, bool startsInVehicle)
+    {
+        if (spawned == null || !Entity.Exists(spawned.Ped))
+        {
+            return;
+        }
+
+        int handle = spawned.Ped.Handle;
+
+        _enemyRaidNpcHandles.Add(handle);
+        _enemyRaidKnownNpcHandles.Add(handle);
+        _enemyRaidNpcWasInVehicle[handle] = startsInVehicle;
+        _enemyRaidNextPedOrderAt[handle] = 0;
+    }
+
+    private void RemoveEnemyRaidNpcRecord(int handle, bool deleteEntity)
+    {
+        _enemyRaidNpcHandles.Remove(handle);
+        _enemyRaidKnownNpcHandles.Remove(handle);
+        _enemyRaidNextPedOrderAt.Remove(handle);
+        _enemyRaidNpcWasInVehicle.Remove(handle);
+
+        for (int i = _spawnedNpcs.Count - 1; i >= 0; i--)
+        {
+            SpawnedNpc npc = _spawnedNpcs[i];
+
+            if (npc == null)
+            {
+                continue;
+            }
+
+            if (GetSpawnedNpcRecordHandleSafe(npc) != handle)
+            {
+                continue;
+            }
+
+            RemoveNpcBlip(npc);
+
+            if (deleteEntity && Entity.Exists(npc.Ped))
+            {
+                DeleteEntitySafe(npc.Ped);
+            }
+
+            _spawnedNpcs.RemoveAt(i);
+            break;
+        }
+    }
+
+    private void DeleteEnemyRaidVehicleAndRecord(int handle, bool deleteEntity)
+    {
+        Vehicle vehicle = FindVehicleByHandle(handle);
+
+        RemoveEnemyRaidPlacedVehicleRecord(handle, false);
+
+        if (deleteEntity && Entity.Exists(vehicle))
+        {
+            DeleteEntitySafe(vehicle);
+        }
+
+        _enemyRaidVehicleHandles.Remove(handle);
+        _enemyRaidVehicleCleanupHandles.Remove(handle);
+        _enemyRaidVehicleCleanupStartedAt.Remove(handle);
+        ClearEnemyRaidVehicleTracking(handle);
+    }
+
+    private void RemoveEnemyRaidPlacedVehicleRecord(int handle, bool deleteEntity)
+    {
+        for (int i = _placedVehicles.Count - 1; i >= 0; i--)
+        {
+            PlacedVehicle placed = _placedVehicles[i];
+
+            if (placed == null)
+            {
+                continue;
+            }
+
+            if (GetPlacedVehicleRecordHandleSafe(placed) != handle)
+            {
+                continue;
+            }
+
+            RemovePlacedVehicleBlip(placed);
+
+            if (deleteEntity && Entity.Exists(placed.Vehicle))
+            {
+                DeleteEntitySafe(placed.Vehicle);
+            }
+
+            _placedVehicles.RemoveAt(i);
+        }
+    }
+
+    private SpawnedNpc FindEnemyRaidNpcRecordByHandle(int handle)
+    {
+        if (handle == 0)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < _spawnedNpcs.Count; i++)
+        {
+            SpawnedNpc npc = _spawnedNpcs[i];
+
+            if (npc != null && GetSpawnedNpcRecordHandleSafe(npc) == handle)
+            {
+                return npc;
+            }
+        }
+
+        return null;
+    }
+
+    private PlacedVehicle FindPlacedVehicleRecordByHandle(int handle)
+    {
+        if (handle == 0)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < _placedVehicles.Count; i++)
+        {
+            PlacedVehicle placed = _placedVehicles[i];
+
+            if (placed != null && GetPlacedVehicleRecordHandleSafe(placed) == handle)
+            {
+                return placed;
+            }
+        }
+
+        return null;
+    }
+
+    private int GetSpawnedNpcRecordHandleSafe(SpawnedNpc npc)
+    {
+        if (npc == null || npc.Ped == null)
+        {
+            return 0;
+        }
+
+        try
+        {
+            return npc.Ped.Handle;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private int GetPlacedVehicleRecordHandleSafe(PlacedVehicle placed)
+    {
+        if (placed == null || placed.Vehicle == null)
+        {
+            return 0;
+        }
+
+        try
+        {
+            return placed.Vehicle.Handle;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private int GetPedEntityHandleSafe(Ped ped)
+    {
+        if (ped == null)
+        {
+            return 0;
+        }
+
+        try
+        {
+            return ped.Handle;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private int GetVehicleEntityHandleSafe(Vehicle vehicle)
+    {
+        if (vehicle == null)
+        {
+            return 0;
+        }
+
+        try
+        {
+            return vehicle.Handle;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private int CountLiveEnemyRaidMembersWithoutCleanup()
+    {
+        int count = 0;
+        List<int> handles = new List<int>(_enemyRaidNpcHandles);
+
+        for (int i = 0; i < handles.Count; i++)
+        {
+            SpawnedNpc npc = FindEnemyRaidNpcRecordByHandle(handles[i]);
+
+            if (npc != null && Entity.Exists(npc.Ped) && !npc.Ped.IsDead)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private void UpdateEnemyRaidNpcBlipState(SpawnedNpc npc)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+        {
+            RemoveNpcBlip(npc);
+            return;
+        }
+
+        bool isInVehicle = npc.Ped.IsInVehicle();
+        MarkEnemyRaidNpcVehicleState(npc, isInVehicle, false);
+    }
+
+    private void MarkEnemyRaidNpcVehicleState(SpawnedNpc npc, bool isInVehicle, bool forceRecreate)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+        {
+            return;
+        }
+
+        int handle = npc.Ped.Handle;
+        bool previousState;
+        bool hasPreviousState = _enemyRaidNpcWasInVehicle.TryGetValue(handle, out previousState);
+        bool transitioned = !hasPreviousState || previousState != isInVehicle;
+
+        _enemyRaidNpcWasInVehicle[handle] = isInVehicle;
+
+        if (forceRecreate || transitioned || !isInVehicle)
+        {
+            ForceRefreshEnemyRaidNpcBlip(npc, forceRecreate || transitioned);
+        }
+    }
+
+    private void ForceRefreshEnemyRaidNpcBlip(SpawnedNpc npc, bool recreate)
+    {
+        if (npc == null || !Entity.Exists(npc.Ped) || npc.Ped.IsDead)
+        {
+            RemoveNpcBlip(npc);
+            return;
+        }
+
+        if (recreate)
+        {
+            RemoveNpcBlip(npc);
+        }
+
+        npc.NextBlipRefreshAt = 0;
+        CreateOrUpdateNpcBlip(npc);
+    }
+
+    private void ForceRefreshAllEnemyRaidNpcBlips()
+    {
+        List<int> handles = new List<int>(_enemyRaidNpcHandles);
+
+        for (int i = 0; i < handles.Count; i++)
+        {
+            SpawnedNpc npc = FindEnemyRaidNpcRecordByHandle(handles[i]);
+
+            if (npc != null && Entity.Exists(npc.Ped) && !npc.Ped.IsDead)
+            {
+                ForceRefreshEnemyRaidNpcBlip(npc, true);
+            }
+        }
     }
 }

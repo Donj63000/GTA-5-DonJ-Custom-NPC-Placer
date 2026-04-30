@@ -154,6 +154,9 @@ public class DonJEnemySpawnerTests
         Assert.AreEqual(1300, GetStaticFieldValue<int>("EnemyRaidVehicleOrderIntervalMs"));
         Assert.AreEqual(7000, GetStaticFieldValue<int>("EnemyRaidStuckTimeoutMs"));
         Assert.AreEqual(10000, GetStaticFieldValue<int>("EnemyRaidVehicleRescueCooldownMs"));
+        Assert.AreEqual(1800, GetStaticFieldValue<int>("EnemyRaidPostCombatVehicleCleanupGraceMs"));
+        Assert.AreEqual(45000, GetStaticFieldValue<int>("EnemyRaidVisibleVehicleCleanupMaxMs"));
+        Assert.AreEqual(1800, GetStaticFieldValue<int>("EnemyRaidPlayerDeathRestoreDelayMs"));
         Assert.AreEqual(72.0f, GetStaticFieldValue<float>("EnemyRaidSpawnMinDistance"), 0.001f);
         Assert.AreEqual(130.0f, GetStaticFieldValue<float>("EnemyRaidSpawnMaxDistance"), 0.001f);
         Assert.AreEqual(82.0f, GetStaticFieldValue<float>("EnemyRaidRelocationMinDistance"), 0.001f);
@@ -164,6 +167,9 @@ public class DonJEnemySpawnerTests
         Assert.AreEqual(18.0f, GetStaticFieldValue<float>("EnemyRaidForcedExitVehicleDistance"), 0.001f);
         Assert.AreEqual(125.0f, GetStaticFieldValue<float>("EnemyRaidOnFootShootDistance"), 0.001f);
         Assert.AreEqual(230.0f, GetStaticFieldValue<float>("EnemyRaidTooFarVehicleDistance"), 0.001f);
+        Assert.AreEqual(135.0f, GetStaticFieldValue<float>("EnemyRaidPostCombatVehicleCleanupDistance"), 0.001f);
+        Assert.AreEqual(260.0f, GetStaticFieldValue<float>("EnemyRaidPostCombatVehicleForceCleanupDistance"), 0.001f);
+        Assert.AreEqual(260.0f, GetStaticFieldValue<float>("EnemyRaidRebuildAfterDeathDistance"), 0.001f);
         Assert.AreEqual(GetStaticFieldValue<int>("ProfessionalDrivingStyle"), GetStaticFieldValue<int>("EnemyRaidDrivingStyle"));
         Assert.AreEqual(unchecked((int)0xC6EE6B4C), GetStaticFieldValue<int>("EnemyRaidFullAutoFiringPattern"));
 
@@ -900,6 +906,10 @@ public class DonJEnemySpawnerTests
             source,
             "private void SpawnEnemyRaidWave(int memberCount, int originalRequestedCount)",
             "private bool SpawnEnemyRaidFootEnemy(Ped player, WeaponLoadout loadout, int seedIndex)");
+        string footSpawnBlock = ExtractSourceSection(
+            source,
+            "private bool SpawnEnemyRaidFootEnemy(Ped player, WeaponLoadout loadout, int seedIndex)",
+            "private void UpdateEnemyRaidState(Ped player)");
         string configurePedBlock = ExtractSourceSection(
             source,
             "private void ConfigureEnemyRaidPed(SpawnedNpc spawned, Vehicle assignedVehicle, int assignedSeat)",
@@ -909,20 +919,24 @@ public class DonJEnemySpawnerTests
             "private void UpdateEnemyRaidNpc(SpawnedNpc npc, Ped player)",
             "private void CleanupEnemyRaidHandleSets()");
 
-        int raidBypassIndex = updateNpcsBlock.IndexOf("_enemyRaidNpcHandles.Contains(npc.Ped.Handle)", StringComparison.Ordinal);
+        int raidBypassIndex = updateNpcsBlock.IndexOf("_enemyRaidKnownNpcHandles.Contains(npc.Ped.Handle)", StringComparison.Ordinal);
         int genericThinkIndex = updateNpcsBlock.IndexOf("if (now < npc.NextThinkAt)", StringComparison.Ordinal);
 
-        Assert.IsTrue(raidBypassIndex >= 0, "UpdateNpcs doit ignorer les PNJ de vague ennemie.");
+        Assert.IsTrue(raidBypassIndex >= 0, "UpdateNpcs doit ignorer tous les PNJ connus de vague ennemie.");
         Assert.IsTrue(genericThinkIndex > raidBypassIndex, "Le bypass vague ennemie doit passer avant l'IA générique.");
         StringAssert.Contains(callBlock, "_random.Next(EnemyRaidMinMembers, EnemyRaidMaxMembers + 1)");
         StringAssert.Contains(callBlock, "EnemyRaidMaxActiveMembers");
         StringAssert.Contains(spawnBlock, "RegisterSpawnedNpc(");
+        StringAssert.Contains(spawnBlock, "RegisterEnemyRaidNpc(spawned, true);");
+        StringAssert.Contains(footSpawnBlock, "RegisterEnemyRaidNpc(spawned, false);");
         StringAssert.Contains(spawnBlock, "NpcBehavior.Attacker");
         StringAssert.Contains(spawnBlock, "EnemyRaidHealth");
         StringAssert.Contains(spawnBlock, "EnemyRaidArmor");
         StringAssert.Contains(spawnBlock, "PutPedIntoVehicleSafe(spawned.Ped, vehicle, seat);");
         StringAssert.Contains(configurePedBlock, "Function.Call(Hash.SET_PED_RELATIONSHIP_GROUP_HASH, spawned.Ped.Handle, _hostileGroupHash);");
         StringAssert.Contains(configurePedBlock, "TryEnsureEnemyRaidWeapon(spawned.Ped);");
+        StringAssert.Contains(configurePedBlock, "ForceRefreshEnemyRaidNpcBlip(spawned, true);");
+        StringAssert.Contains(updateRaidNpcBlock, "UpdateEnemyRaidNpcBlipState(npc);");
         StringAssert.Contains(updateRaidNpcBlock, "StartEnemyRaidPassengerDriveBy(npc.Ped, player, false);");
         StringAssert.Contains(updateRaidNpcBlock, "CommandEnemyRaidPedLeaveVehicle(npc, vehicle, true);");
         StringAssert.Contains(updateRaidNpcBlock, "StartEnemyRaidOnFootCombat(npc.Ped, player, false);");
@@ -932,6 +946,10 @@ public class DonJEnemySpawnerTests
     public void SourceFile_EnemyRaidVehiclesUseRedBallasBlipsAndSmgDriveBy()
     {
         string source = File.ReadAllText(GetSourceFilePath());
+        string npcBlipBlock = ExtractSourceSection(
+            source,
+            "private void CreateOrUpdateNpcBlip(SpawnedNpc npc)",
+            "private void RemoveNpcBlip(SpawnedNpc npc)");
         string blipBlock = ExtractSourceSection(
             source,
             "private void CreateOrUpdatePlacedVehicleBlip(PlacedVehicle placed)",
@@ -949,10 +967,14 @@ public class DonJEnemySpawnerTests
             "private void IssueEnemyRaidVehicleAttackOrder(Vehicle vehicle, Ped player, bool force)",
             "private bool CanIssueEnemyRaidVehicleOrder(Vehicle vehicle, bool force)");
 
-        StringAssert.Contains(blipBlock, "if (_enemyRaidVehicleHandles.Contains(placed.Vehicle.Handle))");
+        StringAssert.Contains(npcBlipBlock, "bool isEnemyRaidNpc = pedHandle != 0 && _enemyRaidKnownNpcHandles.Contains(pedHandle);");
+        StringAssert.Contains(npcBlipBlock, "npc.Blip.Name = \"Ballas Ennemi\";");
+        StringAssert.Contains(npcBlipBlock, "npc.Blip.Scale = 0.82f;");
+        StringAssert.Contains(blipBlock, "_enemyRaidVehicleCleanupHandles.Contains(vehicleHandle)");
+        StringAssert.Contains(blipBlock, "if (vehicleHandle != 0 && _enemyRaidVehicleHandles.Contains(vehicleHandle))");
         StringAssert.Contains(blipBlock, "placed.Blip.Color = BlipColor.Red;");
         StringAssert.Contains(blipBlock, "placed.Blip.IsFriendly = false;");
-        StringAssert.Contains(blipBlock, "placed.Blip.Name = \"Ballas Véhicule\";");
+        StringAssert.Contains(blipBlock, "placed.Blip.Name = \"Ballas Vehicule\";");
         StringAssert.Contains(blipBlock, "placed.Blip.Color = BlipColor.Blue;");
         StringAssert.Contains(blipBlock, "placed.Blip.IsFriendly = true;");
         StringAssert.Contains(loadoutBlock, "Weapon = WeaponHash.SMG");
@@ -961,6 +983,40 @@ public class DonJEnemySpawnerTests
         StringAssert.Contains(driveByBlock, "EnemyRaidDriveByDistance");
         StringAssert.Contains(vehicleOrderBlock, "Hash.TASK_VEHICLE_DRIVE_TO_COORD_LONGRANGE");
         StringAssert.Contains(vehicleOrderBlock, "EnemyRaidArrivalDriveSpeed");
+    }
+
+    [TestMethod]
+    public void SourceFile_EnemyRaidCleansAbandonedVehiclesAndRestoresAfterPlayerDeath()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string updateStateBlock = ExtractSourceSection(
+            source,
+            "private void UpdateEnemyRaidState(Ped player)",
+            "private void UpdateEnemyRaidVehicle(Vehicle vehicle, Ped player, int seedIndex)");
+        string cleanupBlock = ExtractSourceSection(
+            source,
+            "private void CleanupEnemyRaidHandleSets()",
+            "private bool DoesEnemyRaidVehicleHaveLiveTrackedOccupant(Vehicle vehicle)");
+        string deathBlock = ExtractSourceSection(
+            source,
+            "private void HandleEnemyRaidPlayerDeath(Ped player)",
+            "private void MaintainEnemyRaidEntitiesDuringPlayerDeath()");
+        string postCombatBlock = ExtractSourceSection(
+            source,
+            "private void BeginEnemyRaidPostCombatCleanup()",
+            "private void RegisterEnemyRaidNpc(SpawnedNpc spawned, bool startsInVehicle)");
+
+        StringAssert.Contains(updateStateBlock, "UpdateEnemyRaidAbandonedVehicles(player);");
+        StringAssert.Contains(updateStateBlock, "HandleEnemyRaidPlayerDeath(player);");
+        StringAssert.Contains(updateStateBlock, "HandleEnemyRaidPlayerAliveAfterDeath(player);");
+        StringAssert.Contains(cleanupBlock, "CleanupEnemyRaidHandleSets(bool allowPostCombatCleanup)");
+        StringAssert.Contains(cleanupBlock, "BeginEnemyRaidPostCombatCleanup();");
+        StringAssert.Contains(deathBlock, "_enemyRaidRestoreMemberCountAfterDeath = liveMembers;");
+        StringAssert.Contains(deathBlock, "SpawnEnemyRaidWave(restoreCount, restoreCount, true);");
+        StringAssert.Contains(postCombatBlock, "QueueEnemyRaidVehicleForCleanup(vehicleHandles[i]);");
+        StringAssert.Contains(postCombatBlock, "ShouldDeleteEnemyRaidAbandonedVehicle(vehicle, player, handle)");
+        StringAssert.Contains(postCombatBlock, "_enemyRaidVehicleCleanupHandles.Add(handle);");
+        StringAssert.Contains(postCombatBlock, "RemovePlacedVehicleBlip(placed);");
     }
 
     [TestMethod]
