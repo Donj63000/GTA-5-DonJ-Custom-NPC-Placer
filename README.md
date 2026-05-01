@@ -6,14 +6,6 @@
 </p>
 
 <p align="center">
-  <img src="Images/principale2.png" alt="DonJ Custom NPC Placer - image d'accueil du mod" width="100%">
-</p>
-
-<p align="center">
-  <img src="Images/20260426005345_1.jpg" alt="DonJ Custom NPC Placer - scène GTA V Enhanced avec véhicules et zone placée" width="100%">
-</p>
-
-<p align="center">
   <strong>Construisez une base, un checkpoint, une scène d’action ou un setup roleplay directement en mode histoire.</strong>
 </p>
 
@@ -111,23 +103,16 @@ En résumé : **vous construisez la scène avec le menu**, puis le mod s’occup
 
 ---
 
-## Aperçu visuel
+## Nouvelle UI par catégories
 
 <table>
   <tr>
-    <td width="33%"><img src="Images/20260426005313_1.jpg" alt="Contact téléphone Cartel"></td>
-    <td width="33%"><img src="Images/20260426030249_1.jpg" alt="Placement caméra précis de PNJ"></td>
-    <td width="33%"><img src="Images/20260426030321_1.jpg" alt="Scène gardée avec PNJ"></td>
+    <td width="50%"><img src="1.png" alt="Nouvelle UI par catégories - véhicules"></td>
+    <td width="50%"><img src="2.png" alt="Nouvelle UI par catégories - objets"></td>
   </tr>
   <tr>
-    <td width="33%"><img src="Images/20260426030418_1.jpg" alt="PNJ armés en intérieur"></td>
-    <td width="33%"><img src="Images/20260426005305_1.jpg" alt="Décor et sécurité"></td>
-    <td width="33%"><img src="Images/20260426005345_1.jpg" alt="Véhicules et zone placée"></td>
-  </tr>
-  <tr>
-    <td width="33%"><img src="Images/20260426005350_1.jpg" alt="Installation de scène"></td>
-    <td width="33%"><img src="Images/20260426005354_1.jpg" alt="Aperçu de scène GTA V Enhanced"></td>
-    <td width="33%"><img src="Images/20260425013205_1.jpg" alt="DonJ Custom NPC Placer en jeu"></td>
+    <td width="50%"><img src="3.png" alt="Nouvelle UI par catégories - NPC"></td>
+    <td width="50%"><img src="4.png" alt="Nouvelle UI par catégories - entrées et sorties"></td>
   </tr>
 </table>
 
@@ -238,11 +223,15 @@ En pratique, ça donne une scène plus propre : les gardes, véhicules et objets
 
 ---
 
-### Appel du Cartel
+### Appels téléphone C / R
 
 <p align="center">
-  <img src="Images/20260426005313_1.jpg" alt="Appel du Cartel depuis le téléphone du joueur" width="100%">
+  <img src="ballas.png" alt="Appels téléphone Cartel avec C et Ballas avec R" width="100%">
 </p>
+
+Le téléphone permet de lancer rapidement deux types d’activité en jeu : `C` appelle le Cartel allié pour protéger le joueur, tandis que `R` déclenche une vague Ballas hostile pour créer du combat autour de la scène.
+
+### Appel du Cartel
 
 <table>
   <tr>
@@ -383,6 +372,10 @@ Exemples d’objets inclus :
 - objets de décoration.
 
 ### Argent ramassable
+
+<p align="center">
+  <img src="argentramassable.png" alt="Exemple d'argent ramassable avec caisse de cash à 250 000 dollars" width="100%">
+</p>
 
 La catégorie **Argent / butin** permet de placer du cash dans vos scènes : liasses, billets, enveloppes, sacs d’argent, sacs de braquage, mallettes, caisses, coffre en or ou chariot cash.
 
