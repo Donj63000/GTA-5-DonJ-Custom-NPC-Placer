@@ -9,6 +9,21 @@
   <img src="images-readme/acceuil.png" alt="DonJ Custom NPC Placer - image de présentation du mod" width="100%">
 </p>
 
+## Sommaire
+
+- [Fonctionnalités principales](#fonctionnalités-principales)
+- [Respawn / réapparition automatique](#respawn--réapparition-automatique)
+- [Installation](#installation)
+- [Utilisation](#utilisation)
+- [Exemple rapide](#exemple-rapide)
+- [Sauvegardes](#sauvegardes)
+- [Compatibilité](#compatibilité)
+- [Build depuis le code source](#build-depuis-le-code-source)
+- [Dépannage](#dépannage)
+- [Licence](#licence)
+
+---
+
 <p align="center">
   <strong>Construisez une base, un checkpoint, une scène d’action ou un setup roleplay directement en mode histoire.</strong>
 </p>
@@ -119,23 +134,6 @@ En résumé : **vous construisez la scène avec le menu**, puis le mod s’occup
     <td width="50%"><img src="images-readme/4.png" alt="Nouvelle UI par catégories - entrées et sorties"></td>
   </tr>
 </table>
-
----
-
-## Sommaire
-
-- [Fonctionnalités principales](#fonctionnalités-principales)
-- [Respawn / réapparition automatique](#respawn--réapparition-automatique)
-- [Installation](#installation)
-- [Utilisation](#utilisation)
-- [Exemple rapide](#exemple-rapide)
-- [Sauvegardes](#sauvegardes)
-- [Compatibilité](#compatibilité)
-- [Build depuis le code source](#build-depuis-le-code-source)
-- [Dépannage](#dépannage)
-- [Licence](#licence)
-
----
 
 ## Fonctionnalités principales
 
