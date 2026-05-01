@@ -60,8 +60,10 @@ Lancer le mod
 
 1. Lancez GTA V Enhanced en mode histoire.
 2. Appuyez sur F10 pour ouvrir le menu du mod.
-3. Pour appeler le Cartel : ouvrez le telephone du joueur, affichez le contact Cartel,
-   puis appuyez sur C.
+3. Pour appeler le Cartel allie : ouvrez le telephone du joueur, affichez les contacts
+   du mod, puis appuyez sur C.
+4. Pour lancer une attaque Ballas hostile : gardez le telephone ouvert et appuyez sur R.
+5. Pour ramasser un objet argent interactif : approchez-vous du cash et appuyez sur E.
 
 Mise a jour du mod
 ------------------
