@@ -6,6 +6,10 @@
 </p>
 
 <p align="center">
+  <img src="acceuil.png" alt="DonJ Custom NPC Placer - image de présentation du mod" width="100%">
+</p>
+
+<p align="center">
   <strong>Construisez une base, un checkpoint, une scène d’action ou un setup roleplay directement en mode histoire.</strong>
 </p>
 
