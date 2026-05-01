@@ -17,6 +17,12 @@ public sealed partial class DonJEnemySpawner
     private const int InteriorPortalCooldownMs = 1800;
     private const int InteriorPortalHintCooldownMs = 2500;
 
+    // Point d'arrivee bunker valide en jeu.
+    // L'ancien point catalogue 899.5518, -3246.038, -98.04907 peut placer le joueur
+    // cote entree / derriere une porte selon les props et upgrades actifs.
+    private static readonly Vector3 BunkerInteriorSafeArrivalPosition = new Vector3(892.6384f, -3245.8664f, -98.2645f);
+    private const float BunkerInteriorSafeArrivalHeading = 180.0f;
+
     private readonly List<InteriorCategory> _interiorCategories = BuildInteriorCategories();
     private readonly List<PlacedInteriorPortal> _placedInteriorPortals = new List<PlacedInteriorPortal>();
 
@@ -96,8 +102,8 @@ public sealed partial class DonJEnemySpawner
                 Id = "bunker_generic",
                 Category = category.Name,
                 DisplayName = "Bunker interieur",
-                Position = new Vector3(899.5518f, -3246.038f, -98.04907f),
-                Heading = 0.0f,
+                Position = BunkerInteriorSafeArrivalPosition,
+                Heading = BunkerInteriorSafeArrivalHeading,
                 Ipls = new List<string>()
             };
         }
@@ -536,28 +542,33 @@ public sealed partial class DonJEnemySpawner
             return;
         }
 
+        // On clone l'interieur de l'entree puis on applique les corrections runtime.
+        // Important : ca corrige aussi les anciennes entrees bunker deja sauvegardees en XML
+        // avec l'ancien point 899.5518, -3246.038, -98.04907.
+        InteriorOption runtimeInterior = BuildRuntimeInteriorOptionForEntry(portal.Interior);
+
         _activeInteriorSession = new ActiveInteriorSession
         {
             EntrancePortalId = portal.Id,
-            InteriorId = portal.Interior.Id,
-            Interior = CloneInteriorOption(portal.Interior),
+            InteriorId = runtimeInterior.Id,
+            Interior = CloneInteriorOption(runtimeInterior),
             ReturnPosition = BuildReturnPositionFromEntrance(portal.Position, portal.Heading),
             ReturnHeading = NormalizeHeading(portal.Heading),
             StartedAt = Game.GameTime
         };
 
-        bool prepared = PrepareInteriorForTeleportSafe(portal.Interior);
+        bool prepared = PrepareInteriorForTeleportSafe(runtimeInterior);
 
         if (!prepared)
         {
             ShowStatus("Interieur charge partiellement: TP quand meme, mais certains assets peuvent encore arriver.", 4500);
         }
 
-        TeleportPlayerWithFadeSafe(player, portal.Interior.Position, portal.Interior.Heading);
-        ApplyInteriorEntitySetsSafe(portal.Interior);
+        TeleportPlayerWithFadeSafe(player, runtimeInterior.Position, runtimeInterior.Heading);
+        ApplyInteriorEntitySetsSafe(runtimeInterior);
 
         _nextInteriorPortalUseAllowedAt = Game.GameTime + InteriorPortalCooldownMs;
-        ShowStatus("Interieur: " + portal.Interior.DisplayName + ". Place une Sortie ici si besoin.", 5000);
+        ShowStatus("Interieur: " + runtimeInterior.DisplayName + ". Place une Sortie ici si besoin.", 5000);
     }
 
     private void ExitInteriorPortal(PlacedInteriorPortal portal, Ped player)
@@ -663,6 +674,34 @@ public sealed partial class DonJEnemySpawner
                !string.IsNullOrWhiteSpace(interior.Id) &&
                !string.IsNullOrWhiteSpace(interior.DisplayName) &&
                !IsZeroVector(interior.Position);
+    }
+
+    private static InteriorOption BuildRuntimeInteriorOptionForEntry(InteriorOption source)
+    {
+        InteriorOption runtimeInterior = CloneInteriorOption(source);
+        ApplyInteriorArrivalOverrideSafe(runtimeInterior);
+        return runtimeInterior;
+    }
+
+    private static void ApplyInteriorArrivalOverrideSafe(InteriorOption interior)
+    {
+        if (interior == null)
+        {
+            return;
+        }
+
+        if (IsBunkerInteriorForSafeArrival(interior.Id))
+        {
+            // Ce point arrive dans le volume principal du bunker, pas derriere la porte d'entree.
+            interior.Position = BunkerInteriorSafeArrivalPosition;
+            interior.Heading = BunkerInteriorSafeArrivalHeading;
+        }
+    }
+
+    private static bool IsBunkerInteriorForSafeArrival(string interiorId)
+    {
+        return !string.IsNullOrWhiteSpace(interiorId) &&
+               interiorId.IndexOf("bunker", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private static InteriorOption CloneInteriorOption(InteriorOption source)

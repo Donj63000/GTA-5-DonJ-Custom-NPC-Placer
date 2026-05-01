@@ -164,6 +164,15 @@ private const int WeaponEditorItemCount = 12;
     private const int PreviewRetryIntervalMs = 650;
 
     private const ulong PlaceEntityOnGroundProperlyNative = 0x58A850EAEE20FAA3UL;
+    // Interactions objets poses : argent, soins, armure, munitions.
+    private const float ObjectInteractionDistance = 2.05f;
+    private const float ObjectInteractionMarkerHeight = 0.85f;
+
+    // Natives utilisees par hash direct pour rester compatible NIB/SHVDN v2.
+    private const ulong NativeStatGetInt = 0x767FBC2AC802EF3DUL;
+    private const ulong NativeStatSetInt = 0xB3271D7AB655B441UL;
+    private const ulong NativeGetSelectedPedWeapon = 0x0A6DB4965674D243UL;
+    private const ulong NativeAddAmmoToPed = 0x78F0424C34306220UL;
 
     private readonly Random _random = new Random();
 
@@ -258,6 +267,7 @@ private bool _menuVisible;
 
     private string _statusText = string.Empty;
     private int _statusUntil;
+    private bool _objectInteractionKeyLatch;
 
     private bool _spawnRequested;
     private PlacementEntityType _requestedPlacementType;
@@ -486,12 +496,26 @@ private enum EnemyBehavior
     {
         Securite,
         Couverture,
+        ArgentButin,
+        MaterielTactique,
+        SoinSurvie,
+        BureauInformatique,
+        AtelierOutils,
         Mobilier,
         CaisseStockage,
         Decoration,
         Lumiere,
         Exterieur,
         Divers
+    }
+
+    private enum ObjectInteractionKind
+    {
+        None,
+        Cash,
+        Health,
+        Armor,
+        Ammo
     }
 
     private sealed class ModelOption
@@ -551,6 +575,15 @@ private enum EnemyBehavior
         public string DisplayName;
         public string ModelName;
         public ObjectPlacementCategory Category;
+
+        // Interaction optionnelle.
+        // Si ces valeurs restent a zero, le script essaie quand meme de deviner
+        // automatiquement selon le nom/modele : cash, health, ammo, armor.
+        public ObjectInteractionKind InteractionKind;
+        public int CashValue;
+        public int HealAmount;
+        public int ArmorAmount;
+        public int AmmoAmount;
 
         public Model ToModel()
         {
@@ -646,6 +679,12 @@ private enum EnemyBehavior
     {
         public string ModelName;
         public string DisplayName;
+
+        public ObjectInteractionKind InteractionKind;
+        public int CashValue;
+        public int HealAmount;
+        public int ArmorAmount;
+        public int AmmoAmount;
 
         public Model ToModel()
         {
@@ -768,6 +807,7 @@ private enum EnemyBehavior
             UpdateCartelConvoyLate();
             UpdatePlacedVehicles();
             UpdatePlacedObjects();
+            UpdatePlacedObjectInteractions();
             UpdateInteriorPortals();
             DrawStatus();
         }
@@ -2923,11 +2963,19 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
     {
         ObjectOption option = CurrentObjectOption();
 
-        return new ObjectIdentity
+        ObjectIdentity identity = new ObjectIdentity
         {
             ModelName = option.ModelName,
-            DisplayName = option.DisplayName
+            DisplayName = option.DisplayName,
+            InteractionKind = option.InteractionKind,
+            CashValue = option.CashValue,
+            HealAmount = option.HealAmount,
+            ArmorAmount = option.ArmorAmount,
+            AmmoAmount = option.AmmoAmount
         };
+
+        ApplyDefaultObjectInteractionIfNeeded(identity);
+        return identity;
     }
 
     private Ped CreatePedFromModelIdentity(ModelIdentity identity, Vector3 position, float heading)
@@ -3154,6 +3202,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
             return null;
         }
 
+        ApplyDefaultObjectInteractionIfNeeded(identity);
         ConfigurePlacedObjectEntity(prop, position, heading);
 
         PlacedObject placed = new PlacedObject
@@ -3174,7 +3223,11 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
         if (showStatus)
         {
-            ShowStatus("Objet place: " + identity.DisplayName + " | respawn " + BoolText(autoRespawn), 3500);
+            string interactionText = HasObjectInteraction(identity)
+                ? " | interactif: " + ObjectInteractionDisplayName(identity)
+                : string.Empty;
+
+            ShowStatus("Objet place: " + identity.DisplayName + interactionText + " | respawn " + BoolText(autoRespawn), 3500);
         }
 
         return placed;
@@ -8397,6 +8450,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
                     writer.WriteAttributeString("z", savePosition.Z.ToString(CultureInfo.InvariantCulture));
                     writer.WriteAttributeString("heading", saveHeading.ToString(CultureInfo.InvariantCulture));
                     writer.WriteAttributeString("autoRespawn", placed.AutoRespawn.ToString(CultureInfo.InvariantCulture));
+                    WriteObjectInteractionXmlAttributes(writer, placed.Identity);
                     writer.WriteEndElement();
                     savedObjects++;
                 }
@@ -8698,11 +8752,19 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         string modelName = ReadStringAttribute(node, "modelName", string.Empty);
         string displayName = ReadStringAttribute(node, "displayName", modelName);
 
-        return new ObjectIdentity
+        ObjectIdentity identity = new ObjectIdentity
         {
             ModelName = modelName,
-            DisplayName = string.IsNullOrWhiteSpace(displayName) ? modelName : displayName
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? modelName : displayName,
+            InteractionKind = ReadEnumAttribute(node, "interactionKind", ObjectInteractionKind.None),
+            CashValue = ReadIntAttribute(node, "cashValue", 0),
+            HealAmount = ReadIntAttribute(node, "healAmount", 0),
+            ArmorAmount = ReadIntAttribute(node, "armorAmount", 0),
+            AmmoAmount = ReadIntAttribute(node, "ammoAmount", 0)
         };
+
+        ApplyDefaultObjectInteractionIfNeeded(identity);
+        return identity;
     }
 
     private void InitializePersistentSaveState()
@@ -9647,12 +9709,73 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
             Obj("Barriere chantier", "prop_barrier_work06a", ObjectPlacementCategory.Securite),
             Obj("Barriere metal", "prop_mp_barrier_02b", ObjectPlacementCategory.Securite),
             Obj("Potelet de securite", "prop_bollard_02a", ObjectPlacementCategory.Securite),
+            Obj("Ruban / borne police", "prop_barrier_work01a", ObjectPlacementCategory.Securite),
+            Obj("Projecteur securite", "prop_worklight_03b", ObjectPlacementCategory.Securite),
 
             Obj("Bloc beton", "prop_mp_barrier_01", ObjectPlacementCategory.Couverture),
             Obj("Barriere crash", "prop_barriercrash_03", ObjectPlacementCategory.Couverture),
             Obj("Benne metal", "prop_dumpster_01a", ObjectPlacementCategory.Couverture),
             Obj("Benne verte", "prop_dumpster_02a", ObjectPlacementCategory.Couverture),
             Obj("Palette bois", "prop_pallet_01a", ObjectPlacementCategory.Couverture),
+            Obj("Sac de sable", "prop_sandbag_01", ObjectPlacementCategory.Couverture),
+            Obj("Pile sacs de sable", "prop_sandbag_02", ObjectPlacementCategory.Couverture),
+
+            // Argent / butin : props decoratifs persistants pour scenes, braquages, planques ou recompenses.
+            // Les libelles 10 000$ donnent une valeur RP claire sans toucher aux stats GTA.
+            Obj("Billets 10 000$ - liasse plate", "prop_cash_pile_01", ObjectPlacementCategory.ArgentButin),
+            Obj("Billets 10 000$ - liasse epaisse", "prop_cash_pile_02", ObjectPlacementCategory.ArgentButin),
+            Obj("Billets 10 000$ - tas scene 1", "prop_anim_cash_pile_01", ObjectPlacementCategory.ArgentButin),
+            Obj("Billets 10 000$ - tas scene 2", "prop_anim_cash_pile_02", ObjectPlacementCategory.ArgentButin),
+            Obj("Billet seul", "p_banknote_s", ObjectPlacementCategory.ArgentButin),
+            Obj("Billet un dollar", "p_banknote_onedollar_s", ObjectPlacementCategory.ArgentButin),
+            Obj("Paquet de cash", "v_corp_cashpack", ObjectPlacementCategory.ArgentButin),
+            Obj("Enveloppe de cash", "prop_cash_envelope_01", ObjectPlacementCategory.ArgentButin),
+            Obj("Pochette argent plastique", "prop_poly_bag_money", ObjectPlacementCategory.ArgentButin),
+            Obj("Portefeuille argent", "prop_ld_wallet_pickup", ObjectPlacementCategory.ArgentButin),
+            Obj("Sac d'argent", "prop_money_bag_01", ObjectPlacementCategory.ArgentButin),
+            Obj("Sac de braquage", "p_ld_heist_bag_s", ObjectPlacementCategory.ArgentButin),
+            Obj("Sac de braquage pro", "p_ld_heist_bag_s_pro", ObjectPlacementCategory.ArgentButin),
+            Obj("Malette cash fermee", "prop_cash_case_01", ObjectPlacementCategory.ArgentButin),
+            Obj("Malette cash ouverte", "prop_cash_case_02", ObjectPlacementCategory.ArgentButin),
+            Obj("Caisse de cash", "prop_cash_crate_01", ObjectPlacementCategory.ArgentButin),
+            Obj("Coffre or", "prop_ld_gold_chest", ObjectPlacementCategory.ArgentButin),
+            Obj("Tas cash braquage", "hei_prop_heist_cash_pile", ObjectPlacementCategory.ArgentButin),
+            Obj("Chariot cash", "prop_cash_trolly", ObjectPlacementCategory.ArgentButin),
+
+            // Objets utiles pour bases, checkpoints, caches d'armes et scenes de mission.
+            Obj("Pack munitions 1", "prop_ld_ammo_pack_01", ObjectPlacementCategory.MaterielTactique),
+            Obj("Pack munitions 2", "prop_ld_ammo_pack_02", ObjectPlacementCategory.MaterielTactique),
+            Obj("Pack munitions 3", "prop_ld_ammo_pack_03", ObjectPlacementCategory.MaterielTactique),
+            Obj("Boite munitions", "prop_box_ammo01a", ObjectPlacementCategory.MaterielTactique),
+            Obj("Caisse munitions lourde", "prop_box_ammo03a", ObjectPlacementCategory.MaterielTactique),
+            Obj("Set caisse munitions", "prop_box_ammo03a_set", ObjectPlacementCategory.MaterielTactique),
+            Obj("Caisse armes bleue", "prop_box_guncase_02a", ObjectPlacementCategory.MaterielTactique),
+            Obj("Caisse armes noire", "prop_box_guncase_03a", ObjectPlacementCategory.MaterielTactique),
+            Obj("Mallette tactique", "prop_ld_case_01", ObjectPlacementCategory.MaterielTactique),
+            Obj("Sac sport", "prop_cs_heist_bag_02", ObjectPlacementCategory.MaterielTactique),
+            Obj("Etui arme", "prop_pistol_holster", ObjectPlacementCategory.MaterielTactique),
+
+            Obj("Kit de soin", "prop_ld_health_pack", ObjectPlacementCategory.SoinSurvie),
+            Obj("Sac medical", "prop_med_bag_01", ObjectPlacementCategory.SoinSurvie),
+            Obj("Bouteille eau", "prop_water_bottle_dark", ObjectPlacementCategory.SoinSurvie),
+            Obj("Bouteille club", "ba_prop_club_water_bottle", ObjectPlacementCategory.SoinSurvie),
+            Obj("Sac nourriture", "prop_food_bag1", ObjectPlacementCategory.SoinSurvie),
+            Obj("Sac shopping provisions", "prop_shopping_bags01", ObjectPlacementCategory.SoinSurvie),
+
+            Obj("Ordinateur portable", "prop_laptop_01a", ObjectPlacementCategory.BureauInformatique),
+            Obj("Ordinateur portable ferme", "prop_laptop_02_closed", ObjectPlacementCategory.BureauInformatique),
+            Obj("Clavier acces", "prop_ld_keypad_01", ObjectPlacementCategory.BureauInformatique),
+            Obj("Clavier acces mural", "prop_ld_keypad_01b", ObjectPlacementCategory.BureauInformatique),
+            Obj("Livre / registre", "prop_cs_stock_book", ObjectPlacementCategory.BureauInformatique),
+            Obj("Sac papier dossier", "prop_paper_bag_01", ObjectPlacementCategory.BureauInformatique),
+            Obj("Television", "prop_tv_flat_01", ObjectPlacementCategory.BureauInformatique),
+
+            Obj("Boite a outils", "prop_tool_box_04", ObjectPlacementCategory.AtelierOutils),
+            Obj("Boite a outils 2", "prop_tool_box_06", ObjectPlacementCategory.AtelierOutils),
+            Obj("Bidon huile", "prop_oilcan_01a", ObjectPlacementCategory.AtelierOutils),
+            Obj("Bidon essence", "prop_jerrycan_01a", ObjectPlacementCategory.AtelierOutils),
+            Obj("Bouteille gaz", "prop_gascyl_01a", ObjectPlacementCategory.AtelierOutils),
+            Obj("Caisse atelier", "prop_crate_11e", ObjectPlacementCategory.AtelierOutils),
 
             Obj("Chaise simple", "prop_chair_01a", ObjectPlacementCategory.Mobilier),
             Obj("Chaise bureau", "prop_off_chair_04", ObjectPlacementCategory.Mobilier),
@@ -9662,16 +9785,19 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
             Obj("Lit simple", "prop_bed_01", ObjectPlacementCategory.Mobilier),
 
             Obj("Caisse bois", "prop_box_wood02a", ObjectPlacementCategory.CaisseStockage),
+            Obj("Caisse bois renforcee", "prop_box_wood05a", ObjectPlacementCategory.CaisseStockage),
             Obj("Caisse militaire", "prop_box_ammo03a", ObjectPlacementCategory.CaisseStockage),
             Obj("Pile de cartons", "prop_boxpile_06b", ObjectPlacementCategory.CaisseStockage),
             Obj("Caisse transport", "prop_crate_11e", ObjectPlacementCategory.CaisseStockage),
             Obj("Valise", "prop_ld_suitcase_01", ObjectPlacementCategory.CaisseStockage),
+            Obj("Valise rouge", "prop_suitcase_03", ObjectPlacementCategory.CaisseStockage),
+            Obj("Carton vetements", "prop_cs_clothes_box", ObjectPlacementCategory.CaisseStockage),
 
             Obj("Plante bureau", "prop_plant_int_01a", ObjectPlacementCategory.Decoration),
-            Obj("Television", "prop_tv_flat_01", ObjectPlacementCategory.Decoration),
-            Obj("Ordinateur portable", "prop_laptop_01a", ObjectPlacementCategory.Decoration),
             Obj("Frigo", "prop_fridge_01", ObjectPlacementCategory.Decoration),
             Obj("Machine cafe", "prop_coffee_mac_02", ObjectPlacementCategory.Decoration),
+            Obj("Sac shopping", "prop_shopping_bags02", ObjectPlacementCategory.Decoration),
+            Obj("Sac a main", "prop_ld_handbag", ObjectPlacementCategory.Decoration),
 
             Obj("Projecteur chantier", "prop_worklight_03b", ObjectPlacementCategory.Lumiere),
             Obj("Lampe chantier", "prop_worklight_01a", ObjectPlacementCategory.Lumiere),
@@ -9681,11 +9807,11 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
             Obj("Parasol", "prop_parasol_01", ObjectPlacementCategory.Exterieur),
             Obj("Table pique-nique", "prop_picnictable_01", ObjectPlacementCategory.Exterieur),
             Obj("Feu de camp", "prop_beach_fire", ObjectPlacementCategory.Exterieur),
+            Obj("Antenne mobile", "prop_mobile_mast_1", ObjectPlacementCategory.Exterieur),
 
             Obj("Extincteur", "prop_fire_exting_1a", ObjectPlacementCategory.Divers),
-            Obj("Clavier acces", "prop_ld_keypad_01", ObjectPlacementCategory.Divers),
-            Obj("Sac sport", "prop_cs_heist_bag_02", ObjectPlacementCategory.Divers),
-            Obj("Bidon essence", "prop_jerrycan_01a", ObjectPlacementCategory.Divers)
+            Obj("Sac papier petit", "prop_paper_bag_small", ObjectPlacementCategory.Divers),
+            Obj("Cigare", "prop_cigar_02", ObjectPlacementCategory.Divers)
         };
     }
 
@@ -9695,7 +9821,12 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         {
             DisplayName = displayName,
             ModelName = modelName,
-            Category = category
+            Category = category,
+            InteractionKind = ObjectInteractionKind.None,
+            CashValue = 0,
+            HealAmount = 0,
+            ArmorAmount = 0,
+            AmmoAmount = 0
         };
     }
 
@@ -9705,6 +9836,11 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
         AddObjectCategory(categories, "Securite", all, ObjectPlacementCategory.Securite);
         AddObjectCategory(categories, "Couverture / Combat", all, ObjectPlacementCategory.Couverture);
+        AddObjectCategory(categories, "Argent / butin", all, ObjectPlacementCategory.ArgentButin);
+        AddObjectCategory(categories, "Materiel tactique", all, ObjectPlacementCategory.MaterielTactique);
+        AddObjectCategory(categories, "Soins / survie", all, ObjectPlacementCategory.SoinSurvie);
+        AddObjectCategory(categories, "Bureau / informatique", all, ObjectPlacementCategory.BureauInformatique);
+        AddObjectCategory(categories, "Atelier / outils", all, ObjectPlacementCategory.AtelierOutils);
         AddObjectCategory(categories, "Mobilier", all, ObjectPlacementCategory.Mobilier);
         AddObjectCategory(categories, "Caisses / Stockage", all, ObjectPlacementCategory.CaisseStockage);
         AddObjectCategory(categories, "Decoration", all, ObjectPlacementCategory.Decoration);
@@ -10210,6 +10346,675 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         {
             return defaultValue;
         }
+    }
+
+    private void UpdatePlacedObjectInteractions()
+    {
+        if (_placementMode || _menuVisible)
+        {
+            _objectInteractionKeyLatch = false;
+            return;
+        }
+
+        Ped player = Game.Player.Character;
+
+        if (!Entity.Exists(player) || player.IsDead)
+        {
+            _objectInteractionKeyLatch = false;
+            return;
+        }
+
+        PlacedObject nearest = FindNearestInteractablePlacedObject(player);
+
+        if (nearest == null)
+        {
+            if (!Game.IsKeyPressed(Keys.E))
+            {
+                _objectInteractionKeyLatch = false;
+            }
+
+            return;
+        }
+
+        DrawPlacedObjectInteractionMarker(nearest);
+        DrawPlacedObjectInteractionPrompt(nearest);
+
+        bool ePressed = Game.IsKeyPressed(Keys.E);
+
+        if (!ePressed)
+        {
+            _objectInteractionKeyLatch = false;
+            return;
+        }
+
+        if (_objectInteractionKeyLatch)
+        {
+            return;
+        }
+
+        _objectInteractionKeyLatch = true;
+        TryUsePlacedObject(nearest, player);
+    }
+
+    private PlacedObject FindNearestInteractablePlacedObject(Ped player)
+    {
+        if (!Entity.Exists(player))
+        {
+            return null;
+        }
+
+        PlacedObject best = null;
+        float bestDistance = ObjectInteractionDistance;
+        Vector3 playerPosition = player.Position;
+
+        for (int i = 0; i < _placedObjects.Count; i++)
+        {
+            PlacedObject placed = _placedObjects[i];
+
+            if (placed == null || !Entity.Exists(placed.Prop))
+            {
+                continue;
+            }
+
+            ApplyDefaultObjectInteractionIfNeeded(placed.Identity);
+
+            if (!HasObjectInteraction(placed.Identity))
+            {
+                continue;
+            }
+
+            float distance = (placed.Prop.Position - playerPosition).Length();
+
+            if (distance <= bestDistance)
+            {
+                bestDistance = distance;
+                best = placed;
+            }
+        }
+
+        return best;
+    }
+
+    private void DrawPlacedObjectInteractionMarker(PlacedObject placed)
+    {
+        if (placed == null || !Entity.Exists(placed.Prop))
+        {
+            return;
+        }
+
+        Vector3 markerPosition = placed.Prop.Position + new Vector3(0.0f, 0.0f, ObjectInteractionMarkerHeight);
+
+        World.DrawMarker(
+            MarkerType.DebugSphere,
+            markerPosition,
+            Vector3.Zero,
+            Vector3.Zero,
+            new Vector3(0.18f, 0.18f, 0.18f),
+            Color.FromArgb(220, 255, 230, 80));
+    }
+
+    private void DrawPlacedObjectInteractionPrompt(PlacedObject placed)
+    {
+        if (placed == null || placed.Identity == null)
+        {
+            return;
+        }
+
+        string action = ObjectInteractionPromptText(placed.Identity);
+
+        DrawRect(305, 616, 670, 48, Color.FromArgb(165, 0, 0, 0));
+        DrawText("E - " + FitText(action, 86), 640, 629, 0.32f, Color.White, true, true);
+    }
+
+    private bool TryUsePlacedObject(PlacedObject placed, Ped player)
+    {
+        if (placed == null || placed.Identity == null || !Entity.Exists(placed.Prop) || !Entity.Exists(player))
+        {
+            return false;
+        }
+
+        ApplyDefaultObjectInteractionIfNeeded(placed.Identity);
+
+        switch (placed.Identity.InteractionKind)
+        {
+            case ObjectInteractionKind.Cash:
+                return TryUseCashObject(placed);
+
+            case ObjectInteractionKind.Health:
+                return TryUseHealthObject(placed, player);
+
+            case ObjectInteractionKind.Armor:
+                return TryUseArmorObject(placed, player);
+
+            case ObjectInteractionKind.Ammo:
+                return TryUseAmmoObject(placed, player);
+
+            case ObjectInteractionKind.None:
+            default:
+                return false;
+        }
+    }
+
+    private bool TryUseCashObject(PlacedObject placed)
+    {
+        int amount = placed.Identity.CashValue;
+
+        if (amount <= 0)
+        {
+            ShowStatus("Argent invalide sur cet objet.", 2500);
+            return false;
+        }
+
+        int oldCash;
+        int newCash;
+
+        if (!TryAddSinglePlayerCash(amount, out oldCash, out newCash))
+        {
+            ShowStatus("Impossible d'ajouter l'argent solo. Objet conserve.", 3500);
+            return false;
+        }
+
+        ConsumePlacedObject(placed);
+        ShowStatus("Argent recupere: +" + FormatMoney(amount) + " | total: " + FormatMoney(newCash), 4200);
+        return true;
+    }
+
+    private bool TryUseHealthObject(PlacedObject placed, Ped player)
+    {
+        int amount = Math.Max(1, placed.Identity.HealAmount);
+        int maxHealth = Math.Max(100, player.MaxHealth);
+
+        if (player.Health >= maxHealth)
+        {
+            ShowStatus("Sante deja au maximum.", 2500);
+            return false;
+        }
+
+        int oldHealth = player.Health;
+        player.Health = Clamp(player.Health + amount, 1, maxHealth);
+
+        ConsumePlacedObject(placed);
+        ShowStatus("Soin utilise: +" + (player.Health - oldHealth).ToString(CultureInfo.InvariantCulture) + " PV", 3200);
+        return true;
+    }
+
+    private bool TryUseArmorObject(PlacedObject placed, Ped player)
+    {
+        int amount = Math.Max(1, placed.Identity.ArmorAmount);
+
+        if (player.Armor >= MaxArmor)
+        {
+            ShowStatus("Armure deja au maximum.", 2500);
+            return false;
+        }
+
+        int oldArmor = player.Armor;
+        player.Armor = Clamp(player.Armor + amount, MinArmor, MaxArmor);
+
+        ConsumePlacedObject(placed);
+        ShowStatus("Armure equipee: +" + (player.Armor - oldArmor).ToString(CultureInfo.InvariantCulture), 3200);
+        return true;
+    }
+
+    private bool TryUseAmmoObject(PlacedObject placed, Ped player)
+    {
+        int amount = Math.Max(1, placed.Identity.AmmoAmount);
+
+        if (!TryAddAmmoToCurrentWeapon(player, amount))
+        {
+            ShowStatus("Equipe une arme pour prendre ces munitions.", 3000);
+            return false;
+        }
+
+        ConsumePlacedObject(placed);
+        ShowStatus("Munitions ajoutees: +" + amount.ToString(CultureInfo.InvariantCulture), 3200);
+        return true;
+    }
+
+    private void ConsumePlacedObject(PlacedObject placed)
+    {
+        if (placed == null)
+        {
+            return;
+        }
+
+        DeleteEntitySafe(placed.Prop);
+        _placedObjects.Remove(placed);
+    }
+
+    private bool TryAddSinglePlayerCash(int amount, out int oldCash, out int newCash)
+    {
+        oldCash = 0;
+        newCash = 0;
+
+        if (amount <= 0)
+        {
+            return false;
+        }
+
+        amount = Clamp(amount, 1, 100000000);
+
+        int currentSlot = GetCurrentSinglePlayerCashSlotSafe();
+
+        if (currentSlot >= 0)
+        {
+            return TryAddCashToSinglePlayerSlot(currentSlot, amount, out oldCash, out newCash);
+        }
+
+        // Si le joueur utilise un modele custom, on ne sait pas toujours quel slot story mode
+        // est actif. Dans ce cas on incremente les trois slots SP pour eviter un pickup sans effet.
+        bool anySuccess = false;
+        int firstOldCash = 0;
+        int firstNewCash = 0;
+
+        for (int i = 0; i < 3; i++)
+        {
+            int slotOldCash;
+            int slotNewCash;
+
+            if (TryAddCashToSinglePlayerSlot(i, amount, out slotOldCash, out slotNewCash))
+            {
+                if (!anySuccess)
+                {
+                    firstOldCash = slotOldCash;
+                    firstNewCash = slotNewCash;
+                }
+
+                anySuccess = true;
+            }
+        }
+
+        oldCash = firstOldCash;
+        newCash = firstNewCash;
+        return anySuccess;
+    }
+
+    private bool TryAddCashToSinglePlayerSlot(int slot, int amount, out int oldCash, out int newCash)
+    {
+        oldCash = 0;
+        newCash = 0;
+
+        if (slot < 0 || slot > 2 || amount <= 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            string statName = "SP" + slot.ToString(CultureInfo.InvariantCulture) + "_TOTAL_CASH";
+            int statHash = Game.GenerateHash(statName);
+
+            OutputArgument outValue = new OutputArgument();
+            bool readOk = Function.Call<bool>((Hash)NativeStatGetInt, statHash, outValue, -1);
+
+            if (!readOk)
+            {
+                return false;
+            }
+
+            oldCash = outValue.GetResult<int>();
+
+            long target = (long)oldCash + amount;
+
+            if (target > int.MaxValue)
+            {
+                target = int.MaxValue;
+            }
+
+            if (target < 0)
+            {
+                target = 0;
+            }
+
+            newCash = (int)target;
+            return Function.Call<bool>((Hash)NativeStatSetInt, statHash, newCash, true);
+        }
+        catch
+        {
+            oldCash = 0;
+            newCash = 0;
+            return false;
+        }
+    }
+
+    private int GetCurrentSinglePlayerCashSlotSafe()
+    {
+        try
+        {
+            Ped player = Game.Player.Character;
+
+            if (!Entity.Exists(player))
+            {
+                return -1;
+            }
+
+            int modelHash = player.Model.Hash;
+
+            if (modelHash == Game.GenerateHash("player_zero"))
+            {
+                return 0; // Michael
+            }
+
+            if (modelHash == Game.GenerateHash("player_one"))
+            {
+                return 1; // Franklin
+            }
+
+            if (modelHash == Game.GenerateHash("player_two"))
+            {
+                return 2; // Trevor
+            }
+        }
+        catch
+        {
+        }
+
+        return -1;
+    }
+
+    private bool TryAddAmmoToCurrentWeapon(Ped player, int amount)
+    {
+        if (!Entity.Exists(player) || player.IsDead || amount <= 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            int weaponHash = Function.Call<int>((Hash)NativeGetSelectedPedWeapon, player.Handle);
+
+            if (weaponHash == 0 || weaponHash == Game.GenerateHash("WEAPON_UNARMED"))
+            {
+                return false;
+            }
+
+            Function.Call((Hash)NativeAddAmmoToPed, player.Handle, weaponHash, amount);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static void WriteObjectInteractionXmlAttributes(XmlWriter writer, ObjectIdentity identity)
+    {
+        if (writer == null || identity == null)
+        {
+            return;
+        }
+
+        writer.WriteAttributeString("interactionKind", identity.InteractionKind.ToString());
+        writer.WriteAttributeString("cashValue", identity.CashValue.ToString(CultureInfo.InvariantCulture));
+        writer.WriteAttributeString("healAmount", identity.HealAmount.ToString(CultureInfo.InvariantCulture));
+        writer.WriteAttributeString("armorAmount", identity.ArmorAmount.ToString(CultureInfo.InvariantCulture));
+        writer.WriteAttributeString("ammoAmount", identity.AmmoAmount.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private static bool HasObjectInteraction(ObjectIdentity identity)
+    {
+        if (identity == null)
+        {
+            return false;
+        }
+
+        switch (identity.InteractionKind)
+        {
+            case ObjectInteractionKind.Cash:
+                return identity.CashValue > 0;
+
+            case ObjectInteractionKind.Health:
+                return identity.HealAmount > 0;
+
+            case ObjectInteractionKind.Armor:
+                return identity.ArmorAmount > 0;
+
+            case ObjectInteractionKind.Ammo:
+                return identity.AmmoAmount > 0;
+
+            case ObjectInteractionKind.None:
+            default:
+                return false;
+        }
+    }
+
+    private static string ObjectInteractionDisplayName(ObjectIdentity identity)
+    {
+        if (identity == null)
+        {
+            return "aucune";
+        }
+
+        switch (identity.InteractionKind)
+        {
+            case ObjectInteractionKind.Cash:
+                return "argent +" + FormatMoney(identity.CashValue);
+
+            case ObjectInteractionKind.Health:
+                return "soin +" + identity.HealAmount.ToString(CultureInfo.InvariantCulture);
+
+            case ObjectInteractionKind.Armor:
+                return "armure +" + identity.ArmorAmount.ToString(CultureInfo.InvariantCulture);
+
+            case ObjectInteractionKind.Ammo:
+                return "munitions +" + identity.AmmoAmount.ToString(CultureInfo.InvariantCulture);
+
+            case ObjectInteractionKind.None:
+            default:
+                return "aucune";
+        }
+    }
+
+    private static string ObjectInteractionPromptText(ObjectIdentity identity)
+    {
+        if (identity == null)
+        {
+            return "Interagir";
+        }
+
+        string name = string.IsNullOrWhiteSpace(identity.DisplayName)
+            ? "Objet"
+            : identity.DisplayName;
+
+        switch (identity.InteractionKind)
+        {
+            case ObjectInteractionKind.Cash:
+                return "Ramasser " + name + " (+" + FormatMoney(identity.CashValue) + ")";
+
+            case ObjectInteractionKind.Health:
+                return "Utiliser " + name + " (soin +" + identity.HealAmount.ToString(CultureInfo.InvariantCulture) + ")";
+
+            case ObjectInteractionKind.Armor:
+                return "Equiper " + name + " (armure +" + identity.ArmorAmount.ToString(CultureInfo.InvariantCulture) + ")";
+
+            case ObjectInteractionKind.Ammo:
+                return "Prendre " + name + " (munitions +" + identity.AmmoAmount.ToString(CultureInfo.InvariantCulture) + ")";
+
+            case ObjectInteractionKind.None:
+            default:
+                return "Interagir avec " + name;
+        }
+    }
+
+    private static void ApplyDefaultObjectInteractionIfNeeded(ObjectIdentity identity)
+    {
+        if (identity == null)
+        {
+            return;
+        }
+
+        // Si l'interaction est deja configuree et valide, on ne change rien.
+        if (HasObjectInteraction(identity))
+        {
+            return;
+        }
+
+        string text = ((identity.DisplayName ?? string.Empty) + " " + (identity.ModelName ?? string.Empty)).ToLowerInvariant();
+
+        if (LooksLikeCashObject(text))
+        {
+            identity.InteractionKind = ObjectInteractionKind.Cash;
+            identity.CashValue = InferCashValue(text);
+            identity.HealAmount = 0;
+            identity.ArmorAmount = 0;
+            identity.AmmoAmount = 0;
+            return;
+        }
+
+        if (LooksLikeHealthObject(text))
+        {
+            identity.InteractionKind = ObjectInteractionKind.Health;
+            identity.CashValue = 0;
+            identity.HealAmount = 75;
+            identity.ArmorAmount = 0;
+            identity.AmmoAmount = 0;
+            return;
+        }
+
+        if (LooksLikeArmorObject(text))
+        {
+            identity.InteractionKind = ObjectInteractionKind.Armor;
+            identity.CashValue = 0;
+            identity.HealAmount = 0;
+            identity.ArmorAmount = 50;
+            identity.AmmoAmount = 0;
+            return;
+        }
+
+        if (LooksLikeAmmoObject(text))
+        {
+            identity.InteractionKind = ObjectInteractionKind.Ammo;
+            identity.CashValue = 0;
+            identity.HealAmount = 0;
+            identity.ArmorAmount = 0;
+            identity.AmmoAmount = 90;
+        }
+    }
+
+    private static bool LooksLikeCashObject(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        return text.Contains("cash") ||
+               text.Contains("money") ||
+               text.Contains("argent") ||
+               text.Contains("billet") ||
+               text.Contains("banknote") ||
+               text.Contains("poly_bag_money") ||
+               text.Contains("heist_bag") ||
+               text.Contains("gold_chest") ||
+               text.Contains("cashpack") ||
+               text.Contains("cash_case") ||
+               text.Contains("cash_crate") ||
+               text.Contains("cash_trolly");
+    }
+
+    private static bool LooksLikeHealthObject(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        return text.Contains("health") ||
+               text.Contains("soin") ||
+               text.Contains("medical") ||
+               text.Contains("med_bag");
+    }
+
+    private static bool LooksLikeArmorObject(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        return text.Contains("armor") ||
+               text.Contains("armour") ||
+               text.Contains("armure") ||
+               text.Contains("gilet pare");
+    }
+
+    private static bool LooksLikeAmmoObject(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        return text.Contains("ammo") ||
+               text.Contains("munition") ||
+               text.Contains("munitions") ||
+               text.Contains("guncase");
+    }
+
+    private static int InferCashValue(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return 10000;
+        }
+
+        string compact = text
+            .Replace(" ", string.Empty)
+            .Replace("_", string.Empty)
+            .Replace("-", string.Empty)
+            .Replace("$", string.Empty);
+
+        if (compact.Contains("10000") || compact.Contains("10k"))
+        {
+            return 10000;
+        }
+
+        if (compact.Contains("onedollar"))
+        {
+            return 1;
+        }
+
+        if (compact.Contains("banknote") || compact.Contains("billetseul"))
+        {
+            return 100;
+        }
+
+        if (compact.Contains("envelope") || compact.Contains("enveloppe"))
+        {
+            return 2500;
+        }
+
+        if (compact.Contains("cashpack") || compact.Contains("paquetdecash"))
+        {
+            return 5000;
+        }
+
+        if (compact.Contains("heistbag") || compact.Contains("moneybag") || compact.Contains("sacdargent") || compact.Contains("sacdebraquage"))
+        {
+            return 50000;
+        }
+
+        if (compact.Contains("cashcase") || compact.Contains("malette"))
+        {
+            return 50000;
+        }
+
+        if (compact.Contains("cashcrate") || compact.Contains("goldchest") || compact.Contains("coffreor"))
+        {
+            return 250000;
+        }
+
+        if (compact.Contains("cashtrolly") || compact.Contains("chariotcash"))
+        {
+            return 200000;
+        }
+
+        return 10000;
+    }
+
+    private static string FormatMoney(int amount)
+    {
+        return amount.ToString("N0", CultureInfo.InvariantCulture).Replace(",", " ") + "$";
     }
 
     private void DrawStatus()

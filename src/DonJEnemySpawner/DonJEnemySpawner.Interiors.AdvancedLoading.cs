@@ -37,6 +37,7 @@ public sealed partial class DonJEnemySpawner
     private const ulong AdvancedNativePinInteriorInMemory = 0x2CA429C029CCF247UL;
     private const ulong AdvancedNativeIsInteriorReady = 0x6726BDCCC1932F0EUL;
     private const ulong AdvancedNativeActivateInteriorEntitySet = 0x55E86AF2712B36A1UL;
+    private const ulong AdvancedNativeDeactivateInteriorEntitySet = 0x420BD37289EEE162UL;
     private const ulong AdvancedNativeSetInteriorEntitySetTintIndex = 0xC1F1920BAF281317UL;
     private const ulong AdvancedNativeRefreshInterior = 0x41F37C3427C75AE0UL;
 
@@ -64,6 +65,7 @@ public sealed partial class DonJEnemySpawner
     private sealed class AdvancedInteriorEntitySetSpec
     {
         public string Name;
+        public bool Enabled;
         public bool HasTint;
         public int TintIndex;
     }
@@ -404,15 +406,24 @@ public sealed partial class DonJEnemySpawner
 
             try
             {
-                Function.Call((Hash)AdvancedNativeActivateInteriorEntitySet, interiorId, set.Name);
-
-                if (set.HasTint)
+                if (set.Enabled)
                 {
-                    Function.Call((Hash)AdvancedNativeSetInteriorEntitySetTintIndex, interiorId, set.Name, set.TintIndex);
+                    Function.Call((Hash)AdvancedNativeActivateInteriorEntitySet, interiorId, set.Name);
+
+                    if (set.HasTint)
+                    {
+                        Function.Call((Hash)AdvancedNativeSetInteriorEntitySetTintIndex, interiorId, set.Name, set.TintIndex);
+                    }
+                }
+                else
+                {
+                    Function.Call((Hash)AdvancedNativeDeactivateInteriorEntitySet, interiorId, set.Name);
                 }
             }
             catch
             {
+                // Certains interiors ne connaissent pas tous les entity sets selon la version/DLC chargee.
+                // On ignore l'entree fautive pour garder le portail utilisable.
             }
         }
     }
@@ -430,18 +441,7 @@ public sealed partial class DonJEnemySpawner
 
         if (id == "facility" || id == "iaa_facility")
         {
-            AddInteriorEntitySetSafe(result, "set_int_02_decal_01", 1);
-            AddInteriorEntitySetSafe(result, "set_int_02_lounge1", 1);
-            AddInteriorEntitySetSafe(result, "set_int_02_cannon", 1);
-            AddInteriorEntitySetSafe(result, "set_int_02_clutter1", 1);
-            AddInteriorEntitySetSafe(result, "set_int_02_crewemblem", null);
-            AddInteriorEntitySetSafe(result, "set_int_02_shell", 1);
-            AddInteriorEntitySetSafe(result, "set_int_02_security", 1);
-            AddInteriorEntitySetSafe(result, "set_int_02_sleep", 1);
-            AddInteriorEntitySetSafe(result, "set_int_02_trophy1", 1);
-            AddInteriorEntitySetSafe(result, "set_int_02_paramedic_complete", 1);
-            AddInteriorEntitySetSafe(result, "set_Int_02_outfit_paramedic", 1);
-            AddInteriorEntitySetSafe(result, "set_Int_02_outfit_serverfarm", 1);
+            AddFacilityUpgradedEntitySetsSafe(result);
         }
         else if (id == "server_farm")
         {
@@ -451,34 +451,308 @@ public sealed partial class DonJEnemySpawner
         }
         else if (id == "smugglers_hangar")
         {
-            AddInteriorEntitySetSafe(result, "set_lighting_hangar_a", null);
-            AddInteriorEntitySetSafe(result, "set_tint_shell", 1);
-            AddInteriorEntitySetSafe(result, "set_bedroom_tint", 1);
-            AddInteriorEntitySetSafe(result, "set_crane_tint", 1);
-            AddInteriorEntitySetSafe(result, "set_modarea", 1);
-            AddInteriorEntitySetSafe(result, "set_lighting_tint_props", 1);
-            AddInteriorEntitySetSafe(result, "set_floor_1", null);
-            AddInteriorEntitySetSafe(result, "set_floor_decal_1", 1);
-            AddInteriorEntitySetSafe(result, "set_bedroom_modern", null);
-            AddInteriorEntitySetSafe(result, "set_office_modern", null);
-            AddInteriorEntitySetSafe(result, "set_bedroom_blinds_open", null);
-            AddInteriorEntitySetSafe(result, "set_lighting_wall_tint01", null);
+            AddHangarUpgradedEntitySetsSafe(result);
         }
         else if (id.Contains("bunker"))
         {
-            AddInteriorEntitySetSafe(result, "standard_bunker_set", null);
-            AddInteriorEntitySetSafe(result, "interior_basic", null);
-            AddInteriorEntitySetSafe(result, "office_blocker_set", null);
-            AddInteriorEntitySetSafe(result, "gun_wall_blocker", null);
-            AddInteriorEntitySetSafe(result, "gun_range_lights", null);
-            AddInteriorEntitySetSafe(result, "gun_locker_upgrade", null);
-            AddInteriorEntitySetSafe(result, "Gun_schematic_set", null);
+            AddBunkerUpgradedEntitySetsSafe(result);
+        }
+        else if (id == "avenger")
+        {
+            AddAvengerUpgradedEntitySetsSafe(result);
+        }
+        else if (id == "terrorbyte")
+        {
+            AddTerrorbyteUpgradedEntitySetsSafe(result);
+        }
+        else if (id == "nightclub" || id == "casino_nightclub")
+        {
+            AddNightclubUpgradedEntitySetsSafe(result);
+        }
+        else if (id == "nightclub_warehouse")
+        {
+            AddNightclubWarehouseUpgradedEntitySetsSafe(result);
+        }
+        else if (id.StartsWith("clubhouse_", StringComparison.OrdinalIgnoreCase))
+        {
+            AddClubhouseUpgradedEntitySetsSafe(result, id);
+        }
+        else if (id == "meth_lab")
+        {
+            AddInteriorEntitySetSafe(result, "meth_lab_upgrade", null);
+            AddInteriorEntitySetSafe(result, "meth_lab_production", null);
+            AddInteriorEntitySetSafe(result, "meth_lab_security_high", null);
+        }
+        else if (id == "weed_farm")
+        {
+            AddWeedFarmUpgradedEntitySetsSafe(result);
+        }
+        else if (id == "cocaine_lockup")
+        {
+            AddInteriorEntitySetSafe(result, "security_high", null);
+            AddInteriorEntitySetSafe(result, "equipment_upgrade", null);
+            AddInteriorEntitySetSafe(result, "production_upgrade", null);
+            AddInteriorEntitySetSafe(result, "coke_press_upgrade", null);
+            AddInteriorEntitySetSafe(result, "table_equipment_upgrade", null);
+            AddInteriorEntitySetSafe(result, "coke_cut_05", null);
+        }
+        else if (id == "counterfeit_cash")
+        {
+            AddCounterfeitCashUpgradedEntitySetsSafe(result);
+        }
+        else if (id == "document_forgery")
+        {
+            AddInteriorEntitySetSafe(result, "production", null);
+            AddInteriorEntitySetSafe(result, "clutter", null);
+            AddInteriorEntitySetSafe(result, "equipment_upgrade", null);
+            AddInteriorEntitySetSafe(result, "security_high", null);
+            AddInteriorEntitySetSafe(result, "interior_upgrade", null);
+            AddInteriorEntitySetSafe(result, "chair01", null);
+            AddInteriorEntitySetSafe(result, "chair02", null);
+            AddInteriorEntitySetSafe(result, "chair03", null);
+            AddInteriorEntitySetSafe(result, "chair04", null);
+            AddInteriorEntitySetSafe(result, "chair05", null);
+            AddInteriorEntitySetSafe(result, "chair06", null);
+            AddInteriorEntitySetSafe(result, "chair07", null);
+        }
+        else if (id == "vehicle_warehouse")
+        {
+            RemoveInteriorEntitySetSafe(result, "basic_style_set");
+            AddInteriorEntitySetSafe(result, "urban_style_set", null);
+            AddInteriorEntitySetSafe(result, "door_blocker", null);
+            AddInteriorEntitySetSafe(result, "car_floor_hatch", null);
+        }
+        else if (id.StartsWith("warehouse_", StringComparison.OrdinalIgnoreCase))
+        {
+            AddInteriorEntitySetSafe(result, "office_chairs", null);
+        }
+        else if (IsCeoOfficeInteriorIdSafe(id))
+        {
+            AddCeoOfficeUpgradedEntitySetsSafe(result);
         }
 
         return result;
     }
 
+    private static bool IsCeoOfficeInteriorIdSafe(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return false;
+        }
+
+        return id.StartsWith("arcadius_", StringComparison.OrdinalIgnoreCase) ||
+               id.StartsWith("maze_", StringComparison.OrdinalIgnoreCase) ||
+               id.StartsWith("lom_", StringComparison.OrdinalIgnoreCase) ||
+               id.StartsWith("maze_west_", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void AddFacilityUpgradedEntitySetsSafe(List<AdvancedInteriorEntitySetSpec> result)
+    {
+        AddInteriorEntitySetSafe(result, "set_int_02_decal_01", 1);
+        AddInteriorEntitySetSafe(result, "set_int_02_lounge1", 1);
+        AddInteriorEntitySetSafe(result, "set_int_02_cannon", 1);
+        AddInteriorEntitySetSafe(result, "set_int_02_clutter1", 1);
+        AddInteriorEntitySetSafe(result, "set_int_02_crewemblem", null);
+        AddInteriorEntitySetSafe(result, "set_int_02_shell", 1);
+        AddInteriorEntitySetSafe(result, "set_int_02_security", 1);
+        AddInteriorEntitySetSafe(result, "set_int_02_sleep", 1);
+        AddInteriorEntitySetSafe(result, "set_int_02_trophy1", 1);
+        AddInteriorEntitySetSafe(result, "set_int_02_paramedic_complete", 1);
+        AddInteriorEntitySetSafe(result, "set_Int_02_outfit_paramedic", 1);
+        AddInteriorEntitySetSafe(result, "set_Int_02_outfit_serverfarm", 1);
+    }
+
+    private static void AddHangarUpgradedEntitySetsSafe(List<AdvancedInteriorEntitySetSpec> result)
+    {
+        AddInteriorEntitySetSafe(result, "set_lighting_hangar_a", null);
+        AddInteriorEntitySetSafe(result, "set_tint_shell", 1);
+        AddInteriorEntitySetSafe(result, "set_bedroom_tint", 1);
+        AddInteriorEntitySetSafe(result, "set_crane_tint", 1);
+        AddInteriorEntitySetSafe(result, "set_modarea", 1);
+        AddInteriorEntitySetSafe(result, "set_lighting_tint_props", 1);
+        AddInteriorEntitySetSafe(result, "set_floor_1", null);
+        AddInteriorEntitySetSafe(result, "set_floor_decal_1", 1);
+        AddInteriorEntitySetSafe(result, "set_bedroom_modern", null);
+        AddInteriorEntitySetSafe(result, "set_office_modern", null);
+        AddInteriorEntitySetSafe(result, "set_bedroom_blinds_open", null);
+        AddInteriorEntitySetSafe(result, "set_lighting_wall_tint01", null);
+    }
+
+    private static void AddBunkerUpgradedEntitySetsSafe(List<AdvancedInteriorEntitySetSpec> result)
+    {
+        // On retire les variantes basiques et les blockers avant d'activer la variante amelioree.
+        RemoveInteriorEntitySetSafe(result, "standard_bunker_set");
+        RemoveInteriorEntitySetSafe(result, "standard_security_set");
+        RemoveInteriorEntitySetSafe(result, "Office_blocker_set");
+        RemoveInteriorEntitySetSafe(result, "office_blocker_set");
+        RemoveInteriorEntitySetSafe(result, "gun_range_blocker_set");
+
+        AddInteriorEntitySetSafe(result, "Bunker_Style_C", null);
+        AddInteriorEntitySetSafe(result, "bunker_style_c", null);
+        AddInteriorEntitySetSafe(result, "upgrade_bunker_set", null);
+        AddInteriorEntitySetSafe(result, "security_upgrade", null);
+        AddInteriorEntitySetSafe(result, "Office_Upgrade_set", null);
+        AddInteriorEntitySetSafe(result, "office_upgrade_set", null);
+        AddInteriorEntitySetSafe(result, "gun_wall_blocker", null);
+        AddInteriorEntitySetSafe(result, "gun_range_lights", null);
+        AddInteriorEntitySetSafe(result, "gun_locker_upgrade", null);
+        AddInteriorEntitySetSafe(result, "Gun_schematic_set", null);
+    }
+
+    private static void AddAvengerUpgradedEntitySetsSafe(List<AdvancedInteriorEntitySetSpec> result)
+    {
+        AddInteriorEntitySetSafe(result, "shell_tint", 1);
+        AddInteriorEntitySetSafe(result, "control_1", null);
+        AddInteriorEntitySetSafe(result, "weapons_mod", null);
+        AddInteriorEntitySetSafe(result, "vehicle_mod", null);
+        AddInteriorEntitySetSafe(result, "gold_bling", null);
+    }
+
+    private static void AddTerrorbyteUpgradedEntitySetsSafe(List<AdvancedInteriorEntitySetSpec> result)
+    {
+        AddInteriorEntitySetSafe(result, "Int_03_ba_Design_01", null);
+        AddInteriorEntitySetSafe(result, "Int_03_ba_weapons_mod", null);
+        AddInteriorEntitySetSafe(result, "Int_03_ba_drone", null);
+        AddInteriorEntitySetSafe(result, "Int_03_ba_bikemod", null);
+        AddInteriorEntitySetSafe(result, "Int_03_ba_Tint", 1);
+        AddInteriorEntitySetSafe(result, "Int_03_ba_Light_Rig1", null);
+    }
+
+    private static void AddNightclubUpgradedEntitySetsSafe(List<AdvancedInteriorEntitySetSpec> result)
+    {
+        AddInteriorEntitySetSafe(result, "Int01_ba_Style03", null);
+        AddInteriorEntitySetSafe(result, "Int01_ba_style03_podium", null);
+        AddInteriorEntitySetSafe(result, "Int01_ba_security_upgrade", null);
+        AddInteriorEntitySetSafe(result, "Int01_ba_equipment_upgrade", null);
+        AddInteriorEntitySetSafe(result, "Int01_ba_clubname_01", null);
+        AddInteriorEntitySetSafe(result, "Int01_ba_Screen", null);
+        AddInteriorEntitySetSafe(result, "int01_ba_lights_screen", null);
+        AddInteriorEntitySetSafe(result, "Int01_ba_lightgrid_01", null);
+        AddInteriorEntitySetSafe(result, "Int01_ba_Clutter", null);
+        AddInteriorEntitySetSafe(result, "Int01_ba_bar_content", null);
+        AddInteriorEntitySetSafe(result, "Int01_ba_booze_03", null);
+        AddInteriorEntitySetSafe(result, "Int01_ba_dj04", null);
+        AddInteriorEntitySetSafe(result, "DJ_04_Lights_01", null);
+        AddInteriorEntitySetSafe(result, "Int01_ba_dry_ice", null);
+    }
+
+    private static void AddNightclubWarehouseUpgradedEntitySetsSafe(List<AdvancedInteriorEntitySetSpec> result)
+    {
+        AddInteriorEntitySetSafe(result, "Int02_ba_floor05", null);
+        AddInteriorEntitySetSafe(result, "Int02_ba_sec_upgrade_grg", null);
+        AddInteriorEntitySetSafe(result, "Int02_ba_sec_upgrade_strg", null);
+        AddInteriorEntitySetSafe(result, "Int02_ba_sec_upgrade_desk", null);
+        AddInteriorEntitySetSafe(result, "Int02_ba_equipment_upgrade", null);
+        AddInteriorEntitySetSafe(result, "Int02_ba_Cash08", null);
+        AddInteriorEntitySetSafe(result, "Int02_ba_Cash_EQP", null);
+        AddInteriorEntitySetSafe(result, "Int02_ba_coke02", null);
+        AddInteriorEntitySetSafe(result, "Int02_ba_coke_EQP", null);
+        AddInteriorEntitySetSafe(result, "Int02_ba_meth04", null);
+        AddInteriorEntitySetSafe(result, "Int02_ba_meth_EQP", null);
+        AddInteriorEntitySetSafe(result, "Int02_ba_Weed16", null);
+        AddInteriorEntitySetSafe(result, "Int02_ba_Weed_EQP", null);
+        AddInteriorEntitySetSafe(result, "Int02_ba_Forged12", null);
+        AddInteriorEntitySetSafe(result, "Int02_ba_Forged_EQP", null);
+        AddInteriorEntitySetSafe(result, "Int02_ba_DeskPC", null);
+        AddInteriorEntitySetSafe(result, "Int02_ba_clutterstuff", null);
+    }
+
+    private static void AddClubhouseUpgradedEntitySetsSafe(List<AdvancedInteriorEntitySetSpec> result, string id)
+    {
+        AddInteriorEntitySetSafe(result, "walls_02", null);
+        AddInteriorEntitySetSafe(result, "furnishings_02", null);
+        AddInteriorEntitySetSafe(result, "decorative_02", null);
+        AddInteriorEntitySetSafe(result, "mural_09", null);
+        AddInteriorEntitySetSafe(result, "gun_locker", null);
+        AddInteriorEntitySetSafe(result, "mod_booth", null);
+
+        if (string.Equals(id, "clubhouse_2", StringComparison.OrdinalIgnoreCase))
+        {
+            AddInteriorEntitySetSafe(result, "cash_large", null);
+            AddInteriorEntitySetSafe(result, "coke_large", null);
+            AddInteriorEntitySetSafe(result, "counterfeit_large", null);
+            AddInteriorEntitySetSafe(result, "id_large", null);
+            AddInteriorEntitySetSafe(result, "meth_large", null);
+            AddInteriorEntitySetSafe(result, "weed_large", null);
+            AddInteriorEntitySetSafe(result, "lower_walls_default", null);
+        }
+        else
+        {
+            AddInteriorEntitySetSafe(result, "cash_stash3", null);
+            AddInteriorEntitySetSafe(result, "coke_stash3", null);
+            AddInteriorEntitySetSafe(result, "counterfeit_stash3", null);
+            AddInteriorEntitySetSafe(result, "id_stash3", null);
+            AddInteriorEntitySetSafe(result, "meth_stash3", null);
+            AddInteriorEntitySetSafe(result, "weed_stash3", null);
+        }
+    }
+
+    private static void AddWeedFarmUpgradedEntitySetsSafe(List<AdvancedInteriorEntitySetSpec> result)
+    {
+        AddInteriorEntitySetSafe(result, "weed_upgrade_equip", null);
+        AddInteriorEntitySetSafe(result, "weed_security_upgrade", null);
+        AddInteriorEntitySetSafe(result, "weed_production", null);
+        AddInteriorEntitySetSafe(result, "weed_drying", null);
+        AddInteriorEntitySetSafe(result, "weed_chairs", null);
+
+        string[] stations = { "a", "b", "c", "d", "e", "f", "g", "h", "i" };
+
+        for (int i = 0; i < stations.Length; i++)
+        {
+            AddInteriorEntitySetSafe(result, "weed_growth" + stations[i] + "_stage3", null);
+            AddInteriorEntitySetSafe(result, "weed_hose" + stations[i], null);
+            AddInteriorEntitySetSafe(result, "light_growth" + stations[i] + "_stage23_upgrade", null);
+        }
+    }
+
+    private static void AddCounterfeitCashUpgradedEntitySetsSafe(List<AdvancedInteriorEntitySetSpec> result)
+    {
+        AddInteriorEntitySetSafe(result, "counterfeit_security", null);
+        AddInteriorEntitySetSafe(result, "counterfeit_upgrade_equip", null);
+        AddInteriorEntitySetSafe(result, "money_cutter", null);
+        AddInteriorEntitySetSafe(result, "special_chairs", null);
+        AddInteriorEntitySetSafe(result, "counterfeit_cashpile100d", null);
+        AddInteriorEntitySetSafe(result, "counterfeit_cashpile20d", null);
+        AddInteriorEntitySetSafe(result, "counterfeit_cashpile10d", null);
+        AddInteriorEntitySetSafe(result, "dryera_on", null);
+        AddInteriorEntitySetSafe(result, "dryerb_on", null);
+        AddInteriorEntitySetSafe(result, "dryerc_on", null);
+        AddInteriorEntitySetSafe(result, "dryerd_on", null);
+    }
+
+    private static void AddCeoOfficeUpgradedEntitySetsSafe(List<AdvancedInteriorEntitySetSpec> result)
+    {
+        AddInteriorEntitySetSafe(result, "office_chairs", null);
+        AddInteriorEntitySetSafe(result, "office_booze", null);
+        AddInteriorEntitySetSafe(result, "cash_set_24", null);
+        AddInteriorEntitySetSafe(result, "swag_art3", null);
+        AddInteriorEntitySetSafe(result, "swag_booze_cigs3", null);
+        AddInteriorEntitySetSafe(result, "swag_counterfeit3", null);
+        AddInteriorEntitySetSafe(result, "swag_drugbags3", null);
+        AddInteriorEntitySetSafe(result, "swag_drugstatue3", null);
+        AddInteriorEntitySetSafe(result, "swag_electronic3", null);
+        AddInteriorEntitySetSafe(result, "swag_furcoats3", null);
+        AddInteriorEntitySetSafe(result, "swag_gems3", null);
+        AddInteriorEntitySetSafe(result, "swag_guns3", null);
+        AddInteriorEntitySetSafe(result, "swag_ivory3", null);
+        AddInteriorEntitySetSafe(result, "swag_jewelwatch3", null);
+        AddInteriorEntitySetSafe(result, "swag_med3", null);
+        AddInteriorEntitySetSafe(result, "swag_pills3", null);
+        AddInteriorEntitySetSafe(result, "swag_silver3", null);
+    }
+
     private static void AddInteriorEntitySetSafe(List<AdvancedInteriorEntitySetSpec> target, string name, int? tintIndex)
+    {
+        AddInteriorEntitySetStateSafe(target, name, true, tintIndex);
+    }
+
+    private static void RemoveInteriorEntitySetSafe(List<AdvancedInteriorEntitySetSpec> target, string name)
+    {
+        AddInteriorEntitySetStateSafe(target, name, false, null);
+    }
+
+    private static void AddInteriorEntitySetStateSafe(List<AdvancedInteriorEntitySetSpec> target, string name, bool enabled, int? tintIndex)
     {
         if (target == null || string.IsNullOrWhiteSpace(name))
         {
@@ -488,7 +762,8 @@ public sealed partial class DonJEnemySpawner
         target.Add(new AdvancedInteriorEntitySetSpec
         {
             Name = name.Trim(),
-            HasTint = tintIndex.HasValue,
+            Enabled = enabled,
+            HasTint = enabled && tintIndex.HasValue,
             TintIndex = tintIndex.HasValue ? tintIndex.Value : 0
         });
     }

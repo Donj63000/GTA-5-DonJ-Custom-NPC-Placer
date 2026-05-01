@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Runtime.Serialization;
+using System.Xml;
 using System.Xml.Linq;
 using GTA;
 using GTA.Math;
@@ -1178,6 +1179,118 @@ public class DonJEnemySpawnerTests
     }
 
     [TestMethod]
+    public void BuildObjectCategories_AddsLootAndUtilityObjectGroups()
+    {
+        IList all = (IList)InvokeStatic("BuildAllObjectOptions");
+        IList categories = (IList)InvokeStatic("BuildObjectCategories", all);
+
+        Assert.AreEqual(14, categories.Count, "Le menu objets doit exposer les categories utiles plus Tous les objets.");
+
+        AssertObjectOption(all, "Billets 10 000$ - liasse plate", "prop_cash_pile_01", "ArgentButin");
+        AssertObjectOption(all, "Chariot cash", "prop_cash_trolly", "ArgentButin");
+        AssertObjectOption(all, "Pack munitions 1", "prop_ld_ammo_pack_01", "MaterielTactique");
+        AssertObjectOption(all, "Kit de soin", "prop_ld_health_pack", "SoinSurvie");
+        AssertObjectOption(all, "Ordinateur portable", "prop_laptop_01a", "BureauInformatique");
+        AssertObjectOption(all, "Boite a outils", "prop_tool_box_04", "AtelierOutils");
+
+        AssertCategoryContainsOption(categories, "Argent / butin", "Billets 10 000$ - liasse plate");
+        AssertCategoryContainsOption(categories, "Materiel tactique", "Pack munitions 1");
+        AssertCategoryContainsOption(categories, "Soins / survie", "Kit de soin");
+        AssertCategoryContainsOption(categories, "Bureau / informatique", "Ordinateur portable");
+        AssertCategoryContainsOption(categories, "Atelier / outils", "Boite a outils");
+        AssertCategoryContainsOption(categories, "Tous les objets", "Chariot cash");
+    }
+
+    [TestMethod]
+    public void ObjectInteractions_InferUsefulPlacedObjects()
+    {
+        object cash = CreateObjectIdentity("prop_cash_pile_01", "Billets 10 000$ - liasse plate");
+        object health = CreateObjectIdentity("prop_ld_health_pack", "Kit de soin");
+        object ammo = CreateObjectIdentity("prop_ld_ammo_pack_01", "Pack munitions 1");
+        object armor = CreateObjectIdentity("prop_armour_pickup", "Gilet pare-balles");
+        object decorative = CreateObjectIdentity("prop_chair_01a", "Chaise simple");
+
+        InvokeStatic("ApplyDefaultObjectInteractionIfNeeded", cash);
+        InvokeStatic("ApplyDefaultObjectInteractionIfNeeded", health);
+        InvokeStatic("ApplyDefaultObjectInteractionIfNeeded", ammo);
+        InvokeStatic("ApplyDefaultObjectInteractionIfNeeded", armor);
+        InvokeStatic("ApplyDefaultObjectInteractionIfNeeded", decorative);
+
+        AssertObjectInteraction(cash, "Cash", 10000, 0, 0, 0);
+        AssertObjectInteraction(health, "Health", 0, 75, 0, 0);
+        AssertObjectInteraction(ammo, "Ammo", 0, 0, 0, 90);
+        AssertObjectInteraction(armor, "Armor", 0, 0, 50, 0);
+        AssertObjectInteraction(decorative, "None", 0, 0, 0, 0);
+        Assert.IsTrue((bool)InvokeStatic("HasObjectInteraction", cash));
+        Assert.IsFalse((bool)InvokeStatic("HasObjectInteraction", decorative));
+        Assert.AreEqual("Ramasser Billets 10 000$ - liasse plate (+10 000$)", (string)InvokeStatic("ObjectInteractionPromptText", cash));
+        Assert.AreEqual("munitions +90", (string)InvokeStatic("ObjectInteractionDisplayName", ammo));
+    }
+
+    [TestMethod]
+    public void ObjectInteractions_ReadLegacyAndExplicitXmlContracts()
+    {
+        XmlDocument legacyDocument = new XmlDocument();
+        legacyDocument.LoadXml("<Object modelName=\"prop_cash_trolly\" displayName=\"Chariot cash\" />");
+
+        object legacy = InvokeStatic("ReadObjectIdentityXml", legacyDocument.DocumentElement);
+
+        AssertObjectInteraction(legacy, "Cash", 200000, 0, 0, 0);
+
+        XmlDocument explicitDocument = new XmlDocument();
+        explicitDocument.LoadXml("<Object modelName=\"prop_custom_reward\" displayName=\"Prime\" interactionKind=\"Cash\" cashValue=\"777\" healAmount=\"0\" armorAmount=\"0\" ammoAmount=\"0\" />");
+
+        object explicitIdentity = InvokeStatic("ReadObjectIdentityXml", explicitDocument.DocumentElement);
+
+        AssertObjectInteraction(explicitIdentity, "Cash", 777, 0, 0, 0);
+    }
+
+    [TestMethod]
+    public void ObjectInteractions_WriteXmlAttributesForPersistence()
+    {
+        object identity = CreateObjectIdentity("prop_ld_health_pack", "Kit de soin");
+        SetObjectInteraction(identity, "Health", 0, 75, 0, 0);
+
+        StringWriter text = new StringWriter(CultureInfo.InvariantCulture);
+
+        using (XmlWriter writer = XmlWriter.Create(text, new XmlWriterSettings { OmitXmlDeclaration = true }))
+        {
+            writer.WriteStartElement("Object");
+            InvokeStatic("WriteObjectInteractionXmlAttributes", writer, identity);
+            writer.WriteEndElement();
+        }
+
+        XElement element = XElement.Parse(text.ToString());
+
+        Assert.AreEqual("Health", (string)element.Attribute("interactionKind"));
+        Assert.AreEqual("0", (string)element.Attribute("cashValue"));
+        Assert.AreEqual("75", (string)element.Attribute("healAmount"));
+        Assert.AreEqual("0", (string)element.Attribute("armorAmount"));
+        Assert.AreEqual("0", (string)element.Attribute("ammoAmount"));
+    }
+
+    [TestMethod]
+    public void SourceFile_ObjectInteractionsRunBetweenPlacedObjectsAndPortals()
+    {
+        string source = File.ReadAllText(GetSourceFilePath());
+        string tickBlock = ExtractSourceSection(
+            source,
+            "private void OnTick(object sender, EventArgs e)",
+            "private void OnKeyDown(object sender, KeyEventArgs e)");
+
+        int updateObjectsIndex = tickBlock.IndexOf("UpdatePlacedObjects();", StringComparison.Ordinal);
+        int interactionIndex = tickBlock.IndexOf("UpdatePlacedObjectInteractions();", StringComparison.Ordinal);
+        int updatePortalsIndex = tickBlock.IndexOf("UpdateInteriorPortals();", StringComparison.Ordinal);
+
+        Assert.IsTrue(updateObjectsIndex >= 0 && interactionIndex > updateObjectsIndex, "Les interactions doivent utiliser l'etat objet deja nettoye.");
+        Assert.IsTrue(updatePortalsIndex > interactionIndex, "Les interactions doivent etre mises a jour avant les portails et le statut.");
+        StringAssert.Contains(source, "private const ulong NativeStatGetInt = 0x767FBC2AC802EF3DUL;");
+        StringAssert.Contains(source, "private const ulong NativeStatSetInt = 0xB3271D7AB655B441UL;");
+        StringAssert.Contains(source, "Function.Call((Hash)NativeAddAmmoToPed, player.Handle, weaponHash, amount);");
+        StringAssert.Contains(source, "WriteObjectInteractionXmlAttributes(writer, placed.Identity);");
+    }
+
+    [TestMethod]
     public void HeadingFromTo_UsesGtaHeadingConvention()
     {
         float north = (float)InvokeStatic("HeadingFromTo", new Vector3(0.0f, 0.0f, 0.0f), new Vector3(0.0f, 10.0f, 0.0f));
@@ -1571,6 +1684,11 @@ public class DonJEnemySpawnerTests
         object serverFarm = FindInteriorOption(categories, "server_farm");
         object smugglersHangar = FindInteriorOption(categories, "smugglers_hangar");
         object submarine = FindInteriorOption(categories, "submarine");
+        object bunker = FindInteriorOption(categories, "bunker_generic");
+
+        Assert.IsNotNull(bunker, "Le bunker generique doit rester present.");
+        AssertVector3Equals(new Vector3(892.6384f, -3245.8664f, -98.2645f), GetFieldValue<Vector3>(bunker, "Position"), 0.001f);
+        Assert.AreEqual(180.0f, GetFieldValue<float>(bunker, "Heading"), 0.001f);
 
         Assert.IsNotNull(facility, "La facility Doomsday doit rester presente.");
         Assert.AreEqual("Doomsday Facility", GetFieldValue<string>(facility, "DisplayName"));
@@ -1593,6 +1711,43 @@ public class DonJEnemySpawnerTests
         Assert.IsNotNull(submarine, "Le sous-marin / Kosatka doit rester present.");
         AssertVector3Equals(new Vector3(514.29266f, 4885.8706f, -62.58986f), GetFieldValue<Vector3>(submarine, "Position"), 0.001f);
         Assert.AreEqual(180.25909f, GetFieldValue<float>(submarine, "Heading"), 0.001f);
+    }
+
+    [TestMethod]
+    public void BuildRuntimeInteriorOptionForEntry_OverridesLegacyBunkerArrivalOnly()
+    {
+        object oldBunker = CreateInteriorOption("bunker_generic", "Online - bases criminelles", "Bunker interieur generique", new Vector3(899.5518f, -3246.038f, -98.04907f), 0.0f);
+        object customBunker = CreateInteriorOption("custom_bunker_hideout", "Custom", "Bunker custom", new Vector3(100.0f, 200.0f, 300.0f), 42.0f);
+        object facility = CreateInteriorOption("facility", "Online - bases criminelles", "Doomsday Facility", new Vector3(483.2006f, 4810.5405f, -58.91929f), 18.04706f);
+
+        object runtimeOldBunker = InvokeStatic("BuildRuntimeInteriorOptionForEntry", oldBunker);
+        object runtimeCustomBunker = InvokeStatic("BuildRuntimeInteriorOptionForEntry", customBunker);
+        object runtimeFacility = InvokeStatic("BuildRuntimeInteriorOptionForEntry", facility);
+
+        AssertVector3Equals(new Vector3(892.6384f, -3245.8664f, -98.2645f), GetFieldValue<Vector3>(runtimeOldBunker, "Position"), 0.001f);
+        Assert.AreEqual(180.0f, GetFieldValue<float>(runtimeOldBunker, "Heading"), 0.001f);
+
+        AssertVector3Equals(new Vector3(892.6384f, -3245.8664f, -98.2645f), GetFieldValue<Vector3>(runtimeCustomBunker, "Position"), 0.001f);
+        Assert.AreEqual(180.0f, GetFieldValue<float>(runtimeCustomBunker, "Heading"), 0.001f);
+
+        AssertVector3Equals(new Vector3(483.2006f, 4810.5405f, -58.91929f), GetFieldValue<Vector3>(runtimeFacility, "Position"), 0.001f);
+        Assert.AreEqual(18.04706f, GetFieldValue<float>(runtimeFacility, "Heading"), 0.001f);
+    }
+
+    [TestMethod]
+    public void SourceFile_EnterInteriorPortalUsesRuntimeInteriorOverrides()
+    {
+        string interiorsSource = File.ReadAllText(GetInteriorsSourceFilePath());
+        string enterBlock = ExtractSourceSection(
+            interiorsSource,
+            "private void EnterInteriorPortal(PlacedInteriorPortal portal, Ped player)",
+            "private void ExitInteriorPortal(PlacedInteriorPortal portal, Ped player)");
+
+        StringAssert.Contains(interiorsSource, "private static readonly Vector3 BunkerInteriorSafeArrivalPosition = new Vector3(892.6384f, -3245.8664f, -98.2645f);");
+        StringAssert.Contains(interiorsSource, "private const float BunkerInteriorSafeArrivalHeading = 180.0f;");
+        StringAssert.Contains(enterBlock, "InteriorOption runtimeInterior = BuildRuntimeInteriorOptionForEntry(portal.Interior);");
+        StringAssert.Contains(enterBlock, "TeleportPlayerWithFadeSafe(player, runtimeInterior.Position, runtimeInterior.Heading);");
+        StringAssert.Contains(enterBlock, "ApplyInteriorEntitySetsSafe(runtimeInterior);");
     }
 
     [TestMethod]
@@ -1715,9 +1870,9 @@ public class DonJEnemySpawnerTests
         string advancedSource = File.ReadAllText(GetAdvancedInteriorsSourceFilePath());
 
         StringAssert.Contains(interiorsSource, "MaintainActiveInteriorVisualsSafe(player);");
-        StringAssert.Contains(interiorsSource, "bool prepared = PrepareInteriorForTeleportSafe(portal.Interior);");
-        StringAssert.Contains(interiorsSource, "TeleportPlayerWithFadeSafe(player, portal.Interior.Position, portal.Interior.Heading);");
-        StringAssert.Contains(interiorsSource, "ApplyInteriorEntitySetsSafe(portal.Interior);");
+        StringAssert.Contains(interiorsSource, "bool prepared = PrepareInteriorForTeleportSafe(runtimeInterior);");
+        StringAssert.Contains(interiorsSource, "TeleportPlayerWithFadeSafe(player, runtimeInterior.Position, runtimeInterior.Heading);");
+        StringAssert.Contains(interiorsSource, "ApplyInteriorEntitySetsSafe(runtimeInterior);");
         StringAssert.Contains(interiorsSource, "TeleportPlayerWithFadeSafe(player, returnPosition, returnHeading);");
         StringAssert.Contains(interiorsSource, "JoinInteriorIpls(BuildEffectiveInteriorIplList(portal.Interior))");
 
@@ -1729,10 +1884,57 @@ public class DonJEnemySpawnerTests
         StringAssert.Contains(advancedSource, "private void CleanAllInteriorPortals()");
         StringAssert.Contains(advancedSource, "private const ulong AdvancedNativeOnEnterMp = 0x0888C3502DBBEEF5UL;");
         StringAssert.Contains(advancedSource, "private const ulong AdvancedNativeRefreshInterior = 0x41F37C3427C75AE0UL;");
+        StringAssert.Contains(advancedSource, "private const ulong AdvancedNativeDeactivateInteriorEntitySet = 0x420BD37289EEE162UL;");
+        StringAssert.Contains(advancedSource, "Function.Call((Hash)AdvancedNativeDeactivateInteriorEntitySet, interiorId, set.Name);");
         StringAssert.Contains(advancedSource, "private const ulong AdvancedNativeForceRoomForEntity = 0x52923C4710DD9907UL;");
         StringAssert.Contains(advancedSource, "private const ulong AdvancedNativeForceRoomForGameViewport = 0x920D853F3E17F1DAUL;");
         StringAssert.Contains(advancedSource, "private const ulong AdvancedNativeSetFocusPosAndVel = 0xBB7454BAFF08FE25UL;");
         StringAssert.Contains(advancedSource, "private const int AdvancedInteriorMaintainIntervalMs = 250;");
+    }
+
+    [TestMethod]
+    public void BuildDefaultInteriorEntitySetsSafe_DeactivatesBunkerBasicSetsAndAddsUpgrades()
+    {
+        object bunker = CreateInteriorOption("bunker_generic", "Online - bases criminelles", "Bunker interieur generique", new Vector3(899.5518f, -3246.038f, -98.04907f), 0.0f);
+
+        IList entitySets = (IList)InvokeStatic("BuildDefaultInteriorEntitySetsSafe", bunker);
+
+        AssertEntitySetState(entitySets, "standard_bunker_set", false);
+        AssertEntitySetState(entitySets, "standard_security_set", false);
+        AssertEntitySetState(entitySets, "Office_blocker_set", false);
+        AssertEntitySetState(entitySets, "office_blocker_set", false);
+        AssertEntitySetState(entitySets, "gun_range_blocker_set", false);
+        AssertEntitySetState(entitySets, "Bunker_Style_C", true);
+        AssertEntitySetState(entitySets, "bunker_style_c", true);
+        AssertEntitySetState(entitySets, "upgrade_bunker_set", true);
+        AssertEntitySetState(entitySets, "security_upgrade", true);
+        AssertEntitySetState(entitySets, "office_upgrade_set", true);
+        AssertEntitySetState(entitySets, "gun_range_lights", true);
+        AssertEntitySetState(entitySets, "gun_locker_upgrade", true);
+        AssertEntitySetState(entitySets, "Gun_schematic_set", true);
+    }
+
+    [TestMethod]
+    public void BuildDefaultInteriorEntitySetsSafe_AddsExpandedBusinessAndOfficeSets()
+    {
+        object facility = CreateInteriorOption("facility", "Online - bases criminelles", "Doomsday Facility", new Vector3(483.2006f, 4810.5405f, -58.91929f), 18.04706f);
+        object nightclub = CreateInteriorOption("nightclub", "Online - business", "Nightclub", new Vector3(-1604.664f, -3012.583f, -78.000f), 0.0f);
+        object vehicleWarehouse = CreateInteriorOption("vehicle_warehouse", "Online - business", "Vehicle warehouse", new Vector3(994.5925f, -3002.594f, -39.64699f), 0.0f);
+        object ceoOffice = CreateInteriorOption("maze_west_1", "Online - bureaux", "Maze Bank West", new Vector3(-1392.667f, -480.4736f, 72.04217f), 0.0f);
+
+        IList facilitySets = (IList)InvokeStatic("BuildDefaultInteriorEntitySetsSafe", facility);
+        IList nightclubSets = (IList)InvokeStatic("BuildDefaultInteriorEntitySetsSafe", nightclub);
+        IList vehicleWarehouseSets = (IList)InvokeStatic("BuildDefaultInteriorEntitySetsSafe", vehicleWarehouse);
+        IList ceoOfficeSets = (IList)InvokeStatic("BuildDefaultInteriorEntitySetsSafe", ceoOffice);
+
+        AssertEntitySetState(facilitySets, "set_int_02_shell", true, true, 1);
+        AssertEntitySetState(facilitySets, "set_Int_02_outfit_serverfarm", true, true, 1);
+        AssertEntitySetState(nightclubSets, "Int01_ba_security_upgrade", true);
+        AssertEntitySetState(nightclubSets, "Int01_ba_equipment_upgrade", true);
+        AssertEntitySetState(vehicleWarehouseSets, "basic_style_set", false);
+        AssertEntitySetState(vehicleWarehouseSets, "urban_style_set", true);
+        AssertEntitySetState(ceoOfficeSets, "cash_set_24", true);
+        AssertEntitySetState(ceoOfficeSets, "swag_guns3", true);
     }
 
     [TestMethod]
@@ -2130,6 +2332,26 @@ public class DonJEnemySpawnerTests
         return option;
     }
 
+    private static object CreateObjectIdentity(string modelName, string displayName)
+    {
+        object identity = Activator.CreateInstance(GetNestedType("ObjectIdentity"), true);
+        SetFieldValue(identity, "ModelName", modelName);
+        SetFieldValue(identity, "DisplayName", displayName);
+        SetObjectInteraction(identity, "None", 0, 0, 0, 0);
+        return identity;
+    }
+
+    private static void SetObjectInteraction(object identity, string kindName, int cashValue, int healAmount, int armorAmount, int ammoAmount)
+    {
+        Type interactionKindType = GetNestedType("ObjectInteractionKind");
+
+        SetFieldValue(identity, "InteractionKind", Enum.Parse(interactionKindType, kindName));
+        SetFieldValue(identity, "CashValue", cashValue);
+        SetFieldValue(identity, "HealAmount", healAmount);
+        SetFieldValue(identity, "ArmorAmount", armorAmount);
+        SetFieldValue(identity, "AmmoAmount", ammoAmount);
+    }
+
     private static object CreateModelOptionsList(params object[] options)
     {
         return CreateTypedList(GetNestedType("ModelOption"), options);
@@ -2208,6 +2430,85 @@ public class DonJEnemySpawnerTests
         }
 
         Assert.Fail($"La liste ne contient pas '{expected}'.");
+    }
+
+    private static void AssertObjectOption(IList options, string displayName, string modelName, string categoryName)
+    {
+        foreach (object option in options)
+        {
+            if (!string.Equals(GetFieldValue<string>(option, "DisplayName"), displayName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            Assert.AreEqual(modelName, GetFieldValue<string>(option, "ModelName"));
+            Assert.AreEqual(categoryName, GetFieldValue<object>(option, "Category").ToString());
+            return;
+        }
+
+        Assert.Fail($"L'objet '{displayName}' est introuvable.");
+    }
+
+    private static void AssertObjectInteraction(object identity, string kindName, int cashValue, int healAmount, int armorAmount, int ammoAmount)
+    {
+        Assert.AreEqual(kindName, GetFieldValue<object>(identity, "InteractionKind").ToString());
+        Assert.AreEqual(cashValue, GetFieldValue<int>(identity, "CashValue"));
+        Assert.AreEqual(healAmount, GetFieldValue<int>(identity, "HealAmount"));
+        Assert.AreEqual(armorAmount, GetFieldValue<int>(identity, "ArmorAmount"));
+        Assert.AreEqual(ammoAmount, GetFieldValue<int>(identity, "AmmoAmount"));
+    }
+
+    private static void AssertCategoryContainsOption(IList categories, string categoryName, string displayName)
+    {
+        IList options = FindCategoryOptions(categories, categoryName);
+
+        Assert.IsNotNull(options, $"La categorie '{categoryName}' est introuvable.");
+
+        foreach (object option in options)
+        {
+            if (string.Equals(GetFieldValue<string>(option, "DisplayName"), displayName, StringComparison.Ordinal))
+            {
+                return;
+            }
+        }
+
+        Assert.Fail($"La categorie '{categoryName}' ne contient pas '{displayName}'.");
+    }
+
+    private static IList FindCategoryOptions(IList categories, string categoryName)
+    {
+        foreach (object category in categories)
+        {
+            if (string.Equals(GetFieldValue<string>(category, "Name"), categoryName, StringComparison.Ordinal))
+            {
+                return (IList)GetFieldValue<object>(category, "Options");
+            }
+        }
+
+        return null;
+    }
+
+    private static void AssertEntitySetState(IList entitySets, string name, bool enabled)
+    {
+        AssertEntitySetState(entitySets, name, enabled, false, 0);
+    }
+
+    private static void AssertEntitySetState(IList entitySets, string name, bool enabled, bool hasTint, int tintIndex)
+    {
+        foreach (object entitySet in entitySets)
+        {
+            if (!string.Equals(GetFieldValue<string>(entitySet, "Name"), name, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            Assert.AreEqual(enabled, GetFieldValue<bool>(entitySet, "Enabled"), $"Etat Enabled incorrect pour '{name}'.");
+            Assert.AreEqual(hasTint, GetFieldValue<bool>(entitySet, "HasTint"), $"Etat HasTint incorrect pour '{name}'.");
+            Assert.AreEqual(tintIndex, GetFieldValue<int>(entitySet, "TintIndex"), $"TintIndex incorrect pour '{name}'.");
+            return;
+        }
+
+        Assert.Fail($"L'entity set '{name}' est introuvable.");
     }
 
     private static int CountStringOccurrences(IList list, string expected)

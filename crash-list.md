@@ -376,3 +376,25 @@ Ce fichier conserve une trace ecrite de tous les crashs, erreurs, regressions et
 - Action menee: J'ai relance les validations en sequence, puis j'ai ajuste le test pour compter separement le placement initial, l'upgrade Cartel, la TP secours Cartel, la configuration vehicule Ballas et la relocalisation secours Ballas. J'ai aussi ajoute des tests du contrat Ballas: constantes, touche R telephone, bypass de l'IA generique, groupe hostile, blips rouges et SMG/drive-by.
 - Verification: `dotnet build GTA5modDEV.sln -c Release` a reussi sans avertissement, puis `dotnet test GTA5modDEV.sln -c Release` a reussi avec `123` tests verts.
 - Resolution: Resolue. Incident d'outillage et de test uniquement.
+
+## 2026-05-01 02:34:56 +02:00 - Echec transitoire de test apres correction runtime du point bunker
+- Statut: Ferme
+- Contexte: Verification Release apres modification du point d'arrivee `bunker_generic` et ajout de la correction runtime des anciens portails bunker sauvegardes.
+- Symptome: Le premier `dotnet test .\GTA5modDEV.sln -c Release` a echoue sur `SourceFiles_InteriorPortalsUseAdvancedLoadingAndSafeTeleport`.
+- Sources verifiees:
+  - `console dotnet test .\GTA5modDEV.sln -c Release`
+  - `C:\Users\nodig\GTA5modDEV\tests\DonJEnemySpawner.Tests\DonJEnemySpawnerTests.cs`
+  - `C:\Users\nodig\GTA5modDEV\src\DonJEnemySpawner\DonJEnemySpawner.Interiors.cs`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\ScriptHookVDotNet.log`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\ScriptHookV.log`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\asiloader.log`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\scripts\MapEditor.log`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\menyooLog.txt`
+- Extraits utiles:
+  - `console dotnet test .\GTA5modDEV.sln -c Release`: `Echoue SourceFiles_InteriorPortalsUseAdvancedLoadingAndSafeTeleport` puis `ne contient pas la chaine 'bool prepared = PrepareInteriorForTeleportSafe(portal.Interior);'`.
+  - `C:\Users\nodig\GTA5modDEV\src\DonJEnemySpawner\DonJEnemySpawner.Interiors.cs`: `EnterInteriorPortal` utilise maintenant `runtimeInterior`, ce qui est le nouveau comportement voulu pour corriger les anciens portails bunker.
+  - Logs GTA verifies par presence/date: les logs existants datent de 2025 et ne contiennent pas d'information exploitable pour cet incident de test hors jeu.
+- Analyse / hypothese: L'echec venait d'une assertion source obsolette qui verifiait encore l'appel direct a `portal.Interior` apres le changement volontaire vers `runtimeInterior`.
+- Action menee: J'ai mis a jour le test pour proteger le nouveau contrat: preparation, teleportation et application des entity sets sur `runtimeInterior`.
+- Verification: `dotnet build .\GTA5modDEV.sln -c Release` a reussi sans avertissement, puis `dotnet test .\GTA5modDEV.sln -c Release` a reussi avec `133` tests verts.
+- Resolution: Resolue. Incident de test uniquement.

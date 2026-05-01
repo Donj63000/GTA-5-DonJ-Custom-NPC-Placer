@@ -8,7 +8,7 @@ public sealed partial class DonJEnemySpawner
         return new List<InteriorCategory>
         {
             Cat("Online - bases criminelles",
-                I("bunker_generic", "Bunker interieur generique", 899.5518f, -3246.038f, -98.04907f, 0.0f),
+                I("bunker_generic", "Bunker interieur generique", 892.6384f, -3245.8664f, -98.2645f, 180.0f),
                 I("facility", "Doomsday Facility", 483.2006f, 4810.5405f, -58.91929f, 18.04706f),
                 I("iaa_facility", "IAA Facility", 2151.137f, 2921.3303f, -61.90187f, 85.82783f),
                 I("server_farm", "IAA Server Farm", 2158.1184f, 2920.9382f, -81.07539f, 270.48007f),
