@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <img src="acceuil.png" alt="DonJ Custom NPC Placer - image de présentation du mod" width="100%">
+  <img src="images-readme/acceuil.png" alt="DonJ Custom NPC Placer - image de présentation du mod" width="100%">
 </p>
 
 <p align="center">
@@ -111,12 +111,12 @@ En résumé : **vous construisez la scène avec le menu**, puis le mod s’occup
 
 <table>
   <tr>
-    <td width="50%"><img src="1.png" alt="Nouvelle UI par catégories - véhicules"></td>
-    <td width="50%"><img src="2.png" alt="Nouvelle UI par catégories - objets"></td>
+    <td width="50%"><img src="images-readme/1.png" alt="Nouvelle UI par catégories - véhicules"></td>
+    <td width="50%"><img src="images-readme/2.png" alt="Nouvelle UI par catégories - objets"></td>
   </tr>
   <tr>
-    <td width="50%"><img src="3.png" alt="Nouvelle UI par catégories - NPC"></td>
-    <td width="50%"><img src="4.png" alt="Nouvelle UI par catégories - entrées et sorties"></td>
+    <td width="50%"><img src="images-readme/3.png" alt="Nouvelle UI par catégories - NPC"></td>
+    <td width="50%"><img src="images-readme/4.png" alt="Nouvelle UI par catégories - entrées et sorties"></td>
   </tr>
 </table>
 
@@ -230,7 +230,7 @@ En pratique, ça donne une scène plus propre : les gardes, véhicules et objets
 ### Appels téléphone C / R
 
 <p align="center">
-  <img src="ballas.png" alt="Appels téléphone Cartel avec C et Ballas avec R" width="100%">
+  <img src="images-readme/ballas.png" alt="Appels téléphone Cartel avec C et Ballas avec R" width="100%">
 </p>
 
 Le téléphone permet de lancer rapidement deux types d’activité en jeu : `C` appelle le Cartel allié pour protéger le joueur, tandis que `R` déclenche une vague Ballas hostile pour créer du combat autour de la scène.
@@ -378,7 +378,7 @@ Exemples d’objets inclus :
 ### Argent ramassable
 
 <p align="center">
-  <img src="argentramassable.png" alt="Exemple d'argent ramassable avec caisse de cash à 250 000 dollars" width="100%">
+  <img src="images-readme/argentramassable.png" alt="Exemple d'argent ramassable avec caisse de cash à 250 000 dollars" width="100%">
 </p>
 
 La catégorie **Argent / butin** permet de placer du cash dans vos scènes : liasses, billets, enveloppes, sacs d’argent, sacs de braquage, mallettes, caisses, coffre en or ou chariot cash.
