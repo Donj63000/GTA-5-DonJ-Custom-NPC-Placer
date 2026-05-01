@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Outil de création de scènes solo pour GTA V Enhanced</strong><br>
-  <sub>PNJ, gardes, patrouilles, respawn, Cartel, véhicules, objets, intérieurs et sauvegardes XML.</sub>
+  <sub>PNJ, gardes, patrouilles, respawn, Cartel, Ballas, véhicules, objets, intérieurs et sauvegardes XML.</sub>
 </p>
 
 <p align="center">
@@ -47,7 +47,7 @@
     <td width="58%">
       <strong>Présentation</strong>
       <br><br>
-      <strong>DonJ Custom NPC Placer</strong> permet de créer rapidement des scènes personnalisées dans Los Santos : <strong>PNJ armés</strong>, <strong>gardes</strong>, <strong>patrouilles</strong>, <strong>alliés</strong>, <strong>véhicules</strong>, <strong>objets</strong>, <strong>décors</strong>, <strong>entrées/sorties d’intérieurs</strong>, <strong>appel de renforts Cartel</strong> et <strong>sauvegardes XML réutilisables</strong>.
+      <strong>DonJ Custom NPC Placer</strong> permet de créer rapidement des scènes personnalisées dans Los Santos : <strong>PNJ armés</strong>, <strong>gardes</strong>, <strong>patrouilles</strong>, <strong>alliés</strong>, <strong>véhicules</strong>, <strong>objets</strong>, <strong>décors</strong>, <strong>entrées/sorties d’intérieurs</strong>, <strong>appel de renforts Cartel</strong>, <strong>appel hostile Ballas</strong> et <strong>sauvegardes XML réutilisables</strong>.
       <br><br>
       Le mod est pensé comme un outil de placement propre, pratique et immersif pour les joueurs qui veulent construire leurs propres bases, checkpoints, scènes d’action, zones sécurisées, missions maison ou setups roleplay en mode histoire.
     </td>
@@ -57,7 +57,7 @@
       <ul>
         <li><strong>Placement précis</strong> avec caméra libre et aperçu transparent.</li>
         <li><strong>PNJ configurables</strong> avec armes, santé, armure, comportements et respawn.</li>
-        <li><strong>Renforts Cartel</strong> depuis le téléphone avec la touche <code>C</code>.</li>
+        <li><strong>Contacts téléphone</strong> : Cartel avec <code>C</code>, Ballas avec <code>R</code> pour créer rapidement de l’activité.</li>
         <li><strong>Scènes durables</strong> avec réapparition automatique et sauvegardes XML.</li>
       </ul>
     </td>
@@ -94,7 +94,7 @@ En résumé : **vous construisez la scène avec le menu**, puis le mod s’occup
   <tr>
     <td width="33%"><strong>Base ou checkpoint</strong><br>Placement précis de PNJ, véhicules, objets et couvertures.</td>
     <td width="33%"><strong>Zone gardée</strong><br>PNJ alliés, neutres, hostiles, patrouilles, défense et respawn.</td>
-    <td width="33%"><strong>Renforts rapides</strong><br>Contact téléphone <code>Cartel</code>, convoi allié, Baller6 blindées et repli contrôlé.</td>
+    <td width="33%"><strong>Contacts rapides</strong><br><code>Cartel</code> allié avec <code>C</code> et vague Ballas hostile avec <code>R</code> pour lancer de l’activité.</td>
   </tr>
   <tr>
     <td width="33%"><strong>Placement propre</strong><br>Caméra libre, aperçu transparent, rotation et placement direct.</td>
@@ -282,6 +282,14 @@ Comportement du Cartel :
 Rappeler le Cartel pendant qu’une équipe est active ordonne son repli. Les hommes restent alliés, retournent vers les véhicules, quittent le secteur puis sont nettoyés automatiquement quand ils sont assez loin ou hors champ.
 
 Vous pouvez appeler une nouvelle équipe même si une ancienne équipe est encore en train de quitter la zone.
+
+### Appel des Ballas
+
+Le mod ajoute aussi un appel hostile **Ballas** utilisable depuis le téléphone du joueur.
+
+Quand le téléphone est ouvert, appuyez sur `R` pour déclencher une vague Ballas autour du joueur. Cette touche sert à créer rapidement un peu d’activité en mode histoire : embuscade, attaque de base, fusillade de rue, pression sur un checkpoint ou simple événement dynamique autour d’une scène déjà préparée.
+
+Les Ballas arrivent comme ennemis armés et cherchent le combat avec le joueur. Contrairement au Cartel, ils ne sont pas des renforts alliés : l’appel Ballas est pensé pour rendre la zone vivante et hostile sans devoir placer manuellement chaque PNJ.
 
 ---
 
@@ -594,15 +602,12 @@ F10
 
 Le menu du mod doit s’ouvrir.
 
-Pour appeler le Cartel :
+Pour utiliser les appels téléphone :
 
 1. Ouvrez le téléphone du joueur.
-2. Affichez le contact `Cartel`.
-3. Appuyez sur :
-
-```text
-C
-```
+2. Affichez les contacts du mod.
+3. Appuyez sur `C` pour appeler le Cartel allié.
+4. Appuyez sur `R` pour appeler une vague Ballas hostile et créer de l’activité autour du joueur.
 
 ---
 
@@ -697,15 +702,16 @@ Le menu principal s’ouvre avec plusieurs sections :
 
 ---
 
-### Contrôles du contact Cartel
+### Contrôles des contacts téléphone
 
 | Touche / état | Action |
 |---|---|
-| Téléphone du joueur ouvert | Affiche le contact `Cartel` |
+| Téléphone du joueur ouvert | Affiche les contacts `Cartel` et `Ballas` |
 | `C` | Appeler les hommes de main du Cartel |
 | `C` avec une équipe Cartel active | Faire replier l’équipe active |
+| `R` | Appeler une vague Ballas hostile pour créer de l’activité autour du joueur |
 
-Un court délai anti-spam empêche de relancer l’appel plusieurs fois instantanément.
+Un court délai anti-spam empêche de relancer les appels plusieurs fois instantanément.
 
 ---
 
