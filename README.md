@@ -47,7 +47,7 @@
     <td width="58%">
       <strong>Présentation</strong>
       <br><br>
-      <strong>DonJ Custom NPC Placer</strong> permet de créer rapidement des scènes personnalisées dans Los Santos : <strong>PNJ armés</strong>, <strong>gardes</strong>, <strong>patrouilles</strong>, <strong>alliés</strong>, <strong>véhicules</strong>, <strong>objets</strong>, <strong>décors</strong>, <strong>entrées/sorties d’intérieurs</strong>, <strong>appel de renforts Cartel</strong>, <strong>appel hostile Ballas</strong> et <strong>sauvegardes XML réutilisables</strong>.
+      <strong>DonJ Custom NPC Placer</strong> permet de créer rapidement des scènes personnalisées dans Los Santos : <strong>PNJ armés</strong>, <strong>gardes</strong>, <strong>patrouilles</strong>, <strong>alliés</strong>, <strong>véhicules</strong>, <strong>objets</strong>, <strong>décors</strong>, <strong>argent ramassable</strong>, <strong>entrées/sorties d’intérieurs</strong>, <strong>appel de renforts Cartel</strong>, <strong>appel hostile Ballas</strong> et <strong>sauvegardes XML réutilisables</strong>.
       <br><br>
       Le mod est pensé comme un outil de placement propre, pratique et immersif pour les joueurs qui veulent construire leurs propres bases, checkpoints, scènes d’action, zones sécurisées, missions maison ou setups roleplay en mode histoire.
     </td>
@@ -58,6 +58,7 @@
         <li><strong>Placement précis</strong> avec caméra libre et aperçu transparent.</li>
         <li><strong>PNJ configurables</strong> avec armes, santé, armure, comportements et respawn.</li>
         <li><strong>Contacts téléphone</strong> : Cartel avec <code>C</code>, Ballas avec <code>R</code> pour créer rapidement de l’activité.</li>
+        <li><strong>Argent ramassable</strong> avec plusieurs montants pour récompenser les zones et missions.</li>
         <li><strong>Scènes durables</strong> avec réapparition automatique et sauvegardes XML.</li>
       </ul>
     </td>
@@ -100,6 +101,11 @@ En résumé : **vous construisez la scène avec le menu**, puis le mod s’occup
     <td width="33%"><strong>Placement propre</strong><br>Caméra libre, aperçu transparent, rotation et placement direct.</td>
     <td width="33%"><strong>Scènes persistantes</strong><br>Respawn automatique et chargement XML des setups complets.</td>
     <td width="33%"><strong>Intérieurs</strong><br>Entrées/sorties, catalogue étendu et chargement IPL automatique.</td>
+  </tr>
+  <tr>
+    <td width="33%"><strong>Butin ramassable</strong><br>Liasses, sacs, mallettes, caisses et chariots cash avec valeurs différentes.</td>
+    <td width="33%"><strong>Récompenses de mission</strong><br>Objets argent à placer dans une planque, un coffre, un bureau ou une zone à fouiller.</td>
+    <td width="33%"><strong>Intérêt gameplay</strong><br>Le joueur peut ramasser le cash avec <code>E</code>, puis l’objet disparaît de la scène.</td>
   </tr>
 </table>
 
@@ -343,6 +349,11 @@ Catégories disponibles :
 
 - Sécurité ;
 - Couverture / Combat ;
+- Argent / butin ;
+- Matériel tactique ;
+- Soins / survie ;
+- Bureau / informatique ;
+- Atelier / outils ;
 - Mobilier ;
 - Caisses / Stockage ;
 - Décoration ;
@@ -357,6 +368,11 @@ Exemples d’objets inclus :
 - blocs béton ;
 - bennes ;
 - palettes ;
+- liasses de billets ;
+- sacs d’argent ;
+- mallettes cash ;
+- caisses de cash ;
+- chariots cash ;
 - chaises ;
 - tables ;
 - caisses ;
@@ -365,6 +381,29 @@ Exemples d’objets inclus :
 - sacs ;
 - extincteurs ;
 - objets de décoration.
+
+### Argent ramassable
+
+La catégorie **Argent / butin** permet de placer du cash dans vos scènes : liasses, billets, enveloppes, sacs d’argent, sacs de braquage, mallettes, caisses, coffre en or ou chariot cash.
+
+Ces objets servent à donner un vrai intérêt aux zones ou missions que vous créez. Vous pouvez mettre une petite liasse dans un bureau, une mallette dans une planque, un sac de braquage après un combat, ou une grosse caisse de cash au fond d’un bunker pour récompenser l’exploration.
+
+En jeu, le joueur s’approche de l’objet et appuie sur `E` pour le ramasser. Le montant est ajouté au cash solo du personnage, puis le prop disparaît et n’est plus sauvegardé si vous enregistrez la scène après l’avoir pris.
+
+Les montants varient selon l’objet :
+
+| Type de butin | Montant indicatif |
+|---|---:|
+| Billet seul | `100$` |
+| Billet un dollar | `1$` |
+| Liasse ou tas de cash | `10 000$` |
+| Enveloppe cash | `2 500$` |
+| Paquet de cash | `5 000$` |
+| Sac d’argent, sac de braquage ou mallette cash | `50 000$` |
+| Chariot cash | `200 000$` |
+| Caisse de cash ou coffre or | `250 000$` |
+
+Les autres objets restent décoratifs ou utilitaires selon leur type. Les packs de munitions, kits de soin et objets d’armure peuvent aussi devenir interactifs quand leur modèle correspond.
 
 ---
 
