@@ -898,6 +898,22 @@ Commande de test :
 dotnet test GTA5modDEV.sln -c Release
 ```
 
+### Validation sécurité et non-régression
+
+Avant chaque ajout ou livraison, lancez la suite complète hors jeu :
+
+```powershell
+.\tools\run-safety-checks.ps1
+```
+
+Si Windows bloque l'exécution des scripts PowerShell sur votre poste, lancez la même suite avec une politique limitée au processus courant :
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run-safety-checks.ps1
+```
+
+Cette commande restaure, compile et teste en `Release`, déploie le `.ENdll` dans un dossier temporaire et vérifie que les anciens fichiers `DonJEnemySpawner.*` ne réapparaissent pas dans le pipeline.
+
 Le fichier généré se trouve ici :
 
 ```text
@@ -930,6 +946,14 @@ Vérifiez que :
 ---
 
 ### Le mod ne se charge pas
+
+Pour regrouper automatiquement les logs utiles dans le projet sans lancer GTA, utilisez :
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\collect-bug-logs.ps1 -Title "bug-court" -SinceHours 24
+```
+
+Les rapports sont créés dans `bug-reports\YYYYMMDD-HHMMSS-titre`. Ce dossier reste local et ignoré par Git pour éviter d'envoyer des logs personnels sur GitHub.
 
 Consultez les logs suivants :
 

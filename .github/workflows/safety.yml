@@ -1,0 +1,29 @@
+name: Safety
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  safety:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Run safety suite
+        shell: pwsh
+        run: .\tools\run-safety-checks.ps1 -Ci -UseStubApi
+
+      - name: Upload safety results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safety-results
+          path: TestResults/safety-*

@@ -2,6 +2,7 @@ bin/
 obj/
 .vs/
 TestResults/
+bug-reports/
 AGENTS.md
 mod.zip
 src.zip

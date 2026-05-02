@@ -398,3 +398,20 @@ Ce fichier conserve une trace ecrite de tous les crashs, erreurs, regressions et
 - Action menee: J'ai mis a jour le test pour proteger le nouveau contrat: preparation, teleportation et application des entity sets sur `runtimeInterior`.
 - Verification: `dotnet build .\GTA5modDEV.sln -c Release` a reussi sans avertissement, puis `dotnet test .\GTA5modDEV.sln -c Release` a reussi avec `133` tests verts.
 - Resolution: Resolue. Incident de test uniquement.
+
+## 2026-05-02 04:17:35 +02:00 - Echec transitoire du collecteur de logs bugs pendant validation
+- Statut: Ferme
+- Contexte: Premiere execution de `tools\collect-bug-logs.ps1` apres ajout du systeme de recolte locale des logs.
+- Symptome: PowerShell a refuse de parser le script a cause de backticks Markdown mal echappes dans les chaines de generation `summary.md` et `crash-list-entry.md`.
+- Sources verifiees:
+  - `console powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\collect-bug-logs.ps1 -Title "test-collecteur" -SinceHours 24`
+  - `C:\Users\nodig\GTA5modDEV\tools\collect-bug-logs.ps1`
+  - `C:\Users\nodig\GTA5modDEV\bug-reports\20260502-041545-test-collecteur\summary.md`
+- Extraits utiles:
+  - `console collect-bug-logs`: `Vous devez indiquer une expression de valeur apres l'operateur "-"` puis `Le terminateur " est manquant dans la chaine`.
+  - `tools\collect-bug-logs.ps1`: les backticks Markdown sont maintenant doubles dans les chaines PowerShell, par exemple ````$reportRoot````.
+  - `bug-reports\20260502-041545-test-collecteur\summary.md`: le rapport final contient `Logs copies: 10` et `Evenements Windows: copied`.
+- Analyse / hypothese: L'echec venait uniquement de l'echappement PowerShell dans le nouveau script de collecte, pas du mod ni des logs GTA sources.
+- Action menee: J'ai corrige l'echappement Markdown et la conversion des listes generiques dans `manifest.json`.
+- Verification: `collect-bug-logs.ps1` a reussi, puis `run-safety-checks.ps1`, `dotnet build GTA5modDEV.sln -c Release` et `dotnet test GTA5modDEV.sln -c Release` ont tous reussi avec `144` tests verts.
+- Resolution: Resolue. Incident de script uniquement.

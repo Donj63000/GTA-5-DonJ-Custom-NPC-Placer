@@ -349,6 +349,7 @@ private bool _menuVisible;
         KeyDown += OnKeyDown;
         Aborted += OnAborted;
 
+        LogInfo("Chargement", TrainerTitle + " charge.");
         ShowStatus(TrainerTitle + " charge. " + MenuToggleKeyLabel + " pour ouvrir le menu.", 4500);
     }
 
@@ -813,63 +814,73 @@ private enum EnemyBehavior
         }
         catch (Exception ex)
         {
+            LogException("OnTick", ex);
             ShowStatus("Erreur " + TrainerTitle + ": " + ex.Message, 7000);
         }
     }
 
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.KeyCode == MenuToggleKey)
+        try
         {
+            if (e.KeyCode == MenuToggleKey)
+            {
+                if (_placementMode)
+                {
+                    StopPlacementMode(true);
+                }
+                else
+                {
+                    _menuVisible = !_menuVisible;
+                }
+
+                e.Handled = true;
+                return;
+            }
+
             if (_placementMode)
             {
-                StopPlacementMode(true);
+                if (e.KeyCode == Keys.Escape || e.KeyCode == Keys.Back)
+                {
+                    _placementCancelRequested = true;
+                    e.Handled = true;
+                    return;
+                }
+
+                if (e.KeyCode == Keys.Enter || e.KeyCode == Keys.NumPad5)
+                {
+                    _placementConfirmRequested = true;
+                    e.Handled = true;
+                    return;
+                }
+
+                return;
+            }
+
+            if (!_menuVisible)
+            {
+                return;
+            }
+
+            if (_menuPage == MenuPage.WeaponEditor)
+            {
+                HandleWeaponEditorKey(e);
             }
             else
             {
-                _menuVisible = !_menuVisible;
+                HandleMainMenuKey(e);
             }
-
-            e.Handled = true;
-            return;
         }
-
-        if (_placementMode)
+        catch (Exception ex)
         {
-            if (e.KeyCode == Keys.Escape || e.KeyCode == Keys.Back)
-            {
-                _placementCancelRequested = true;
-                e.Handled = true;
-                return;
-            }
-
-            if (e.KeyCode == Keys.Enter || e.KeyCode == Keys.NumPad5)
-            {
-                _placementConfirmRequested = true;
-                e.Handled = true;
-                return;
-            }
-
-            return;
-        }
-
-        if (!_menuVisible)
-        {
-            return;
-        }
-
-        if (_menuPage == MenuPage.WeaponEditor)
-        {
-            HandleWeaponEditorKey(e);
-        }
-        else
-        {
-            HandleMainMenuKey(e);
+            LogException("OnKeyDown", ex);
+            ShowStatus("Erreur touche " + TrainerTitle + ": " + ex.Message, 7000);
         }
     }
 
     private void OnAborted(object sender, EventArgs e)
     {
+        LogInfo("Arret", TrainerTitle + " arrete.");
         StopPlacementMode(false);
 
         for (int i = 0; i < _spawnedNpcs.Count; i++)
@@ -2822,6 +2833,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
         if (!Entity.Exists(player) || player.IsDead)
         {
+            LogWarning("SpawnNpc", "Spawn annule: joueur invalide.");
             ShowStatus("Spawn annule: joueur invalide.", 3000);
             return false;
         }
@@ -2869,6 +2881,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
         if (!Entity.Exists(player))
         {
+            LogWarning("SpawnVehicle", "Placement vehicule annule: joueur invalide.");
             ShowStatus("Placement vehicule annule: joueur invalide.", 3000);
             return false;
         }
@@ -2899,6 +2912,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
         if (!Entity.Exists(player))
         {
+            LogWarning("SpawnObject", "Placement objet annule: joueur invalide.");
             ShowStatus("Placement objet annule: joueur invalide.", 3000);
             return false;
         }
@@ -2982,6 +2996,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
     {
         if (identity == null)
         {
+            LogWarning("SpawnNpc", "Modele NPC manquant.");
             ShowStatus("Spawn annule: modele manquant.", 3000);
             return null;
         }
@@ -2990,12 +3005,14 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
         if (!model.IsValid || !model.IsInCdImage || !model.IsPed)
         {
+            LogWarning("SpawnNpc", "Modele invalide ou non monte: " + identity.DisplayName);
             ShowStatus("Modele invalide ou non monte: " + identity.DisplayName, 5000);
             return null;
         }
 
         if (!model.Request(2500))
         {
+            LogWarning("SpawnNpc", "Chargement modele impossible: " + identity.DisplayName);
             ShowStatus("Chargement modele impossible: " + identity.DisplayName, 5000);
             return null;
         }
@@ -3005,6 +3022,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
         if (!Entity.Exists(ped))
         {
+            LogWarning("SpawnNpc", "Echec creation NPC: " + identity.DisplayName);
             ShowStatus("Echec creation NPC: " + identity.DisplayName, 5000);
             return null;
         }
@@ -3016,6 +3034,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
     {
         if (identity == null)
         {
+            LogWarning("SpawnVehicle", "Modele vehicule manquant.");
             ShowStatus("Vehicule annule: modele manquant.", 3000);
             return null;
         }
@@ -3024,12 +3043,14 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
         if (!model.IsValid || !model.IsInCdImage || !model.IsVehicle)
         {
+            LogWarning("SpawnVehicle", "Vehicule invalide ou non monte: " + identity.DisplayName);
             ShowStatus("Vehicule invalide ou non monte: " + identity.DisplayName, 5000);
             return null;
         }
 
         if (!model.Request(2500))
         {
+            LogWarning("SpawnVehicle", "Chargement vehicule impossible: " + identity.DisplayName);
             ShowStatus("Chargement vehicule impossible: " + identity.DisplayName, 5000);
             return null;
         }
@@ -3039,6 +3060,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
         if (!Entity.Exists(vehicle))
         {
+            LogWarning("SpawnVehicle", "Echec creation vehicule: " + identity.DisplayName);
             ShowStatus("Echec creation vehicule: " + identity.DisplayName, 5000);
             return null;
         }
@@ -3050,6 +3072,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
     {
         if (identity == null || string.IsNullOrWhiteSpace(identity.ModelName))
         {
+            LogWarning("SpawnObject", "Modele objet manquant.");
             ShowStatus("Objet annule: modele manquant.", 3000);
             return null;
         }
@@ -3058,12 +3081,14 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
         if (!model.IsValid || !model.IsInCdImage)
         {
+            LogWarning("SpawnObject", "Objet invalide ou non monte: " + identity.DisplayName);
             ShowStatus("Objet invalide ou non monte: " + identity.DisplayName, 5000);
             return null;
         }
 
         if (!model.Request(2500))
         {
+            LogWarning("SpawnObject", "Chargement objet impossible: " + identity.DisplayName);
             ShowStatus("Chargement objet impossible: " + identity.DisplayName, 5000);
             return null;
         }
@@ -3073,6 +3098,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
         if (!Entity.Exists(prop))
         {
+            LogWarning("SpawnObject", "Echec creation objet: " + identity.DisplayName);
             ShowStatus("Echec creation objet: " + identity.DisplayName, 5000);
             return null;
         }
@@ -3615,6 +3641,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         }
         catch (Exception ex)
         {
+            LogException("GiveWeaponLoadout", ex);
             ped.Weapons.Select(WeaponHash.Unarmed);
 
             if (showErrors)
@@ -8479,6 +8506,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         }
         catch (Exception ex)
         {
+            LogException("SaveCurrentSetup", ex);
             ShowStatus("Erreur sauvegarde: " + ex.Message, 7000);
         }
         finally
@@ -8498,6 +8526,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
 
             if (!TryResolveSavePathForLoad(normalizedFileName, out path, out searchedDirectory))
             {
+                LogWarning("LoadSetup", "Fichier introuvable: " + normalizedFileName + " | dossier: " + searchedDirectory);
                 ShowStatus(
                     "Fichier introuvable: " + normalizedFileName + " | dossier: " + CompactPathForStatus(searchedDirectory),
                     7000);
@@ -8649,6 +8678,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         }
         catch (Exception ex)
         {
+            LogException("LoadSetup", ex);
             ShowStatus("Erreur chargement: " + ex.Message, 7000);
         }
     }
