@@ -882,6 +882,7 @@ private enum EnemyBehavior
     {
         LogInfo("Arret", TrainerTitle + " arrete.");
         StopPlacementMode(false);
+        ForceDeleteHighSecurityEscortEntitiesAndRecords(true);
 
         for (int i = 0; i < _spawnedNpcs.Count; i++)
         {
@@ -4287,7 +4288,8 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
              * On évite donc que le comportement Attacker générique remplace
              * les ordres de conduite sur la frame suivante.
              */
-            if (_enemyRaidKnownNpcHandles.Contains(npc.Ped.Handle))
+            if (_enemyRaidKnownNpcHandles.Contains(npc.Ped.Handle) ||
+                IsHighSecurityEscortPedHandle(npc.Ped.Handle))
             {
                 continue;
             }
@@ -11586,6 +11588,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         UpdateCartelPhoneContact(player);
         UpdateCartelConvoyState(player);
         UpdateEnemyRaidState(player);
+        UpdateHighSecurityEscortState(player);
     }
 
     /*
@@ -11625,6 +11628,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         {
             _cartelPhoneKeyLatch = false;
             _enemyRaidPhoneKeyLatch = false;
+            _highSecurityEscortPhoneKeyLatch = false;
             return;
         }
 
@@ -11653,6 +11657,18 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
             _enemyRaidPhoneKeyLatch = true;
             CallEnemyRaid();
         }
+
+        bool lPressed = Game.IsKeyPressed(Keys.L);
+
+        if (!lPressed)
+        {
+            _highSecurityEscortPhoneKeyLatch = false;
+        }
+        else if (!_highSecurityEscortPhoneKeyLatch)
+        {
+            _highSecurityEscortPhoneKeyLatch = true;
+            ToggleHighSecurityEscortCall();
+        }
     }
 
     private bool IsPlayerPhoneOpen(Ped player)
@@ -11677,7 +11693,7 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         int x = 845;
         int y = 420;
         int width = 455;
-        int height = 178;
+        int height = 222;
 
         DrawRect(x, y, width, height, Color.FromArgb(192, 0, 0, 0));
         DrawRect(x, y, width, 34, Color.FromArgb(230, 110, 15, 15));
@@ -11724,6 +11740,9 @@ private void DrawSummaryMetric(int x, int y, int width, string label, string val
         }
 
         DrawText(enemyStatus, x + 18, y + 137, 0.285f, Color.FromArgb(230, 230, 230), false, false);
+
+        DrawText(HighSecurityEscortContactName, x + 18, y + 164, 0.42f, Color.FromArgb(170, 210, 255), false, true);
+        DrawText(GetHighSecurityEscortPhoneStatus(), x + 18, y + 195, 0.285f, Color.FromArgb(230, 230, 230), false, false);
     }
 
     private void ToggleCartelCall()

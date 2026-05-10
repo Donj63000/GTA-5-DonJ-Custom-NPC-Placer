@@ -183,6 +183,77 @@ public class DonJEnemySpawnerTests
     }
 
     [TestMethod]
+    public void HighSecurityEscortConstants_KeepPhoneEscortContract()
+    {
+        Assert.AreEqual("Escorte haute sécurité", GetStaticFieldValue<string>("HighSecurityEscortContactName"));
+        Assert.AreEqual(4, GetStaticFieldValue<int>("HighSecurityEscortBallerCount"));
+        Assert.AreEqual(4, GetStaticFieldValue<int>("HighSecurityEscortBallerOccupantCount"));
+        Assert.AreEqual(3, GetStaticFieldValue<int>("HighSecurityEscortLimousineGuardCount"));
+        Assert.AreEqual(500, GetStaticFieldValue<int>("HighSecurityEscortGuardHealth"));
+        Assert.AreEqual(200, GetStaticFieldValue<int>("HighSecurityEscortGuardArmor"));
+        Assert.AreEqual(1800, GetStaticFieldValue<int>("HighSecurityEscortCallCooldownMs"));
+        Assert.AreEqual(550, GetStaticFieldValue<int>("HighSecurityEscortThinkIntervalMs"));
+        Assert.AreEqual(1650, GetStaticFieldValue<int>("HighSecurityEscortVehicleOrderIntervalMs"));
+        Assert.AreEqual(850, GetStaticFieldValue<int>("HighSecurityEscortPedOrderIntervalMs"));
+        Assert.AreEqual(1500, GetStaticFieldValue<int>("HighSecurityEscortDismissOrderIntervalMs"));
+        Assert.AreEqual(22000, GetStaticFieldValue<int>("HighSecurityEscortDismissForceCleanupMs"));
+        Assert.AreEqual(GetStaticFieldValue<int>("CartelCombatOrderIntervalMs"), GetStaticFieldValue<int>("HighSecurityEscortCombatOrderIntervalMs"));
+        Assert.AreEqual(GetStaticFieldValue<int>("CartelThreatScanIntervalMs"), GetStaticFieldValue<int>("HighSecurityEscortThreatScanIntervalMs"));
+        Assert.AreEqual(GetStaticFieldValue<int>("CartelThreatCacheLifetimeMs"), GetStaticFieldValue<int>("HighSecurityEscortThreatCacheLifetimeMs"));
+        Assert.AreEqual(GetStaticFieldValue<int>("CartelMaxGuardThreatScansPerPass"), GetStaticFieldValue<int>("HighSecurityEscortMaxGuardThreatScansPerPass"));
+        Assert.AreEqual(GetStaticFieldValue<int>("CartelThreatRelationshipRefreshMs"), GetStaticFieldValue<int>("HighSecurityEscortThreatRelationshipRefreshMs"));
+        Assert.AreEqual(GetStaticFieldValue<int>("CartelGuardPassiveMaintenanceIntervalMs"), GetStaticFieldValue<int>("HighSecurityEscortGuardPassiveMaintenanceIntervalMs"));
+        Assert.AreEqual(GetStaticFieldValue<int>("CartelGuardPassiveMaintenanceJitterMs"), GetStaticFieldValue<int>("HighSecurityEscortGuardPassiveMaintenanceJitterMs"));
+        Assert.AreEqual(GetStaticFieldValue<int>("CartelGuardMobilityOrderIntervalMs"), GetStaticFieldValue<int>("HighSecurityEscortGuardMobilityOrderIntervalMs"));
+        Assert.AreEqual(GetStaticFieldValue<int>("CartelGuardFootFollowIntervalMs"), GetStaticFieldValue<int>("HighSecurityEscortGuardFootFollowIntervalMs"));
+        Assert.AreEqual(72.0f, GetStaticFieldValue<float>("HighSecurityEscortSpawnMinDistance"), 0.001f);
+        Assert.AreEqual(128.0f, GetStaticFieldValue<float>("HighSecurityEscortSpawnMaxDistance"), 0.001f);
+        Assert.AreEqual(24.0f, GetStaticFieldValue<float>("HighSecurityEscortArrivalDriveSpeed"), 0.001f);
+        Assert.AreEqual(21.5f, GetStaticFieldValue<float>("HighSecurityEscortConvoyDriveSpeed"), 0.001f);
+        Assert.AreEqual(8.5f, GetStaticFieldValue<float>("HighSecurityEscortConvoyCloseDriveSpeed"), 0.001f);
+        Assert.AreEqual(28.0f, GetStaticFieldValue<float>("HighSecurityEscortFormationCatchupSpeed"), 0.001f);
+        Assert.AreEqual(10.5f, GetStaticFieldValue<float>("HighSecurityEscortDestinationArriveDistance"), 0.001f);
+        Assert.AreEqual(GetStaticFieldValue<float>("CartelVehicleFootExitDistance"), GetStaticFieldValue<float>("HighSecurityEscortFootExitDistance"), 0.001f);
+        Assert.AreEqual(72.0f, GetStaticFieldValue<float>("HighSecurityEscortVehicleApproachDistance"), 0.001f);
+        Assert.AreEqual(GetStaticFieldValue<float>("CartelGuardFootFollowDistance"), GetStaticFieldValue<float>("HighSecurityEscortGuardFootFollowDistance"), 0.001f);
+        Assert.AreEqual(GetStaticFieldValue<float>("CartelGuardFootStandDistance"), GetStaticFieldValue<float>("HighSecurityEscortGuardFootStandDistance"), 0.001f);
+        Assert.AreEqual(GetStaticFieldValue<float>("CartelThreatScanRadius"), GetStaticFieldValue<float>("HighSecurityEscortThreatScanRadius"), 0.001f);
+        Assert.AreEqual(GetStaticFieldValue<float>("CartelThreatEvidenceRadius"), GetStaticFieldValue<float>("HighSecurityEscortThreatEvidenceRadius"), 0.001f);
+        Assert.AreEqual(GetStaticFieldValue<float>("CartelDriveByDistance"), GetStaticFieldValue<float>("HighSecurityEscortDriveByDistance"), 0.001f);
+        Assert.AreEqual(GetStaticFieldValue<float>("CartelPassengerExitCombatDistance"), GetStaticFieldValue<float>("HighSecurityEscortPassengerExitCombatDistance"), 0.001f);
+        Assert.AreEqual(GetStaticFieldValue<float>("CartelOnFootShootDistance"), GetStaticFieldValue<float>("HighSecurityEscortOnFootShootDistance"), 0.001f);
+        Assert.AreEqual(235.0f, GetStaticFieldValue<float>("HighSecurityEscortVehicleTooFarDistance"), 0.001f);
+        Assert.AreEqual(46.0f, GetStaticFieldValue<float>("HighSecurityEscortDismissDeleteDistance"), 0.001f);
+        Assert.AreEqual(GetStaticFieldValue<int>("ProfessionalDrivingStyle"), GetStaticFieldValue<int>("HighSecurityEscortDrivingStyle"));
+        Assert.AreEqual(786469, GetStaticFieldValue<int>("HighSecurityEscortFastTaxiDrivingStyle"));
+        Assert.AreEqual(2883621, GetStaticFieldValue<int>("HighSecurityEscortCombatDrivingStyle"));
+        Assert.AreEqual(6500, GetStaticFieldValue<int>("HighSecurityEscortCombatMemoryMs"));
+        Assert.AreEqual(11500, GetStaticFieldValue<int>("HighSecurityEscortGuardCombatFootLockMs"));
+        Assert.AreEqual(3600, GetStaticFieldValue<int>("HighSecurityEscortSoftUnstuckAfterMs"));
+        Assert.AreEqual(5200, GetStaticFieldValue<int>("HighSecurityEscortSoftUnstuckCooldownMs"));
+        Assert.AreEqual(19000, GetStaticFieldValue<int>("HighSecurityEscortHardRescueAfterMs"));
+        Assert.AreEqual(1250, GetStaticFieldValue<int>("HighSecurityEscortSoftReverseMs"));
+        Assert.AreEqual(24.0f, GetStaticFieldValue<float>("HighSecurityEscortCombatRouteSpeed"), 0.001f);
+        Assert.AreEqual(27.0f, GetStaticFieldValue<float>("HighSecurityEscortCombatFormationCatchupSpeed"), 0.001f);
+        Assert.AreEqual(10.0f, GetStaticFieldValue<float>("HighSecurityEscortCombatCloseSpeed"), 0.001f);
+        Assert.AreEqual(31.0f, GetStaticFieldValue<float>("HighSecurityEscortLimoGuardExitThreatDistance"), 0.001f);
+        Assert.AreEqual(52.0f, GetStaticFieldValue<float>("HighSecurityEscortBlockedLimoGuardExitThreatDistance"), 0.001f);
+        Assert.AreEqual(8.5f, GetStaticFieldValue<float>("HighSecurityEscortObstacleProbeDistance"), 0.001f);
+        Assert.AreEqual(GetStaticFieldValue<int>("CartelFullAutoFiringPattern"), GetStaticFieldValue<int>("HighSecurityEscortFullAutoFiringPattern"));
+        Assert.AreEqual(8, GetStaticFieldValue<int>("HighSecurityWaypointBlipSprite"));
+        Assert.AreEqual(0x1BEDE233E6CD2A1FUL, GetStaticFieldValue<ulong>("NativeGetFirstBlipInfoId"));
+        Assert.AreEqual(0xA6DB27D19ECBB7DAUL, GetStaticFieldValue<ulong>("NativeDoesBlipExist"));
+        Assert.AreEqual(0x586AFE3FF72D996EUL, GetStaticFieldValue<ulong>("NativeGetBlipCoords"));
+
+        CollectionAssert.AreEqual(
+            new[] { "limo2", "stretch" },
+            GetStaticFieldValue<string[]>("HighSecurityEscortLimousineModelNames"));
+        CollectionAssert.AreEqual(
+            new[] { "baller8", "baller6", "baller5" },
+            GetStaticFieldValue<string[]>("HighSecurityEscortBallerModelNames"));
+    }
+
+    [TestMethod]
     public void CartelCombatConstants_KeepDedicatedThreatAndFireContract()
     {
         Assert.AreEqual(750, GetStaticFieldValue<int>("CartelCombatOrderIntervalMs"));
@@ -866,7 +937,7 @@ public class DonJEnemySpawnerTests
     }
 
     [TestMethod]
-    public void SourceFile_PhoneContactKeepsCartelOnCAndEnemyRaidOnR()
+    public void SourceFile_PhoneContactKeepsCartelOnCEnemyRaidOnRAndEscortOnL()
     {
         string source = File.ReadAllText(GetSourceFilePath());
         string contactBlock = ExtractSourceSection(
@@ -880,15 +951,179 @@ public class DonJEnemySpawnerTests
 
         StringAssert.Contains(contactBlock, "_cartelPhoneKeyLatch = false;");
         StringAssert.Contains(contactBlock, "_enemyRaidPhoneKeyLatch = false;");
+        StringAssert.Contains(contactBlock, "_highSecurityEscortPhoneKeyLatch = false;");
         StringAssert.Contains(contactBlock, "bool cPressed = Game.IsKeyPressed(Keys.C);");
         StringAssert.Contains(contactBlock, "ToggleCartelCall();");
         StringAssert.Contains(contactBlock, "bool rPressed = Game.IsKeyPressed(Keys.R);");
         StringAssert.Contains(contactBlock, "CallEnemyRaid();");
+        StringAssert.Contains(contactBlock, "bool lPressed = Game.IsKeyPressed(Keys.L);");
+        StringAssert.Contains(contactBlock, "ToggleHighSecurityEscortCall();");
         StringAssert.Contains(overlayBlock, "DrawText(\"Contacts téléphone\"");
         StringAssert.Contains(overlayBlock, "DrawText(CartelContactName");
         StringAssert.Contains(overlayBlock, "DrawText(EnemyRaidContactName");
         StringAssert.Contains(overlayBlock, "int liveEnemies = CountLiveEnemyRaidMembers();");
         StringAssert.Contains(overlayBlock, "_nextEnemyRaidCallAllowedAt - Game.GameTime");
+        StringAssert.Contains(overlayBlock, "DrawText(HighSecurityEscortContactName");
+        StringAssert.Contains(overlayBlock, "DrawText(GetHighSecurityEscortPhoneStatus()");
+    }
+
+    [TestMethod]
+    public void SourceFile_HighSecurityEscortUsesPartialDedicatedAiAndCleanup()
+    {
+        string mainSource = File.ReadAllText(GetSourceFilePath());
+        string escortSource = File.ReadAllText(GetHighSecurityEscortSourceFilePath());
+        string updateNpcsBlock = ExtractSourceSection(
+            mainSource,
+            "private void UpdateNpcs()",
+            "private void RefreshNpcBlipIfNeeded(SpawnedNpc npc, int now, ref int blipBudget)");
+
+        StringAssert.Contains(mainSource, "UpdateHighSecurityEscortState(player);");
+        StringAssert.Contains(mainSource, "ForceDeleteHighSecurityEscortEntitiesAndRecords(true);");
+        StringAssert.Contains(updateNpcsBlock, "IsHighSecurityEscortPedHandle(npc.Ped.Handle)");
+        StringAssert.Contains(escortSource, "public sealed partial class DonJEnemySpawner : Script");
+        StringAssert.Contains(escortSource, "private void ToggleHighSecurityEscortCall()");
+        StringAssert.Contains(escortSource, "DismissHighSecurityEscort(true);");
+        StringAssert.Contains(escortSource, "private void UpdateHighSecurityEscortState(Ped player)");
+        StringAssert.Contains(escortSource, "player.IsDead");
+        StringAssert.Contains(escortSource, "DismissHighSecurityEscort(false);");
+        StringAssert.Contains(escortSource, "private void AssistPlayerEnterHighSecurityLimousine(Ped player)");
+        StringAssert.Contains(escortSource, "Game.IsKeyPressed(Keys.F)");
+        StringAssert.Contains(escortSource, "private void HandleHighSecurityEscortRouteValidationInput(Ped player)");
+        StringAssert.Contains(escortSource, "Game.IsKeyPressed(Keys.L)");
+        StringAssert.Contains(escortSource, "TryGetHighSecurityEscortWaypoint(out destination)");
+        StringAssert.Contains(escortSource, "UpdateHighSecurityEscortFootFollow(player);");
+        StringAssert.Contains(escortSource, "UpdateHighSecurityEscortPlayerVehicleFollow(player);");
+        StringAssert.Contains(escortSource, "ReturnHighSecurityEscortGuardsToVehicles(false);");
+        StringAssert.Contains(escortSource, "_highSecurityEscortKnownNpcHandles.Add(handle);");
+    }
+
+    [TestMethod]
+    public void SourceFile_HighSecurityEscortMirrorsCartelGuardModelLoadoutAndThreatEvidence()
+    {
+        string escortSource = File.ReadAllText(GetHighSecurityEscortSourceFilePath());
+        string modelBlock = ExtractSourceSection(
+            escortSource,
+            "private ModelIdentity ResolveHighSecurityEscortGuardModelIdentity(int seedIndex)",
+            "private WeaponLoadout CreateHighSecurityEscortLoadout()");
+        string loadoutBlock = ExtractSourceSection(
+            escortSource,
+            "private WeaponLoadout CreateHighSecurityEscortLoadout()",
+            "private void ConfigureHighSecurityEscortGuard(SpawnedNpc spawned, Vehicle assignedVehicle, int assignedSeat)");
+        string threatBlock = ExtractSourceSection(
+            escortSource,
+            "private Ped FindBestHighSecurityEscortThreat(Ped player)",
+            "private bool IsValidHighSecurityEscortThreatCandidate(Ped candidate, Ped player)");
+        string candidateBlock = ExtractSourceSection(
+            escortSource,
+            "private bool IsValidHighSecurityEscortThreatCandidate(Ped candidate, Ped player)",
+            "private bool HasHighSecurityEscortThreatEvidence(Ped candidate, Ped player)");
+
+        StringAssert.Contains(modelBlock, "return ResolveCartelGuardModelIdentity();");
+        StringAssert.Contains(loadoutBlock, "return CreateCartelPrimaryLoadout();");
+        StringAssert.Contains(loadoutBlock, "GiveCartelWeapons(ped);");
+        StringAssert.Contains(loadoutBlock, "WeaponHash.MachinePistol");
+        StringAssert.Contains(loadoutBlock, "WeaponHash.ServiceCarbine");
+        Assert.IsFalse(
+            escortSource.Contains("private static readonly string[] HighSecurityEscortGuardModelNames"),
+            "Le mode L ne doit plus garder de tableau de skins haute securite.");
+        StringAssert.Contains(threatBlock, "HasHighSecurityEscortThreatEvidence(candidate, player)");
+        StringAssert.Contains(threatBlock, "HasHighSecurityEscortThreatEvidenceAgainstSpecificGuard(candidate, guard.Ped, player)");
+        StringAssert.Contains(candidateBlock, "IsManagedAlly(candidate)");
+        StringAssert.Contains(candidateBlock, "_highSecurityEscortKnownNpcHandles.Contains(candidate.Handle)");
+        StringAssert.Contains(candidateBlock, "_cartelNpcHandles.Contains(candidate.Handle)");
+        StringAssert.Contains(candidateBlock, "group == _allyGroupHash");
+    }
+
+    [TestMethod]
+    public void SourceFile_HighSecurityEscortCombatOrdersAreDedicatedAndNotOverwritten()
+    {
+        string escortSource = File.ReadAllText(GetHighSecurityEscortSourceFilePath());
+        string stateBlock = ExtractSourceSection(
+            escortSource,
+            "private void UpdateHighSecurityEscortState(Ped player)",
+            "private void AssistPlayerEnterHighSecurityLimousine(Ped player)");
+        string combatBlock = ExtractSourceSection(
+            escortSource,
+            "private void EngageHighSecurityEscortThreat(Ped threat, Ped player)",
+            "private void UpdateHighSecurityEscortRoute(Ped player)");
+        string cabinBlock = ExtractSourceSection(
+            escortSource,
+            "private void MaintainHighSecurityEscortLimousineCabin(Ped player, bool force)",
+            "private void EnsureHighSecurityEscortVehicleHasDriver(Vehicle vehicle, bool limousine)");
+        string returnBlock = ExtractSourceSection(
+            escortSource,
+            "private void ReturnHighSecurityEscortGuardsToVehicles(bool force)",
+            "private int FindFreeHighSecurityEscortSeatForGuard(Vehicle vehicle)");
+
+        int engageIndex = stateBlock.IndexOf("EngageHighSecurityEscortThreat(threat, player);", StringComparison.Ordinal);
+        int returnIndex = stateBlock.IndexOf("return;", engageIndex, StringComparison.Ordinal);
+        int routeModeIndex = stateBlock.IndexOf("bool playerInLimousine = IsPlayerInHighSecurityEscortLimousine(player);", StringComparison.Ordinal);
+
+        Assert.IsTrue(engageIndex >= 0, "L'etat escorte doit appeler la couche combat dediee.");
+        Assert.IsTrue(returnIndex > engageIndex && returnIndex < routeModeIndex, "Une menace valide ne doit plus etre ecrasee ensuite par standby/convoi.");
+        StringAssert.Contains(combatBlock, "MakeHighSecurityEscortAlliesHostileToThreat(threat);");
+        StringAssert.Contains(combatBlock, "CanIssueHighSecurityEscortCombatOrder(guard.Ped)");
+        StringAssert.Contains(combatBlock, "MarkHighSecurityEscortCombatActive();");
+        StringAssert.Contains(combatBlock, "MarkHighSecurityEscortGuardCombatFootLock(guard.Ped);");
+        StringAssert.Contains(combatBlock, "IssueHighSecurityLimousineDriveOrder(limousine, _highSecurityEscortDestination, false, true);");
+        StringAssert.Contains(combatBlock, "IssueHighSecurityFormationDriveOrder(vehicle, limousine, role, false, true);");
+        StringAssert.Contains(combatBlock, "StartHighSecurityEscortPassengerDriveBy(guard.Ped, threat);");
+        StringAssert.Contains(combatBlock, "StartHighSecurityEscortOnFootCombat(guard.Ped, threat);");
+        StringAssert.Contains(combatBlock, "Hash.TASK_DRIVE_BY");
+        StringAssert.Contains(combatBlock, "Hash.TASK_SHOOT_AT_ENTITY");
+        StringAssert.Contains(combatBlock, "_highSecurityEscortDestinationActive && IsPlayerInHighSecurityEscortLimousine(player)");
+        StringAssert.Contains(combatBlock, "CommandHighSecurityEscortVehicleForCombat(vehicle, threat, player);");
+        StringAssert.Contains(cabinBlock, "IsHighSecurityEscortGuardCombatFootLocked(npc.Ped)");
+        StringAssert.Contains(cabinBlock, "ConfigureHighSecurityEscortDriver(npc.Ped, combatActive);");
+        StringAssert.Contains(returnBlock, "IsHighSecurityEscortGuardCombatFootLocked(npc.Ped)");
+        StringAssert.Contains(returnBlock, "CommandHighSecurityEscortGuardEnterAssignedVehicle(");
+    }
+
+    [TestMethod]
+    public void SourceFile_HighSecurityEscortVehicleOrdersUseCachedTaxiFormationAndCleanup()
+    {
+        string escortSource = File.ReadAllText(GetHighSecurityEscortSourceFilePath());
+        string convoyBlock = ExtractSourceSection(
+            escortSource,
+            "private void IssueHighSecurityLimousineDriveOrder(Vehicle limousine, Vector3 target, bool force)",
+            "private static Vector3 DirectionFromHeading(float heading)");
+        string standbyBlock = ExtractSourceSection(
+            escortSource,
+            "private void UpdateHighSecurityEscortStandby(Ped player)",
+            "private void UpdateHighSecurityEscortPlayerVehicleFollow(Ped player)");
+        string rescueBlock = ExtractSourceSection(
+            escortSource,
+            "private void RescueHighSecurityEscortVehicleIfNeeded(Vehicle vehicle, Ped player, int seedIndex)",
+            "private int GetHighSecurityEscortVehicleRole(int vehicleHandle)");
+        string cleanupBlock = ExtractSourceSection(
+            escortSource,
+            "private void ForceDeleteHighSecurityEscortEntitiesAndRecords(bool deleteEntities)",
+            "private void RemoveHighSecurityEscortPlacedVehicleRecord(int handle, bool deleteEntity)");
+
+        StringAssert.Contains(convoyBlock, "ShouldSkipHighSecurityEscortRepeatedVehicleOrder(");
+        StringAssert.Contains(convoyBlock, "RecordHighSecurityEscortVehicleOrderTarget(limousine, target);");
+        StringAssert.Contains(convoyBlock, "CalculateHighSecurityEscortTaxiSpeed(limousine, target, combatMode)");
+        StringAssert.Contains(convoyBlock, "targetVehicle.Position - forward * (10.0f * compact) - right * side");
+        StringAssert.Contains(convoyBlock, "targetVehicle.Position - forward * (32.0f * compact) + right * side");
+        StringAssert.Contains(convoyBlock, "GetHighSecurityEscortFormationSpacing(role, combatMode)");
+        StringAssert.Contains(convoyBlock, "GetHighSecurityEscortDrivingStyle(combatMode)");
+        StringAssert.Contains(convoyBlock, "IsHighSecurityEscortVehicleInSoftRecovery(vehicle)");
+        Assert.IsFalse(convoyBlock.Contains("targetVehicle.Position + forward * 18.0f"), "Les Baller ne doivent plus viser une position devant la limousine.");
+        StringAssert.Contains(standbyBlock, "ContinueHighSecurityVehicleNearPlayer(vehicle, player, HighSecurityEscortArrivalDriveSpeed, 5.0f, false);");
+        StringAssert.Contains(rescueBlock, "TrySoftUnstuckHighSecurityEscortVehicle(vehicle, seedIndex)");
+        StringAssert.Contains(rescueBlock, "Hash.TASK_VEHICLE_TEMP_ACTION");
+        StringAssert.Contains(rescueBlock, "HasHighSecurityEscortObstacleAhead(vehicle, HighSecurityEscortObstacleProbeDistance)");
+        StringAssert.Contains(rescueBlock, "_highSecurityEscortLastVehicleOrderTarget[handle] = Vector3.Zero;");
+        StringAssert.Contains(cleanupBlock, "_highSecurityEscortLastVehicleOrderTarget.Clear();");
+        StringAssert.Contains(cleanupBlock, "_highSecurityEscortGuardCombatFootLockUntil.Clear();");
+        StringAssert.Contains(cleanupBlock, "_highSecurityEscortVehicleStuckSinceAt.Clear();");
+        StringAssert.Contains(cleanupBlock, "_highSecurityEscortLastVehicleSoftUnstuckAt.Clear();");
+        StringAssert.Contains(cleanupBlock, "_highSecurityEscortVehicleRecoveryUntil.Clear();");
+        StringAssert.Contains(cleanupBlock, "_highSecurityEscortNextCombatOrderAt.Clear();");
+        StringAssert.Contains(cleanupBlock, "_highSecurityEscortNextGuardPassiveMaintenanceAt.Clear();");
+        StringAssert.Contains(cleanupBlock, "_highSecurityEscortNextGuardMobilityOrderAt.Clear();");
+        StringAssert.Contains(cleanupBlock, "ClearCachedHighSecurityEscortThreat();");
+        StringAssert.Contains(cleanupBlock, "_highSecurityEscortLastVehicleOrderTarget.Remove(handle);");
     }
 
     [TestMethod]
@@ -2382,6 +2617,11 @@ public class DonJEnemySpawnerTests
     private static string GetSourceFilePath()
     {
         return Path.Combine(GetRepositoryRoot(), "src", "DonJEnemySpawner", "DonJEnemySpawner.cs");
+    }
+
+    private static string GetHighSecurityEscortSourceFilePath()
+    {
+        return Path.Combine(GetRepositoryRoot(), "src", "DonJEnemySpawner", "DonJEnemySpawner.HighSecurityEscort.cs");
     }
 
     private static string GetInteriorsSourceFilePath()

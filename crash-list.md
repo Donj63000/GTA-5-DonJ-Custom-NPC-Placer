@@ -415,3 +415,25 @@ Ce fichier conserve une trace ecrite de tous les crashs, erreurs, regressions et
 - Action menee: J'ai corrige l'echappement Markdown et la conversion des listes generiques dans `manifest.json`.
 - Verification: `collect-bug-logs.ps1` a reussi, puis `run-safety-checks.ps1`, `dotnet build GTA5modDEV.sln -c Release` et `dotnet test GTA5modDEV.sln -c Release` ont tous reussi avec `144` tests verts.
 - Resolution: Resolue. Incident de script uniquement.
+
+## 2026-05-08 12:28:05 +02:00 - Echec de compilation pendant validation du patch escorte haute securite
+- Statut: Ferme
+- Contexte: Premiere execution de `powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run-safety-checks.ps1` apres integration du patch limite a `src\DonJEnemySpawner\DonJEnemySpawner.HighSecurityEscort.cs`.
+- Symptome: La verification `build-release` a echoue avec `CS0103` sur une variable `vehicle` hors portee dans `FollowHighSecurityEscortGuardOnFoot`.
+- Sources verifiees:
+  - `console run-safety-checks.ps1`
+  - `C:\Users\nodig\GTA5modDEV\TestResults\safety-20260508-122729\logs\build-release.log`
+  - `C:\Users\nodig\GTA5modDEV\src\DonJEnemySpawner\DonJEnemySpawner.HighSecurityEscort.cs`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\ScriptHookVDotNet.log`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\ScriptHookV.log`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\asiloader.log`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\scripts\*.log`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\menyooLog.txt`
+  - `C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V\scripts\MapEditor.log`
+- Extraits utiles:
+  - `build-release.log`: `DonJEnemySpawner.HighSecurityEscort.cs(3272,50): error CS0103: Le nom 'vehicle' n'existe pas dans le contexte actuel`.
+  - Logs GTA verifies par presence/date: les logs existants datent de 2025 ou du 2025-05-02 et ne contiennent pas d'information exploitable pour cet incident de compilation hors jeu.
+- Analyse / hypothese: La garde qui empeche les occupants de la limousine de sortir a ete inseree par erreur dans `FollowHighSecurityEscortGuardOnFoot`, ou aucune variable `vehicle` n'existe.
+- Action menee: J'ai retire cette garde du bloc de suivi a pied et je l'ai placee dans `CommandHighSecurityEscortGuardLeaveVehicle`, qui possede bien le parametre `Vehicle vehicle`.
+- Verification: `run-safety-checks.ps1` a reussi, puis `dotnet build GTA5modDEV.sln -c Release` a reussi sans avertissement et `dotnet test GTA5modDEV.sln -c Release` a reussi avec `149` tests verts.
+- Resolution: Resolue. Incident de compilation transitoire corrige pendant l'intervention.

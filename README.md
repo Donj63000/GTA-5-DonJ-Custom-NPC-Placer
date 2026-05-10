@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Outil de création de scènes solo pour GTA V Enhanced</strong><br>
-  <sub>PNJ, gardes, patrouilles, respawn, Cartel, Ballas, véhicules, objets, intérieurs et sauvegardes XML.</sub>
+  <sub>PNJ, gardes, patrouilles, respawn, Cartel, Ballas, escorte haute sécurité, véhicules, objets, intérieurs et sauvegardes XML.</sub>
 </p>
 
 <p align="center">
@@ -58,7 +58,7 @@
     <td width="58%">
       <strong>Présentation</strong>
       <br><br>
-      <strong>DonJ Custom NPC Placer</strong> permet de créer rapidement des scènes personnalisées dans Los Santos : <strong>PNJ armés</strong>, <strong>gardes</strong>, <strong>patrouilles</strong>, <strong>alliés</strong>, <strong>véhicules</strong>, <strong>objets</strong>, <strong>décors</strong>, <strong>argent ramassable</strong>, <strong>entrées/sorties d’intérieurs</strong>, <strong>appel de renforts Cartel</strong>, <strong>appel hostile Ballas</strong> et <strong>sauvegardes XML réutilisables</strong>.
+      <strong>DonJ Custom NPC Placer</strong> permet de créer rapidement des scènes personnalisées dans Los Santos : <strong>PNJ armés</strong>, <strong>gardes</strong>, <strong>patrouilles</strong>, <strong>alliés</strong>, <strong>véhicules</strong>, <strong>objets</strong>, <strong>décors</strong>, <strong>argent ramassable</strong>, <strong>entrées/sorties d’intérieurs</strong>, <strong>appel de renforts Cartel</strong>, <strong>appel hostile Ballas</strong>, <strong>escorte haute sécurité en convoi blindé</strong> et <strong>sauvegardes XML réutilisables</strong>.
       <br><br>
       Le mod est pensé comme un outil de placement propre, pratique et immersif pour les joueurs qui veulent construire leurs propres bases, checkpoints, scènes d’action, zones sécurisées, missions maison ou setups roleplay en mode histoire.
     </td>
@@ -68,7 +68,7 @@
       <ul>
         <li><strong>Placement précis</strong> avec caméra libre et aperçu transparent.</li>
         <li><strong>PNJ configurables</strong> avec armes, santé, armure, comportements et respawn.</li>
-        <li><strong>Contacts téléphone</strong> : Cartel avec <code>C</code>, Ballas avec <code>R</code> pour créer rapidement de l’activité.</li>
+        <li><strong>Contacts téléphone</strong> : Cartel avec <code>C</code>, Ballas avec <code>R</code>, escorte haute sécurité avec <code>L</code>.</li>
         <li><strong>Argent ramassable</strong> avec plusieurs montants pour récompenser les zones et missions.</li>
         <li><strong>Scènes durables</strong> avec réapparition automatique et sauvegardes XML.</li>
       </ul>
@@ -90,7 +90,7 @@ Le mod fonctionne directement **dans GTA V Enhanced**, sans application séparé
 | **2. Vous ouvrez le menu** | En jeu, `F10` ouvre le menu DonJ. Vous choisissez ce que vous voulez placer : PNJ, véhicule, objet, entrée/sortie d’intérieur ou options de sauvegarde. |
 | **3. Vous configurez la scène** | Vous réglez le modèle, l’arme, la santé, l’armure, le comportement, la patrouille, le respawn, le véhicule ou l’objet à poser. |
 | **4. Vous placez dans le monde** | Le placement direct pose rapidement devant le joueur. Le placement caméra permet de viser précisément, tourner l’entité et valider quand c’est propre. |
-| **5. Le mod gère la vie de la scène** | Après le placement, le mod maintient les PNJ, leurs comportements, les blips, les relations, les menaces, les patrouilles, les gardes du corps, le Cartel et le respawn. |
+| **5. Le mod gère la vie de la scène** | Après le placement, le mod maintient les PNJ, leurs comportements, les blips, les relations, les menaces, les patrouilles, les gardes du corps, le Cartel, les Ballas, l’escorte haute sécurité et le respawn. |
 | **6. Vous sauvegardez / rechargez** | Les setups peuvent être sauvegardés en XML puis rechargés plus tard pour retrouver les PNJ, véhicules, objets, portails, armes, comportements et options de respawn. |
 
 En résumé : **vous construisez la scène avec le menu**, puis le mod s’occupe de faire vivre les éléments placés en jeu.
@@ -106,7 +106,7 @@ En résumé : **vous construisez la scène avec le menu**, puis le mod s’occup
   <tr>
     <td width="33%"><strong>Base ou checkpoint</strong><br>Placement précis de PNJ, véhicules, objets et couvertures.</td>
     <td width="33%"><strong>Zone gardée</strong><br>PNJ alliés, neutres, hostiles, patrouilles, défense et respawn.</td>
-    <td width="33%"><strong>Contacts rapides</strong><br><code>Cartel</code> allié avec <code>C</code> et vague Ballas hostile avec <code>R</code> pour lancer de l’activité.</td>
+    <td width="33%"><strong>Contacts rapides</strong><br><code>C</code> pour le Cartel allié, <code>R</code> pour les Ballas hostiles, <code>L</code> pour une escorte blindée VIP.</td>
   </tr>
   <tr>
     <td width="33%"><strong>Placement propre</strong><br>Caméra libre, aperçu transparent, rotation et placement direct.</td>
@@ -225,13 +225,13 @@ En pratique, ça donne une scène plus propre : les gardes, véhicules et objets
 
 ---
 
-### Appels téléphone C / R
+### Appels téléphone C / R / L
 
 <p align="center">
-  <img src="images-readme/ballas.png" alt="Appels téléphone Cartel avec C et Ballas avec R" width="100%">
+  <img src="images-readme/ballas.png" alt="Appels téléphone Cartel avec C, Ballas avec R et escorte haute sécurité avec L" width="100%">
 </p>
 
-Le téléphone permet de lancer rapidement deux types d’activité en jeu : `C` appelle le Cartel allié pour protéger le joueur, tandis que `R` déclenche une vague Ballas hostile pour créer du combat autour de la scène.
+Le téléphone permet de lancer rapidement trois types d’activité en jeu : `C` appelle le Cartel allié pour protéger le joueur, `R` déclenche une vague Ballas hostile pour créer du combat autour de la scène, et `L` appelle une escorte haute sécurité avec limousine et convoi blindé.
 
 ### Appel du Cartel
 
@@ -287,6 +287,43 @@ Le mod ajoute aussi un appel hostile **Ballas** utilisable depuis le téléphone
 Quand le téléphone est ouvert, appuyez sur `R` pour déclencher une vague Ballas autour du joueur. Cette touche sert à créer rapidement un peu d’activité en mode histoire : embuscade, attaque de base, fusillade de rue, pression sur un checkpoint ou simple événement dynamique autour d’une scène déjà préparée.
 
 Les Ballas arrivent comme ennemis armés et cherchent le combat avec le joueur. Contrairement au Cartel, ils ne sont pas des renforts alliés : l’appel Ballas est pensé pour rendre la zone vivante et hostile sans devoir placer manuellement chaque PNJ.
+
+---
+
+### Escorte haute sécurité
+
+Le mod ajoute un contact **Escorte haute sécurité** utilisable depuis le téléphone du joueur avec `L`.
+
+Quand le téléphone du joueur est ouvert, appuyez sur `L` pour appeler un convoi VIP allié. L’équipe arrive avec :
+
+- une limousine blindée pour transporter le joueur ;
+- `4` Baller noirs haute sécurité en formation ;
+- des gardes Cartel renforcés avec `500` points de santé et `200` points d’armure ;
+- une configuration de combat avec carabine de service et pistolet-mitrailleur ;
+- une IA dédiée pour éviter que les ordres génériques des PNJ remplacent les ordres du convoi.
+
+L’escorte sert à jouer un déplacement sécurisé, une extraction, une arrivée VIP, une fuite protégée ou une mission maison avec protection rapprochée.
+
+Fonctionnement principal :
+
+1. Ouvrez le téléphone du joueur.
+2. Appuyez sur `L` pour appeler l’escorte.
+3. Quand la limousine arrive, approchez-vous et appuyez sur `F` pour monter à l’arrière.
+4. Placez un marqueur sur la carte.
+5. Une fois assis à l’arrière de la limousine, appuyez sur `L` pour valider la destination.
+6. Le convoi part vers le marqueur en formation.
+
+Pendant le trajet, la limousine continue de suivre la route vers la destination. Les Baller se replacent autour d’elle, les chauffeurs évitent de recevoir des ordres inutiles à chaque frame, et les véhicules bloqués peuvent tenter une marche arrière courte ou un recalage hors champ si nécessaire.
+
+En cas d’embuscade, les gardes réagissent comme une vraie escorte :
+
+- les passagers peuvent faire du drive-by ;
+- les gardes peuvent descendre si la menace est proche ou si le véhicule est bloqué ;
+- la limousine garde la priorité sur la route quand le joueur est à bord ;
+- les Baller passent en conduite plus nerveuse pour protéger et rattraper le convoi ;
+- les relations hostiles sont appliquées uniquement sur les menaces valides pour éviter de casser les groupes ambiants.
+
+Si vous rappuyez sur `L` depuis le téléphone pendant qu’une escorte est active, le mod ordonne le repli. Les véhicules quittent le secteur, les gardes sont nettoyés proprement quand ils sont assez loin ou hors champ, et vous pouvez rappeler une nouvelle escorte après le court délai anti-spam.
 
 ---
 
@@ -642,6 +679,14 @@ Pour utiliser les appels téléphone :
 2. Affichez les contacts du mod.
 3. Appuyez sur `C` pour appeler le Cartel allié.
 4. Appuyez sur `R` pour appeler une vague Ballas hostile et créer de l’activité autour du joueur.
+5. Appuyez sur `L` pour appeler ou renvoyer l’escorte haute sécurité.
+
+Pour utiliser le trajet VIP de l’escorte haute sécurité :
+
+1. Appelez l’escorte avec `L` depuis le téléphone.
+2. Montez à l’arrière de la limousine avec `F`.
+3. Placez un marqueur sur la carte.
+4. Appuyez sur `L` dans la limousine pour lancer le convoi vers le marqueur.
 
 ---
 
@@ -740,10 +785,14 @@ Le menu principal s’ouvre avec plusieurs sections :
 
 | Touche / état | Action |
 |---|---|
-| Téléphone du joueur ouvert | Affiche les contacts `Cartel` et `Ballas` |
+| Téléphone du joueur ouvert | Affiche les contacts `Cartel`, `Ballas` et `Escorte haute sécurité` |
 | `C` | Appeler les hommes de main du Cartel |
 | `C` avec une équipe Cartel active | Faire replier l’équipe active |
 | `R` | Appeler une vague Ballas hostile pour créer de l’activité autour du joueur |
+| `L` | Appeler l’escorte haute sécurité avec limousine et 4 Baller |
+| `L` avec une escorte active | Faire replier l’escorte active |
+| `F` près de la limousine | Monter à l’arrière de la limousine VIP |
+| `L` assis à l’arrière de la limousine | Valider le marqueur GPS et lancer le convoi vers la destination |
 
 Un court délai anti-spam empêche de relancer les appels plusieurs fois instantanément.
 
