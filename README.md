@@ -1,567 +1,567 @@
 <h1 align="center">[GTA5 Enhanced] DonJ Custom NPC Placer </h1>
 
 <p align="center">
-  <strong>Outil de création de scènes solo pour GTA V Enhanced</strong><br>
-  <sub>PNJ, gardes, patrouilles, respawn, Cartel, Ballas, escorte haute sécurité, véhicules, objets, intérieurs et sauvegardes XML.</sub>
+  <strong>Solo scene creation tool for GTA V Enhanced</strong><br>
+  <sub>NPCs, guards, patrols, respawn, Cartel, Ballas, high-security escort, vehicles, objects, interiors, and XML saves.</sub>
 </p>
 
 <p align="center">
-  <img src="images-readme/acceuil.png" alt="DonJ Custom NPC Placer - image de présentation du mod" width="100%">
+  <img src="images-readme/acceuil.png" alt="DonJ Custom NPC Placer - mod presentation image" width="100%">
 </p>
 
-## Sommaire
+## Table of Contents
 
-- [Fonctionnalités principales](#fonctionnalités-principales)
-- [Respawn / réapparition automatique](#respawn--réapparition-automatique)
+- [Main Features](#main-features)
+- [Respawn / Automatic Respawn](#respawn--automatic-respawn)
 - [Installation](#installation)
-- [Utilisation](#utilisation)
-- [Exemple rapide](#exemple-rapide)
-- [Sauvegardes](#sauvegardes)
-- [Compatibilité](#compatibilité)
-- [Build depuis le code source](#build-depuis-le-code-source)
-- [Dépannage](#dépannage)
-- [Licence](#licence)
+- [Usage](#usage)
+- [Quick Example](#quick-example)
+- [Saves](#saves)
+- [Compatibility](#compatibility)
+- [Build from Source](#build-from-source)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
 
 ---
 
 <p align="center">
-  <strong>Construisez une base, un checkpoint, une scène d’action ou un setup roleplay directement en mode histoire.</strong>
+  <strong>Build a base, a checkpoint, an action scene, or a roleplay setup directly in story mode.</strong>
 </p>
 
 <p align="center">
   <a href="#installation"><strong>Installation</strong></a>
-  ·
-  <a href="#utilisation"><strong>Utilisation</strong></a>
-  ·
-  <a href="#fonctionnalités-principales"><strong>Fonctionnalités</strong></a>
-  ·
-  <a href="#build-depuis-le-code-source"><strong>Build source</strong></a>
-  ·
-  <a href="#signaler-un-bug"><strong>Signaler un bug</strong></a>
+  |
+  <a href="#usage"><strong>Usage</strong></a>
+  |
+  <a href="#main-features"><strong>Features</strong></a>
+  |
+  <a href="#build-from-source"><strong>Source build</strong></a>
+  |
+  <a href="#report-a-bug"><strong>Report a bug</strong></a>
 </p>
 
 <p align="center">
   <img alt="GTA V Enhanced" src="https://img.shields.io/badge/GTA%20V-Enhanced-8b0000">
-  <img alt="Mode solo uniquement" src="https://img.shields.io/badge/mode-solo%20uniquement-darkgreen">
+  <img alt="Single-player only" src="https://img.shields.io/badge/mode-single--player%20only-darkgreen">
   <img alt=".NET Framework 4.8" src="https://img.shields.io/badge/.NET%20Framework-4.8-512bd4">
   <img alt="NIBScriptHookVDotNet API v2" src="https://img.shields.io/badge/NIBScriptHookVDotNet-API%20v2-blue">
-  <img alt="Statut fonctionnel, développement actif" src="https://img.shields.io/badge/statut-fonctionnel%20%2F%20dev%20actif-brightgreen">
-  <img alt="Licence source ouverte non commerciale" src="https://img.shields.io/badge/licence-source%20ouverte%20non%20commerciale-lightgrey">
+  <img alt="Working status, active development" src="https://img.shields.io/badge/status-working%20%2F%20active%20dev-brightgreen">
+  <img alt="Open source non-commercial license" src="https://img.shields.io/badge/license-open%20source%20non--commercial-lightgrey">
 </p>
 
 > [!IMPORTANT]
-> **Statut du projet : le mod est fonctionnel et utilisable en jeu.**
-> Il reste en développement actif pour être perfectionné, améliorer l’expérience, corriger les limites connues et ajouter des finitions, mais la base actuelle marche déjà en mode histoire.
+> **Project status: the mod is functional and usable in game.**
+> It is still in active development so it can be refined, improve the experience, fix known limits, and add polish, but the current base already works in story mode.
 
 <table>
   <tr>
     <td width="58%">
-      <strong>Présentation</strong>
+      <strong>Overview</strong>
       <br><br>
-      <strong>DonJ Custom NPC Placer</strong> permet de créer rapidement des scènes personnalisées dans Los Santos : <strong>PNJ armés</strong>, <strong>gardes</strong>, <strong>patrouilles</strong>, <strong>alliés</strong>, <strong>véhicules</strong>, <strong>objets</strong>, <strong>décors</strong>, <strong>argent ramassable</strong>, <strong>entrées/sorties d’intérieurs</strong>, <strong>appel de renforts Cartel</strong>, <strong>appel hostile Ballas</strong>, <strong>escorte haute sécurité en convoi blindé</strong> et <strong>sauvegardes XML réutilisables</strong>.
+      <strong>DonJ Custom NPC Placer</strong> lets you quickly create custom scenes in Los Santos: <strong>armed NPCs</strong>, <strong>guards</strong>, <strong>patrols</strong>, <strong>allies</strong>, <strong>vehicles</strong>, <strong>objects</strong>, <strong>props</strong>, <strong>collectible cash</strong>, <strong>interior entrances/exits</strong>, <strong>Cartel reinforcement calls</strong>, <strong>hostile Ballas calls</strong>, <strong>high-security armored convoy escort</strong>, and <strong>reusable XML saves</strong>.
       <br><br>
-      Le mod est pensé comme un outil de placement propre, pratique et immersif pour les joueurs qui veulent construire leurs propres bases, checkpoints, scènes d’action, zones sécurisées, missions maison ou setups roleplay en mode histoire.
+      The mod is designed as a clean, practical, and immersive placement tool for players who want to build their own bases, checkpoints, action scenes, secured zones, homemade missions, or roleplay setups in story mode.
     </td>
     <td width="42%">
-      <strong>Points forts</strong>
+      <strong>Highlights</strong>
       <br><br>
       <ul>
-        <li><strong>Placement précis</strong> avec caméra libre et aperçu transparent.</li>
-        <li><strong>PNJ configurables</strong> avec armes, santé, armure, comportements et respawn.</li>
-        <li><strong>Contacts téléphone</strong> : Cartel avec <code>C</code>, Ballas avec <code>R</code>, escorte haute sécurité avec <code>L</code>.</li>
-        <li><strong>Argent ramassable</strong> avec plusieurs montants pour récompenser les zones et missions.</li>
-        <li><strong>Scènes durables</strong> avec réapparition automatique et sauvegardes XML.</li>
+        <li><strong>Precise placement</strong> with free camera and transparent preview.</li>
+        <li><strong>Configurable NPCs</strong> with weapons, health, armor, behaviors, and respawn.</li>
+        <li><strong>Phone contacts</strong>: Cartel with <code>C</code>, Ballas with <code>R</code>, high-security escort with <code>L</code>.</li>
+        <li><strong>Collectible cash</strong> with several amounts for rewarding zones and missions.</li>
+        <li><strong>Persistent scenes</strong> with automatic respawn and XML saves.</li>
       </ul>
     </td>
   </tr>
 </table>
 
-## Comment marche le mod
+## How the Mod Works
 
 <p align="center">
-  <img src="Images/figma.png" alt="Schéma expliquant le fonctionnement de DonJ Custom NPC Placer" width="100%">
+  <img src="Images/figma.png" alt="Diagram explaining how DonJ Custom NPC Placer works" width="100%">
 </p>
 
-Le mod fonctionne directement **dans GTA V Enhanced**, sans application séparée à ouvrir.
+The mod runs directly **inside GTA V Enhanced**, with no separate application to open.
 
-| Étape | Ce qui se passe |
+| Step | What happens |
 |---|---|
-| **1. Le jeu charge le mod** | Au lancement du mode histoire, `ScriptHookV` et `NIBScriptHookVDotNet2` chargent `DonJCustomNpcPlacer.ENdll` depuis le dossier `Scripts`. |
-| **2. Vous ouvrez le menu** | En jeu, `F10` ouvre le menu DonJ. Vous choisissez ce que vous voulez placer : PNJ, véhicule, objet, entrée/sortie d’intérieur ou options de sauvegarde. |
-| **3. Vous configurez la scène** | Vous réglez le modèle, l’arme, la santé, l’armure, le comportement, la patrouille, le respawn, le véhicule ou l’objet à poser. |
-| **4. Vous placez dans le monde** | Le placement direct pose rapidement devant le joueur. Le placement caméra permet de viser précisément, tourner l’entité et valider quand c’est propre. |
-| **5. Le mod gère la vie de la scène** | Après le placement, le mod maintient les PNJ, leurs comportements, les blips, les relations, les menaces, les patrouilles, les gardes du corps, le Cartel, les Ballas, l’escorte haute sécurité et le respawn. |
-| **6. Vous sauvegardez / rechargez** | Les setups peuvent être sauvegardés en XML puis rechargés plus tard pour retrouver les PNJ, véhicules, objets, portails, armes, comportements et options de respawn. |
+| **1. The game loads the mod** | When story mode starts, `ScriptHookV` and `NIBScriptHookVDotNet2` load `DonJCustomNpcPlacer.ENdll` from the `Scripts` folder. |
+| **2. You open the menu** | In game, `F10` opens the DonJ menu. You choose what you want to place: NPC, vehicle, object, interior entrance/exit, or save options. |
+| **3. You configure the scene** | You set the model, weapon, health, armor, behavior, patrol, respawn, vehicle, or object to place. |
+| **4. You place it in the world** | Direct placement quickly places the item in front of the player. Camera placement lets you aim precisely, rotate the entity, and validate when it is clean. |
+| **5. The mod manages the scene** | After placement, the mod maintains NPCs, their behaviors, blips, relationships, threats, patrols, bodyguards, the Cartel, the Ballas, the high-security escort, and respawn. |
+| **6. You save / reload** | Setups can be saved as XML and reloaded later to restore NPCs, vehicles, objects, portals, weapons, behaviors, and respawn options. |
 
-En résumé : **vous construisez la scène avec le menu**, puis le mod s’occupe de faire vivre les éléments placés en jeu.
+In short: **you build the scene with the menu**, then the mod keeps the placed elements alive in game.
 
 > [!CAUTION]
-> **Mode solo / histoire uniquement.** N’utilisez pas ce mod dans GTA Online.
+> **Story mode / single-player only.** Do not use this mod in GTA Online.
 
 ---
 
-## En bref
+## At a Glance
 
 <table>
   <tr>
-    <td width="33%"><strong>Base ou checkpoint</strong><br>Placement précis de PNJ, véhicules, objets et couvertures.</td>
-    <td width="33%"><strong>Zone gardée</strong><br>PNJ alliés, neutres, hostiles, patrouilles, défense et respawn.</td>
-    <td width="33%"><strong>Contacts rapides</strong><br><code>C</code> pour le Cartel allié, <code>R</code> pour les Ballas hostiles, <code>L</code> pour une escorte blindée VIP.</td>
+    <td width="33%"><strong>Base or checkpoint</strong><br>Precise placement of NPCs, vehicles, objects, and cover.</td>
+    <td width="33%"><strong>Guarded zone</strong><br>Allied, neutral, and hostile NPCs, patrols, defense, and respawn.</td>
+    <td width="33%"><strong>Fast contacts</strong><br><code>C</code> for allied Cartel, <code>R</code> for hostile Ballas, <code>L</code> for a VIP armored escort.</td>
   </tr>
   <tr>
-    <td width="33%"><strong>Placement propre</strong><br>Caméra libre, aperçu transparent, rotation et placement direct.</td>
-    <td width="33%"><strong>Scènes persistantes</strong><br>Respawn automatique et chargement XML des setups complets.</td>
-    <td width="33%"><strong>Intérieurs</strong><br>Entrées/sorties, catalogue étendu et chargement IPL automatique.</td>
+    <td width="33%"><strong>Clean placement</strong><br>Free camera, transparent preview, rotation, and direct placement.</td>
+    <td width="33%"><strong>Persistent scenes</strong><br>Automatic respawn and XML loading for complete setups.</td>
+    <td width="33%"><strong>Interiors</strong><br>Entrances/exits, extended catalog, and automatic IPL loading.</td>
   </tr>
   <tr>
-    <td width="33%"><strong>Butin ramassable</strong><br>Liasses, sacs, mallettes, caisses et chariots cash avec valeurs différentes.</td>
-    <td width="33%"><strong>Récompenses de mission</strong><br>Objets argent à placer dans une planque, un coffre, un bureau ou une zone à fouiller.</td>
-    <td width="33%"><strong>Intérêt gameplay</strong><br>Le joueur peut ramasser le cash avec <code>E</code>, puis l’objet disparaît de la scène.</td>
+    <td width="33%"><strong>Collectible loot</strong><br>Cash stacks, bags, briefcases, crates, and cash trolleys with different values.</td>
+    <td width="33%"><strong>Mission rewards</strong><br>Cash objects to place in a safehouse, vault, office, or searchable zone.</td>
+    <td width="33%"><strong>Gameplay value</strong><br>The player can collect cash with <code>E</code>, then the object disappears from the scene.</td>
   </tr>
 </table>
 
 ---
 
-## Nouvelle UI par catégories
+## New Category UI
 
 <table>
   <tr>
-    <td width="50%"><img src="images-readme/1.png" alt="Nouvelle UI par catégories - véhicules"></td>
-    <td width="50%"><img src="images-readme/2.png" alt="Nouvelle UI par catégories - objets"></td>
+    <td width="50%"><img src="images-readme/1.png" alt="New category UI - vehicles"></td>
+    <td width="50%"><img src="images-readme/2.png" alt="New category UI - objects"></td>
   </tr>
   <tr>
-    <td width="50%"><img src="images-readme/3.png" alt="Nouvelle UI par catégories - NPC"></td>
-    <td width="50%"><img src="images-readme/4.png" alt="Nouvelle UI par catégories - entrées et sorties"></td>
+    <td width="50%"><img src="images-readme/3.png" alt="New category UI - NPCs"></td>
+    <td width="50%"><img src="images-readme/4.png" alt="New category UI - entrances and exits"></td>
   </tr>
 </table>
 
-## Fonctionnalités principales
+## Main Features
 
-### Placement de PNJ / NPC
+### NPC Placement
 
-Le mod permet de placer des PNJ directement dans le monde avec un menu intégré.
+The mod lets you place NPCs directly in the world with an integrated menu.
 
-Vous pouvez choisir :
+You can choose:
 
-- le modèle du PNJ ;
-- la catégorie du PNJ ;
-- l’arme ;
-- les accessoires d’arme ;
-- la santé ;
-- l’armure ;
-- le comportement ;
-- le rayon de patrouille ;
-- la réapparition automatique.
+- the NPC model;
+- the NPC category;
+- the weapon;
+- weapon attachments;
+- health;
+- armor;
+- behavior;
+- patrol radius;
+- automatic respawn.
 
-Catégories de PNJ disponibles :
+Available NPC categories:
 
-- Custom / Add-on ;
-- Sécurité / Police / Militaire ;
-- Gangs / Criminels ;
-- Multiplayer / Online ;
-- Services / Scénarios ;
-- Civils hommes ;
-- Civils femmes ;
-- Story / Cutscene ;
-- Animaux ;
-- Tous les PNJ.
+- Custom / Add-on;
+- Security / Police / Military;
+- Gangs / Criminals;
+- Multiplayer / Online;
+- Services / Scenarios;
+- Male civilians;
+- Female civilians;
+- Story / Cutscene;
+- Animals;
+- All NPCs.
 
-Le mod supporte aussi les modèles custom. Sélectionnez le modèle **Custom**, puis appuyez sur `T` pour entrer le nom du modèle.
+The mod also supports custom models. Select the **Custom** model, then press `T` to enter the model name.
 
 ---
 
-### Comportements des PNJ
+### NPC Behaviors
 
-Chaque PNJ peut recevoir un comportement différent :
+Each NPC can receive a different behavior:
 
-| Comportement | Description |
+| Behavior | Description |
 |---|---|
-| Statique / hostile à vue | Le PNJ reste en position et devient hostile quand il détecte une menace. |
-| Attaquer / agressif | Le PNJ attaque activement le joueur. |
-| Neutre / garde passif | Le PNJ garde sa zone et réagit si une menace apparaît. |
-| Allié / garde défense | Le PNJ défend le joueur contre les menaces proches. |
-| Garde du corps / escorte joueur | Le PNJ suit le joueur à pied ou en véhicule. |
-| Neutre patrouille | Le PNJ patrouille dans une zone sans attaquer immédiatement. |
-| Hostile patrouille | Le PNJ patrouille et agit comme ennemi. |
-| Allié patrouille | Le PNJ patrouille et aide le joueur en cas de combat. |
+| Static / hostile on sight | The NPC stays in position and becomes hostile when it detects a threat. |
+| Attack / aggressive | The NPC actively attacks the player. |
+| Neutral / passive guard | The NPC guards its area and reacts if a threat appears. |
+| Ally / defense guard | The NPC defends the player against nearby threats. |
+| Bodyguard / player escort | The NPC follows the player on foot or in a vehicle. |
+| Neutral patrol | The NPC patrols an area without attacking immediately. |
+| Hostile patrol | The NPC patrols and acts as an enemy. |
+| Allied patrol | The NPC patrols and helps the player in combat. |
 
 ---
 
-### Respawn / réapparition automatique
+### Respawn / Automatic Respawn
 
 > [!TIP]
-> Le **respawn automatique** est l’une des fonctions les plus pratiques pour créer une base, un checkpoint ou une scène de combat qui reste utilisable longtemps.
+> **Automatic respawn** is one of the most practical features for creating a base, checkpoint, or combat scene that stays usable for a long time.
 
-Le respawn permet à un élément placé de **réapparaître automatiquement** après avoir été tué, détruit ou supprimé par le jeu.
+Respawn lets a placed element **automatically reappear** after it has been killed, destroyed, or removed by the game.
 
-Il peut servir pour :
+It can be used to:
 
-- remettre en place des **gardes** après un combat ;
-- recréer des **patrouilles ennemies ou alliées** ;
-- faire revenir un **véhicule placé** s’il explose ou disparaît ;
-- remettre un **objet de décor ou de couverture** si le jeu le supprime ;
-- garder une base ou un checkpoint vivant même après plusieurs attaques.
+- restore **guards** after a fight;
+- recreate **enemy or allied patrols**;
+- bring back a **placed vehicle** if it explodes or disappears;
+- restore a **decorative or cover object** if the game removes it;
+- keep a base or checkpoint alive even after several attacks.
 
-Pour l’utiliser :
+To use it:
 
-1. Ouvrez le menu avec `F10`.
-2. Activez l’option **Réapparition auto** avant de placer l’élément.
-3. Placez votre PNJ, véhicule ou objet normalement.
-4. Sauvegardez votre setup si vous voulez conserver cette option dans le fichier XML.
+1. Open the menu with `F10`.
+2. Enable **Automatic respawn** before placing the element.
+3. Place your NPC, vehicle, or object normally.
+4. Save your setup if you want to keep this option in the XML file.
 
-Quand le respawn est activé, le mod retient la **position d’origine**, la **rotation**, le **modèle**, l’équipement et les réglages importants de l’élément placé.
+When respawn is enabled, the mod remembers the placed element's **original position**, **rotation**, **model**, equipment, and important settings.
 
-Ensuite, si l’élément disparaît :
+Then, if the element disappears:
 
-- le mod attend un court délai avant de le recréer ;
-- le joueur doit s’être éloigné de la zone ;
-- le mod évite de faire apparaître l’élément directement sous les yeux du joueur ;
-- si le jeu refuse le spawn à ce moment-là, le mod réessaie automatiquement plus tard.
+- the mod waits a short delay before recreating it;
+- the player must have moved away from the area;
+- the mod avoids spawning the element directly in front of the player;
+- if the game refuses the spawn at that moment, the mod automatically tries again later.
 
-En pratique, ça donne une scène plus propre : les gardes, véhicules et objets ne réapparaissent pas brutalement devant vous. Ils reviennent surtout quand vous avez quitté la zone ou quand le point de respawn n’est plus visible, ce qui garde l’immersion.
+In practice, this creates a cleaner scene: guards, vehicles, and objects do not brutally reappear in front of you. They mainly come back when you have left the area or when the respawn point is no longer visible, which preserves immersion.
 
 > [!NOTE]
-> Le respawn n’est pas fait pour remplacer un combat en direct seconde par seconde. Si vous restez au même endroit en regardant le point de spawn, le mod peut attendre avant de recréer l’élément pour éviter une apparition trop visible.
+> Respawn is not meant to replace combat second by second in real time. If you stay in the same place while looking at the spawn point, the mod may wait before recreating the element to avoid a spawn that is too visible.
 
 ---
 
-### Appels téléphone C / R / L
+### Phone Calls C / R / L
 
 <p align="center">
-  <img src="images-readme/ballas.png" alt="Appels téléphone Cartel avec C, Ballas avec R et escorte haute sécurité avec L" width="100%">
+  <img src="images-readme/ballas.png" alt="Phone calls for Cartel with C, Ballas with R, and high-security escort with L" width="100%">
 </p>
 
-Le téléphone permet de lancer rapidement trois types d’activité en jeu : `C` appelle le Cartel allié pour protéger le joueur, `R` déclenche une vague Ballas hostile pour créer du combat autour de la scène, et `L` appelle une escorte haute sécurité avec limousine et convoi blindé.
+The phone lets you quickly launch three types of in-game activity: `C` calls allied Cartel protection, `R` triggers a hostile Ballas wave to create combat around the scene, and `L` calls a high-security escort with a limousine and armored convoy.
 
-### Appel du Cartel
+### Cartel Call
 
 <table>
   <tr>
     <td width="50%">
-      <img src="Images/cartel4.jpg" alt="Appel du Cartel confirme depuis le telephone du joueur">
+      <img src="Images/cartel4.jpg" alt="Cartel call confirmed from the player's phone">
     </td>
     <td width="50%">
-      <img src="Images/cartel.jpg" alt="Hommes de main du Cartel regroupes autour du joueur">
+      <img src="Images/cartel.jpg" alt="Cartel gunmen grouped around the player">
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="Images/cartel2.jpg" alt="Baller6 blindees du Cartel en protection rapprochee">
+      <img src="Images/cartel2.jpg" alt="Armored Cartel Baller6 vehicles in close protection">
     </td>
     <td width="50%">
-      <img src="Images/cartel3.jpg" alt="Convoi du Cartel pendant une phase d'action">
+      <img src="Images/cartel3.jpg" alt="Cartel convoy during an action phase">
     </td>
   </tr>
 </table>
 
-Le mod ajoute un contact téléphone **Cartel** utilisable directement en jeu.
+The mod adds a **Cartel** phone contact that can be used directly in game.
 
-Quand le téléphone du joueur est ouvert, une interface `Contact téléphone` apparaît avec le contact `Cartel`. Appuyez sur `C` pour appeler une équipe de protection.
+When the player's phone is open, a `Phone contact` interface appears with the `Cartel` contact. Press `C` to call a protection team.
 
-L’appel fait arriver rapidement :
+The call quickly brings in:
 
-- jusqu’à 11 hommes de main alliés ;
-- jusqu’à 3 Baller6 blindées ;
-- des gardes équipés pour le combat, avec carabine de service et pistolet-mitrailleur ;
-- des gardes renforcés avec `500` points de santé et `200` points d’armure.
+- up to 11 allied gunmen;
+- up to 3 armored Baller6 vehicles;
+- guards equipped for combat, with a Service Carbine and Machine Pistol;
+- reinforced guards with `500` health and `200` armor.
 
-Le convoi apparaît à distance raisonnable, généralement entre `68 m` et `118 m`, en priorité sur une route et hors du champ de vision du joueur pour garder une arrivée immersive.
+The convoy appears at a reasonable distance, usually between `68 m` and `118 m`, preferably on a road and outside the player's field of view to keep the arrival immersive.
 
-Comportement du Cartel :
+Cartel behavior:
 
-- si le joueur est à pied, les véhicules approchent puis les hommes descendent pour le suivre ;
-- si le joueur est en véhicule, les hommes remontent dans les Baller6 et escortent le joueur ;
-- en cas de menace réelle, les gardes défendent le joueur ou les autres gardes Cartel ;
-- les passagers peuvent tirer depuis le véhicule ou descendre selon la situation ;
-- les véhicules bloqués peuvent être réordonnés ou replacés hors champ de vision si le joueur s’éloigne trop.
-- le système est codé pour que vos gardes du corps finissent par vous retrouver autant que possible, pour peu que vous soyez sur une route ou proche d’une route exploitable. S’ils sont trop loin, le mod peut les replacer plus près du joueur, mais hors champ et jamais trop près, afin de garder l’illusion qu’ils arrivent réellement au lieu de les voir apparaître.
+- if the player is on foot, the vehicles approach and the men get out to follow;
+- if the player is in a vehicle, the men get back into the Baller6 vehicles and escort the player;
+- if there is a real threat, the guards defend the player or the other Cartel guards;
+- passengers can shoot from the vehicle or get out depending on the situation;
+- blocked vehicles can be reordered or moved out of view if the player gets too far away.
+- the system is coded so your bodyguards eventually find you again as much as possible, as long as you are on a road or close to a usable road. If they are too far away, the mod can move them closer to the player, but out of view and never too close, to keep the illusion that they are really arriving instead of appearing in front of you.
 
-Rappeler le Cartel pendant qu’une équipe est active ordonne son repli. Les hommes restent alliés, retournent vers les véhicules, quittent le secteur puis sont nettoyés automatiquement quand ils sont assez loin ou hors champ.
+Calling the Cartel again while a team is active orders it to withdraw. The men remain allied, return to the vehicles, leave the area, and are automatically cleaned up when they are far enough away or out of view.
 
-Vous pouvez appeler une nouvelle équipe même si une ancienne équipe est encore en train de quitter la zone.
+You can call a new team even if an older team is still leaving the area.
 
-### Appel des Ballas
+### Ballas Call
 
-Le mod ajoute aussi un appel hostile **Ballas** utilisable depuis le téléphone du joueur.
+The mod also adds a hostile **Ballas** call that can be used from the player's phone.
 
-Quand le téléphone est ouvert, appuyez sur `R` pour déclencher une vague Ballas autour du joueur. Cette touche sert à créer rapidement un peu d’activité en mode histoire : embuscade, attaque de base, fusillade de rue, pression sur un checkpoint ou simple événement dynamique autour d’une scène déjà préparée.
+When the phone is open, press `R` to trigger a Ballas wave around the player. This key is meant to quickly create activity in story mode: ambush, base attack, street shootout, pressure on a checkpoint, or a simple dynamic event around a scene you already prepared.
 
-Les Ballas arrivent comme ennemis armés et cherchent le combat avec le joueur. Contrairement au Cartel, ils ne sont pas des renforts alliés : l’appel Ballas est pensé pour rendre la zone vivante et hostile sans devoir placer manuellement chaque PNJ.
-
----
-
-### Escorte haute sécurité
-
-Le mod ajoute un contact **Escorte haute sécurité** utilisable depuis le téléphone du joueur avec `L`.
-
-Quand le téléphone du joueur est ouvert, appuyez sur `L` pour appeler un convoi VIP allié. L’équipe arrive avec :
-
-- une limousine blindée pour transporter le joueur ;
-- `4` Baller noirs haute sécurité en formation ;
-- des gardes Cartel renforcés avec `500` points de santé et `200` points d’armure ;
-- une configuration de combat avec carabine de service et pistolet-mitrailleur ;
-- une IA dédiée pour éviter que les ordres génériques des PNJ remplacent les ordres du convoi.
-
-L’escorte sert à jouer un déplacement sécurisé, une extraction, une arrivée VIP, une fuite protégée ou une mission maison avec protection rapprochée.
-
-Fonctionnement principal :
-
-1. Ouvrez le téléphone du joueur.
-2. Appuyez sur `L` pour appeler l’escorte.
-3. Quand la limousine arrive, approchez-vous et appuyez sur `F` pour monter à l’arrière.
-4. Placez un marqueur sur la carte.
-5. Une fois assis à l’arrière de la limousine, appuyez sur `L` pour valider la destination.
-6. Le convoi part vers le marqueur en formation.
-
-Pendant le trajet, la limousine continue de suivre la route vers la destination. Les Baller se replacent autour d’elle, les chauffeurs évitent de recevoir des ordres inutiles à chaque frame, et les véhicules bloqués peuvent tenter une marche arrière courte ou un recalage hors champ si nécessaire.
-
-En cas d’embuscade, les gardes réagissent comme une vraie escorte :
-
-- les passagers peuvent faire du drive-by ;
-- les gardes peuvent descendre si la menace est proche ou si le véhicule est bloqué ;
-- la limousine garde la priorité sur la route quand le joueur est à bord ;
-- les Baller passent en conduite plus nerveuse pour protéger et rattraper le convoi ;
-- les relations hostiles sont appliquées uniquement sur les menaces valides pour éviter de casser les groupes ambiants.
-
-Si vous rappuyez sur `L` depuis le téléphone pendant qu’une escorte est active, le mod ordonne le repli. Les véhicules quittent le secteur, les gardes sont nettoyés proprement quand ils sont assez loin ou hors champ, et vous pouvez rappeler une nouvelle escorte après le court délai anti-spam.
+The Ballas arrive as armed enemies and look for a fight with the player. Unlike the Cartel, they are not allied reinforcements: the Ballas call is designed to make the area feel alive and hostile without manually placing every NPC.
 
 ---
 
-### Atelier d’armes
+### High-Security Escort
 
-Le mod inclut un atelier d’armes pour personnaliser l’équipement des PNJ.
+The mod adds a **High-security escort** contact that can be used from the player's phone with `L`.
 
-Options disponibles selon l’arme :
+When the player's phone is open, press `L` to call an allied VIP convoy. The team arrives with:
 
-- chargeur étendu ;
-- silencieux ;
-- lampe ;
-- poignée ;
-- lunette ;
-- compensateur / bouche ;
-- canon amélioré ;
-- munitions MK2 ;
-- teinte ;
-- presets rapides ;
-- application aux PNJ déjà placés.
+- an armored limousine to transport the player;
+- `4` black high-security Baller vehicles in formation;
+- reinforced Cartel guards with `500` health and `200` armor;
+- a combat setup with Service Carbine and Machine Pistol;
+- dedicated AI so generic NPC orders do not replace convoy orders.
 
-Les composants incompatibles avec une arme sont ignorés proprement.
+The escort is useful for playing a secured transfer, extraction, VIP arrival, protected escape, or homemade mission with close protection.
 
----
+Main flow:
 
-### Placement de véhicules
+1. Open the player's phone.
+2. Press `L` to call the escort.
+3. When the limousine arrives, move close to it and press `F` to get in the back.
+4. Place a waypoint on the map.
+5. Once seated in the back of the limousine, press `L` to validate the destination.
+6. The convoy drives to the waypoint in formation.
 
-Vous pouvez placer des véhicules dans le monde avec aperçu et rotation.
+During the trip, the limousine keeps following the route toward the destination. The Baller vehicles reposition around it, drivers avoid receiving useless orders every frame, and blocked vehicles can attempt a short reverse maneuver or an out-of-view reposition if needed.
 
-Catégories disponibles :
+During an ambush, guards react like a real escort:
 
-- Sport / Super ;
-- Berlines / Coupes ;
-- SUV / 4x4 ;
-- Motos ;
-- Police / Secours ;
-- Militaire ;
-- Utilitaires / Vans ;
-- Camions ;
-- Avions / Hélicos ;
-- Bateaux ;
-- Tous les véhicules.
+- passengers can perform drive-by shooting;
+- guards can get out if the threat is close or if the vehicle is blocked;
+- the limousine keeps route priority while the player is on board;
+- the Baller vehicles switch to a more aggressive driving style to protect and catch up with the convoy;
+- hostile relationships are applied only to valid threats to avoid breaking ambient groups.
+
+If you press `L` again from the phone while an escort is active, the mod orders a withdrawal. The vehicles leave the area, guards are cleaned up properly when they are far enough away or out of view, and you can call a new escort after the short anti-spam delay.
 
 ---
 
-### Placement d’objets
+### Weapon Workshop
 
-Le mod permet aussi de poser des objets pour construire des décors, des couvertures, des checkpoints ou des zones de combat.
+The mod includes a weapon workshop to customize NPC equipment.
 
-Catégories disponibles :
+Available options depending on the weapon:
 
-- Sécurité ;
-- Couverture / Combat ;
-- Argent / butin ;
-- Matériel tactique ;
-- Soins / survie ;
-- Bureau / informatique ;
-- Atelier / outils ;
-- Mobilier ;
-- Caisses / Stockage ;
-- Décoration ;
-- Lumières ;
-- Extérieur ;
-- Divers.
+- extended magazine;
+- suppressor;
+- flashlight;
+- grip;
+- scope;
+- compensator / muzzle;
+- improved barrel;
+- MK2 ammunition;
+- tint;
+- quick presets;
+- apply to already placed NPCs.
 
-Exemples d’objets inclus :
+Components incompatible with a weapon are cleanly ignored.
 
-- cônes ;
-- barrières ;
-- blocs béton ;
-- bennes ;
-- palettes ;
-- liasses de billets ;
-- sacs d’argent ;
-- mallettes cash ;
-- caisses de cash ;
-- chariots cash ;
-- chaises ;
-- tables ;
-- caisses ;
-- lampes ;
-- tentes ;
-- sacs ;
-- extincteurs ;
-- objets de décoration.
+---
 
-### Argent ramassable
+### Vehicle Placement
+
+You can place vehicles in the world with preview and rotation.
+
+Available categories:
+
+- Sport / Super;
+- Sedans / Coupes;
+- SUV / 4x4;
+- Motorcycles;
+- Police / Emergency;
+- Military;
+- Utility / Vans;
+- Trucks;
+- Planes / Helicopters;
+- Boats;
+- All vehicles.
+
+---
+
+### Object Placement
+
+The mod also lets you place objects to build props, cover, checkpoints, or combat zones.
+
+Available categories:
+
+- Security;
+- Cover / Combat;
+- Cash / loot;
+- Tactical gear;
+- Health / survival;
+- Office / IT;
+- Workshop / tools;
+- Furniture;
+- Crates / Storage;
+- Decoration;
+- Lights;
+- Exterior;
+- Misc.
+
+Included object examples:
+
+- cones;
+- barriers;
+- concrete blocks;
+- dumpsters;
+- pallets;
+- cash stacks;
+- money bags;
+- cash briefcases;
+- cash crates;
+- cash trolleys;
+- chairs;
+- tables;
+- crates;
+- lamps;
+- tents;
+- bags;
+- fire extinguishers;
+- decorative objects.
+
+### Collectible Cash
 
 <p align="center">
-  <img src="images-readme/argentramassable.png" alt="Exemple d'argent ramassable avec caisse de cash à 250 000 dollars" width="100%">
+  <img src="images-readme/argentramassable.png" alt="Example of collectible cash with a 250,000 dollar cash crate" width="100%">
 </p>
 
-La catégorie **Argent / butin** permet de placer du cash dans vos scènes : liasses, billets, enveloppes, sacs d’argent, sacs de braquage, mallettes, caisses, coffre en or ou chariot cash.
+The **Cash / loot** category lets you place cash in your scenes: stacks, bills, envelopes, money bags, heist bags, briefcases, crates, gold safe, or cash trolley.
 
-Ces objets servent à donner un vrai intérêt aux zones ou missions que vous créez. Vous pouvez mettre une petite liasse dans un bureau, une mallette dans une planque, un sac de braquage après un combat, ou une grosse caisse de cash au fond d’un bunker pour récompenser l’exploration.
+These objects give real value to the zones or missions you create. You can place a small stack in an office, a briefcase in a safehouse, a heist bag after a fight, or a big cash crate at the back of a bunker to reward exploration.
 
-En jeu, le joueur s’approche de l’objet et appuie sur `E` pour le ramasser. Le montant est ajouté au cash solo du personnage, puis le prop disparaît et n’est plus sauvegardé si vous enregistrez la scène après l’avoir pris.
+In game, the player approaches the object and presses `E` to collect it. The amount is added to the character's single-player cash, then the prop disappears and is no longer saved if you save the scene after taking it.
 
-Les montants varient selon l’objet :
+Amounts vary by object:
 
-| Type de butin | Montant indicatif |
+| Loot type | Indicative amount |
 |---|---:|
-| Billet seul | `100$` |
-| Billet un dollar | `1$` |
-| Liasse ou tas de cash | `10 000$` |
-| Enveloppe cash | `2 500$` |
-| Paquet de cash | `5 000$` |
-| Sac d’argent, sac de braquage ou mallette cash | `50 000$` |
-| Chariot cash | `200 000$` |
-| Caisse de cash ou coffre or | `250 000$` |
+| Single bill | `100$` |
+| One-dollar bill | `1$` |
+| Cash stack or pile | `10 000$` |
+| Cash envelope | `2 500$` |
+| Cash package | `5 000$` |
+| Money bag, heist bag, or cash briefcase | `50 000$` |
+| Cash trolley | `200 000$` |
+| Cash crate or gold safe | `250 000$` |
 
-Les autres objets restent décoratifs ou utilitaires selon leur type. Les packs de munitions, kits de soin et objets d’armure peuvent aussi devenir interactifs quand leur modèle correspond.
+Other objects remain decorative or useful depending on their type. Ammo packs, health kits, and armor objects can also become interactive when their model matches.
 
 ---
 
-### Intérieurs et portails
+### Interiors and Portals
 
-Le mod inclut un système d’entrées et de sorties vers des intérieurs.
+The mod includes a system for entrances and exits to interiors.
 
 > [!WARNING]
-> **Fonctionnalité expérimentale.** Les entrées/sorties d’intérieurs peuvent encore occasionner des bugs selon l’intérieur choisi, les IPL chargés ou le contexte de jeu.
-> Le placement de gardes ou de PNJ dans certains intérieurs peut aussi provoquer des comportements imprévus, notamment sur la navigation, le combat, le suivi, le spawn ou le nettoyage. La fonctionnalité marche, mais cette partie est encore en cours de perfectionnement.
+> **Experimental feature.** Interior entrances/exits can still cause bugs depending on the selected interior, loaded IPLs, or game context.
+> Placing guards or NPCs in some interiors can also cause unexpected behavior, especially around navigation, combat, following, spawning, or cleanup. The feature works, but this part is still being refined.
 
-Vous pouvez placer :
+You can place:
 
-- une **entrée** dans le monde extérieur ;
-- une **sortie** dans l’intérieur actif ;
-- des marqueurs permettant de voyager entre les deux.
+- an **entrance** in the exterior world;
+- an **exit** in the active interior;
+- markers that allow travel between the two.
 
-Le catalogue contient plus de 150 emplacements d’intérieurs, dont :
+The catalog contains more than 150 interior locations, including:
 
-- bunkers ;
-- facilities ;
-- appartements online ;
-- garages ;
-- maisons ;
-- bureaux CEO ;
-- business ;
-- Diamond Casino & Resort ;
-- lieux de missions ;
-- lieux spéciaux avec IPL.
+- bunkers;
+- facilities;
+- online apartments;
+- garages;
+- houses;
+- CEO offices;
+- businesses;
+- Diamond Casino & Resort;
+- mission locations;
+- special locations with IPLs.
 
-Le mod charge les IPL nécessaires quand l’intérieur en a besoin.
-
----
-
-### Placement caméra précis
-
-Le placement caméra permet de poser précisément un PNJ, un véhicule, un objet ou un portail.
-
-Pendant le placement :
-
-- le joueur est figé ;
-- le joueur est protégé ;
-- une caméra libre est activée ;
-- un aperçu transparent de l’entité est affiché ;
-- la rotation peut être ajustée avant validation.
-
-C’est le mode recommandé pour créer des scènes propres.
+The mod loads the required IPLs when an interior needs them.
 
 ---
 
-### Placement direct
+### Precise Camera Placement
 
-Le placement direct permet de poser rapidement l’élément sélectionné devant le joueur.
+Camera placement lets you precisely place an NPC, vehicle, object, or portal.
 
-La distance est configurable de `25 m` à `2500 m`, par pas de `25 m`.
+During placement:
+
+- the player is frozen;
+- the player is protected;
+- a free camera is enabled;
+- a transparent preview of the entity is displayed;
+- rotation can be adjusted before validation.
+
+This is the recommended mode for creating clean scenes.
 
 ---
 
-### Sauvegarde et chargement XML
+### Direct Placement
 
-Le mod peut sauvegarder et recharger vos setups.
+Direct placement lets you quickly place the selected element in front of the player.
 
-Les sauvegardes XML contiennent :
+The distance can be configured from `25 m` to `2500 m`, in `25 m` steps.
 
-- les PNJ ;
-- les modèles custom ;
-- les armes ;
-- les accessoires d’armes ;
-- les comportements ;
-- la santé ;
-- l’armure ;
-- les véhicules ;
-- les objets ;
-- les entrées/sorties d’intérieurs ;
-- les options de réapparition automatique.
+---
 
-Le nom de sauvegarde par défaut est :
+### XML Save and Load
+
+The mod can save and reload your setups.
+
+XML saves contain:
+
+- NPCs;
+- custom models;
+- weapons;
+- weapon attachments;
+- behaviors;
+- health;
+- armor;
+- vehicles;
+- objects;
+- interior entrances/exits;
+- automatic respawn options.
+
+The default save name is:
 
 ```text
 maison.xml
 ```
 
-Vous pouvez le modifier depuis le menu du mod.
+You can change it from the mod menu.
 
 ---
 
 ## Installation
 
 <p align="center">
-  <img src="Images/trevor.png" alt="DonJ Custom NPC Placer - image d'installation du mod" width="100%">
+  <img src="Images/trevor.png" alt="DonJ Custom NPC Placer - mod installation image" width="100%">
 </p>
 
 > [!TIP]
-> Pour aller au plus simple, le dépôt contient un dossier direct **`Mode-pour-jeu-ici`**.
-> C’est le dossier “mode pour jeu” : il contient les fichiers du mod prêts à placer dans GTA V Enhanced et le guide [`INSTALLATION_SIMPLE.txt`](Mode-pour-jeu-ici/INSTALLATION_SIMPLE.txt).
+> For the simplest setup, the repository contains a direct **`Mode-pour-jeu-ici`** folder.
+> This is the "game-ready mod" folder: it contains the mod files ready to place in GTA V Enhanced and the [`INSTALLATION_SIMPLE.txt`](Mode-pour-jeu-ici/INSTALLATION_SIMPLE.txt) guide.
 
-### Avant de commencer
+### Before You Start
 
-Ce mod ne se lance pas tout seul. GTA V Enhanced doit déjà avoir les fichiers qui permettent aux mods de fonctionner.
+This mod does not run by itself. GTA V Enhanced must already have the files that allow mods to work.
 
-Vous devez avoir :
+You must have:
 
-- **GTA V Enhanced** sur Windows ;
-- **ScriptHookV** ;
-- **NIBScriptHookVDotNet** pour GTA V Enhanced ;
-- un dossier **Scripts** dans le dossier du jeu.
+- **GTA V Enhanced** on Windows;
+- **ScriptHookV**;
+- **NIBScriptHookVDotNet** for GTA V Enhanced;
+- a **Scripts** folder in the game folder.
 
-Le dossier du jeu, c’est le dossier où se trouve :
+The game folder is the folder where this file is located:
 
 ```text
 GTA5_Enhanced.exe
 ```
 
-Exemple Steam :
+Steam example:
 
 ```text
 C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V Enhanced
 ```
 
-Si le dossier `Scripts` n’existe pas, créez-le vous-même dans le dossier du jeu.
+If the `Scripts` folder does not exist, create it yourself in the game folder.
 
 ---
 
-### 1. Installer les fichiers obligatoires pour les mods
+### 1. Install the Required Mod Files
 
-Dans le dossier principal de GTA V Enhanced, au même endroit que `GTA5_Enhanced.exe`, vous devez avoir ces fichiers :
+In the main GTA V Enhanced folder, in the same location as `GTA5_Enhanced.exe`, you must have these files:
 
 ```text
 ScriptHookV.dll
@@ -570,16 +570,16 @@ NIBScriptHookVDotNet.asi
 NIBScriptHookVDotNet2.dll
 ```
 
-Liens utiles :
+Useful links:
 
-| Ce qu’il faut | Où le télécharger | Où le mettre |
+| Required file | Where to download it | Where to put it |
 |---|---|---|
-| `ScriptHookV.dll` et `dinput8.dll` | [Script Hook V officiel - Alexander Blade](https://www.dev-c.com/gtav/scripthookv/) | Dans le dossier principal du jeu |
-| `NIBScriptHookVDotNet.asi` et `NIBScriptHookVDotNet2.dll` | [NIBMods Menu and .Net plugins - GTA Legacy and Enhanced - JulioNIB](https://www.patreon.com/posts/nibmods-menu-and-22783974) | Dans le dossier principal du jeu |
+| `ScriptHookV.dll` and `dinput8.dll` | [Official Script Hook V - Alexander Blade](https://www.dev-c.com/gtav/scripthookv/) | In the main game folder |
+| `NIBScriptHookVDotNet.asi` and `NIBScriptHookVDotNet2.dll` | [NIBMods Menu and .Net plugins - GTA Legacy and Enhanced - JulioNIB](https://www.patreon.com/posts/nibmods-menu-and-22783974) | In the main game folder |
 
-Pour NIBScriptHookVDotNet, prenez bien la version **GTA Enhanced** quand elle est proposée.
+For NIBScriptHookVDotNet, make sure you choose the **GTA Enhanced** version when it is offered.
 
-Une fois cette partie faite, votre dossier principal du jeu doit ressembler à ça :
+Once this part is done, your main game folder should look like this:
 
 ```text
 Grand Theft Auto V Enhanced
@@ -593,50 +593,50 @@ Grand Theft Auto V Enhanced
 
 ---
 
-### 2. Installer le mod DonJ
+### 2. Install the DonJ Mod
 
-La méthode la plus simple est d’utiliser le dossier prêt à copier fourni dans ce dépôt.
+The simplest method is to use the ready-to-copy folder provided in this repository.
 
-1. Sur GitHub, cliquez sur le bouton vert **Code**.
-2. Cliquez sur **Download ZIP**.
-3. Ouvrez le fichier téléchargé.
-4. Ouvrez le dossier du projet.
-5. Ouvrez le dossier :
+1. On GitHub, click the green **Code** button.
+2. Click **Download ZIP**.
+3. Open the downloaded file.
+4. Open the project folder.
+5. Open this folder:
 
 ```text
 Mode-pour-jeu-ici
 ```
 
-6. Copiez les fichiers qui sont dedans :
+6. Copy the files inside it:
 
 ```text
 DonJCustomNpcPlacer.ENdll
 DonJCustomNpcPlacer.pdb
 ```
 
-7. Collez-les dans le dossier :
+7. Paste them into this folder:
 
 ```text
 Grand Theft Auto V Enhanced\Scripts
 ```
 
-Exemple Steam :
+Steam example:
 
 ```text
 C:\Program Files (x86)\Steam\steamapps\common\Grand Theft Auto V Enhanced\Scripts
 ```
 
 > [!IMPORTANT]
-> Ne copiez pas le dossier `Mode-pour-jeu-ici` entier dans `Scripts`.
-> Ouvrez `Mode-pour-jeu-ici`, puis copiez les fichiers qui sont dedans directement dans `Scripts`.
+> Do not copy the entire `Mode-pour-jeu-ici` folder into `Scripts`.
+> Open `Mode-pour-jeu-ici`, then copy the files inside it directly into `Scripts`.
 
-Le fichier [`Mode-pour-jeu-ici/INSTALLATION_SIMPLE.txt`](Mode-pour-jeu-ici/INSTALLATION_SIMPLE.txt) contient aussi ces étapes en version texte simple.
+The [`Mode-pour-jeu-ici/INSTALLATION_SIMPLE.txt`](Mode-pour-jeu-ici/INSTALLATION_SIMPLE.txt) file also contains these steps in a simple text version.
 
 ---
 
-### 3. Vérifier que les fichiers sont au bon endroit
+### 3. Check That the Files Are in the Right Place
 
-Dans le dossier principal du jeu, vous devez avoir :
+In the main game folder, you must have:
 
 ```text
 Grand Theft Auto V Enhanced\ScriptHookV.dll
@@ -645,65 +645,65 @@ Grand Theft Auto V Enhanced\NIBScriptHookVDotNet.asi
 Grand Theft Auto V Enhanced\NIBScriptHookVDotNet2.dll
 ```
 
-Dans le dossier `Scripts`, vous devez avoir :
+In the `Scripts` folder, you must have:
 
 ```text
 Grand Theft Auto V Enhanced\Scripts\DonJCustomNpcPlacer.ENdll
 ```
 
-Le fichier suivant est optionnel, mais vous pouvez le laisser :
+The following file is optional, but you can leave it:
 
 ```text
 Grand Theft Auto V Enhanced\Scripts\DonJCustomNpcPlacer.pdb
 ```
 
-Le `.pdb` n’est pas obligatoire pour jouer. Il aide surtout à avoir des logs plus lisibles en cas de problème.
+The `.pdb` is not required to play. It mainly helps provide more readable logs if there is a problem.
 
 ---
 
-### 4. Lancer le mod en jeu
+### 4. Launch the Mod in Game
 
-1. Lancez GTA V Enhanced.
-2. Allez en **mode histoire**.
-3. Une fois en jeu, appuyez sur :
+1. Launch GTA V Enhanced.
+2. Go to **story mode**.
+3. Once in game, press:
 
 ```text
 F10
 ```
 
-Le menu du mod doit s’ouvrir.
+The mod menu should open.
 
-Pour utiliser les appels téléphone :
+To use the phone calls:
 
-1. Ouvrez le téléphone du joueur.
-2. Affichez les contacts du mod.
-3. Appuyez sur `C` pour appeler le Cartel allié.
-4. Appuyez sur `R` pour appeler une vague Ballas hostile et créer de l’activité autour du joueur.
-5. Appuyez sur `L` pour appeler ou renvoyer l’escorte haute sécurité.
+1. Open the player's phone.
+2. Display the mod contacts.
+3. Press `C` to call the allied Cartel.
+4. Press `R` to call a hostile Ballas wave and create activity around the player.
+5. Press `L` to call or dismiss the high-security escort.
 
-Pour utiliser le trajet VIP de l’escorte haute sécurité :
+To use the high-security escort VIP route:
 
-1. Appelez l’escorte avec `L` depuis le téléphone.
-2. Montez à l’arrière de la limousine avec `F`.
-3. Placez un marqueur sur la carte.
-4. Appuyez sur `L` dans la limousine pour lancer le convoi vers le marqueur.
+1. Call the escort with `L` from the phone.
+2. Get in the back of the limousine with `F`.
+3. Place a waypoint on the map.
+4. Press `L` inside the limousine to launch the convoy toward the waypoint.
 
 ---
 
-### Si le menu ne s’ouvre pas
+### If the Menu Does Not Open
 
-Vérifiez dans cet ordre :
+Check in this order:
 
-1. Vous êtes bien en **mode histoire**, pas dans GTA Online.
-2. `DonJCustomNpcPlacer.ENdll` est bien dans le dossier `Scripts`.
-3. Le dossier s’appelle exactement `Scripts`.
-4. `ScriptHookV.dll` est bien dans le dossier principal du jeu.
-5. `dinput8.dll` est bien dans le dossier principal du jeu.
-6. `NIBScriptHookVDotNet.asi` est bien dans le dossier principal du jeu.
-7. `NIBScriptHookVDotNet2.dll` est bien dans le dossier principal du jeu.
-8. Aucun ancien fichier du mod n’est encore présent dans `Scripts`.
+1. You are in **story mode**, not GTA Online.
+2. `DonJCustomNpcPlacer.ENdll` is in the `Scripts` folder.
+3. The folder is named exactly `Scripts`.
+4. `ScriptHookV.dll` is in the main game folder.
+5. `dinput8.dll` is in the main game folder.
+6. `NIBScriptHookVDotNet.asi` is in the main game folder.
+7. `NIBScriptHookVDotNet2.dll` is in the main game folder.
+8. No old mod file is still present in `Scripts`.
 
-Anciens fichiers à supprimer s’ils existent :
+Old files to delete if they exist:
 
 ```text
 Scripts\DonJEnemySpawner.dll
@@ -713,170 +713,170 @@ Scripts\DonJEnemySpawner.pdb
 
 ---
 
-### Mise à jour du mod
+### Updating the Mod
 
-1. Fermez le jeu.
-2. Supprimez l’ancien fichier :
+1. Close the game.
+2. Delete the old file:
 
 ```text
 Scripts\DonJCustomNpcPlacer.ENdll
 ```
 
-3. Copiez le nouveau fichier `DonJCustomNpcPlacer.ENdll` dans `Scripts`.
-4. Relancez le jeu en mode histoire.
+3. Copy the new `DonJCustomNpcPlacer.ENdll` file into `Scripts`.
+4. Restart the game in story mode.
 
 ---
 
-### Désinstallation
+### Uninstalling
 
-1. Fermez le jeu.
-2. Supprimez ces fichiers dans `Scripts` :
+1. Close the game.
+2. Delete these files from `Scripts`:
 
 ```text
 Scripts\DonJCustomNpcPlacer.ENdll
 Scripts\DonJCustomNpcPlacer.pdb
 ```
 
-3. Les sauvegardes peuvent être supprimées séparément si vous ne voulez plus les garder.
+3. Saves can be deleted separately if you do not want to keep them.
 
 ---
 
-## Utilisation
+## Usage
 
-### Ouvrir le menu
+### Open the Menu
 
-En jeu, appuyez sur :
+In game, press:
 
 ```text
 F10
 ```
 
-Le menu principal s’ouvre avec plusieurs sections :
+The main menu opens with several sections:
 
-- Type de placement ;
-- NPC ;
-- Véhicule ;
-- Objet ;
-- Intérieur ;
-- Sauvegarde ;
-- Nettoyage.
+- Placement type;
+- NPC;
+- Vehicle;
+- Object;
+- Interior;
+- Save;
+- Cleanup.
 
 ---
 
-### Contrôles du menu
+### Menu Controls
 
-| Touche | Action |
+| Key | Action |
 |---|---|
-| `F10` | Ouvrir / fermer le menu |
-| `↑` / `↓` | Naviguer |
-| `NumPad 8` / `NumPad 2` | Naviguer |
-| `←` / `→` | Modifier une valeur |
-| `NumPad 4` / `NumPad 6` | Modifier une valeur |
-| `Entrée` | Valider / ouvrir une action |
-| `NumPad 5` | Valider / ouvrir une action |
-| `PageUp` / `PageDown` | Défiler rapidement |
-| `Home` / `End` | Aller au début / à la fin |
-| `Échap` / `Retour` / `NumPad 0` | Fermer ou revenir |
-| `T` | Saisir un modèle custom quand le modèle NPC sélectionné est `Custom` |
+| `F10` | Open / close the menu |
+| `Up` / `Down` | Navigate |
+| `NumPad 8` / `NumPad 2` | Navigate |
+| `Left` / `Right` | Change a value |
+| `NumPad 4` / `NumPad 6` | Change a value |
+| `Enter` | Confirm / open an action |
+| `NumPad 5` | Confirm / open an action |
+| `PageUp` / `PageDown` | Scroll quickly |
+| `Home` / `End` | Go to the start / end |
+| `Esc` / `Backspace` / `NumPad 0` | Close or go back |
+| `T` | Enter a custom model when the selected NPC model is `Custom` |
 
 ---
 
-### Contrôles des contacts téléphone
+### Phone Contact Controls
 
-| Touche / état | Action |
+| Key / state | Action |
 |---|---|
-| Téléphone du joueur ouvert | Affiche les contacts `Cartel`, `Ballas` et `Escorte haute sécurité` |
-| `C` | Appeler les hommes de main du Cartel |
-| `C` avec une équipe Cartel active | Faire replier l’équipe active |
-| `R` | Appeler une vague Ballas hostile pour créer de l’activité autour du joueur |
-| `L` | Appeler l’escorte haute sécurité avec limousine et 4 Baller |
-| `L` avec une escorte active | Faire replier l’escorte active |
-| `F` près de la limousine | Monter à l’arrière de la limousine VIP |
-| `L` assis à l’arrière de la limousine | Valider le marqueur GPS et lancer le convoi vers la destination |
+| Player phone open | Shows the `Cartel`, `Ballas`, and `High-security escort` contacts |
+| `C` | Call Cartel gunmen |
+| `C` with an active Cartel team | Make the active team withdraw |
+| `R` | Call a hostile Ballas wave to create activity around the player |
+| `L` | Call the high-security escort with limousine and 4 Baller vehicles |
+| `L` with an active escort | Make the active escort withdraw |
+| `F` near the limousine | Get in the back of the VIP limousine |
+| `L` seated in the back of the limousine | Validate the GPS waypoint and launch the convoy toward the destination |
 
-Un court délai anti-spam empêche de relancer les appels plusieurs fois instantanément.
+A short anti-spam delay prevents calls from being restarted several times instantly.
 
 ---
 
-### Contrôles du placement caméra
+### Camera Placement Controls
 
-Quand vous lancez un placement caméra précis :
+When you launch precise camera placement:
 
-| Touche / action | Effet |
+| Key / action | Effect |
 |---|---|
-| Souris | Regarder autour |
-| `Z` ou `W` | Avancer |
-| `S` | Reculer |
-| `Q` | Aller à gauche |
-| `D` | Aller à droite |
-| `Espace` | Monter |
-| `Ctrl` | Descendre |
-| `Shift` | Déplacement rapide |
-| `Alt` | Déplacement lent |
-| `A` / `E` | Tourner l’entité placée |
-| Clic gauche | Placer |
-| `Entrée` | Placer |
-| `NumPad 5` | Placer |
-| Clic droit | Quitter le placement |
-| `Échap` | Quitter le placement |
-| `Retour` | Quitter le placement |
+| Mouse | Look around |
+| `Z` or `W` | Move forward |
+| `S` | Move backward |
+| `Q` | Move left |
+| `D` | Move right |
+| `Space` | Move up |
+| `Ctrl` | Move down |
+| `Shift` | Fast movement |
+| `Alt` | Slow movement |
+| `A` / `E` | Rotate the placed entity |
+| Left click | Place |
+| `Enter` | Place |
+| `NumPad 5` | Place |
+| Right click | Exit placement |
+| `Esc` | Exit placement |
+| `Backspace` | Exit placement |
 
 ---
 
-## Exemple rapide
+## Quick Example
 
-### Créer un checkpoint hostile
+### Create a Hostile Checkpoint
 
-1. Appuyez sur `F10`.
-2. Choisissez `Type de placement : NPC`.
-3. Ouvrez la section `NPC`.
-4. Sélectionnez une catégorie, par exemple `Sécurité / Police / Militaire`.
-5. Choisissez un modèle, par exemple un SWAT.
-6. Choisissez une arme.
-7. Réglez le comportement sur `Hostile patrouille` ou `Statique / hostile à vue`.
-8. Réglez la santé, l’armure et le rayon de patrouille.
-9. Lancez `Placement camera précis`.
-10. Placez le PNJ avec `Entrée` ou clic gauche.
-11. Répétez pour créer plusieurs gardes.
-12. Sauvegardez avec `Sauvegarder`.
-
----
-
-### Créer une base gardée
-
-1. Placez des objets de couverture.
-2. Placez des véhicules.
-3. Placez des PNJ neutres ou alliés.
-4. Ajoutez des patrouilles.
-5. Ajoutez une entrée vers un intérieur.
-6. Placez une sortie dans l’intérieur.
-7. Sauvegardez le setup.
+1. Press `F10`.
+2. Choose `Placement type: NPC`.
+3. Open the `NPC` section.
+4. Select a category, for example `Security / Police / Military`.
+5. Choose a model, for example a SWAT.
+6. Choose a weapon.
+7. Set the behavior to `Hostile patrol` or `Static / hostile on sight`.
+8. Set health, armor, and patrol radius.
+9. Start `Precise camera placement`.
+10. Place the NPC with `Enter` or left click.
+11. Repeat to create several guards.
+12. Save with `Save`.
 
 ---
 
-## Sauvegardes
+### Create a Guarded Base
 
-Le mod crée automatiquement un dossier de sauvegarde.
+1. Place cover objects.
+2. Place vehicles.
+3. Place neutral or allied NPCs.
+4. Add patrols.
+5. Add an entrance to an interior.
+6. Place an exit inside the interior.
+7. Save the setup.
 
-Le dossier prioritaire est généralement :
+---
+
+## Saves
+
+The mod automatically creates a save folder.
+
+The priority folder is usually:
 
 ```text
 Grand Theft Auto V Enhanced\Scripts\DonJEnemySpawnerSaves
 ```
 
-Si ce dossier n’est pas accessible en écriture, le mod peut utiliser un dossier de secours, par exemple :
+If this folder is not writable, the mod can use a fallback folder, for example:
 
 ```text
 Documents\Rockstar Games\GTA V Enhanced\DonJEnemySpawnerSaves
 ```
 
-ou :
+or:
 
 ```text
 %LOCALAPPDATA%\DonJEnemySpawner\Saves
 ```
 
-Vous pouvez aussi forcer un dossier de sauvegarde personnalisé avec la variable d’environnement :
+You can also force a custom save folder with the environment variable:
 
 ```text
 DONJ_ENEMY_SPAWNER_SAVE_DIR
@@ -884,94 +884,94 @@ DONJ_ENEMY_SPAWNER_SAVE_DIR
 
 ---
 
-## Nettoyage en jeu
+## In-Game Cleanup
 
-Le menu contient une section `Nettoyage`.
+The menu contains a `Cleanup` section.
 
-Elle permet de supprimer séparément :
+It lets you separately remove:
 
-- les PNJ placés ;
-- les véhicules placés ;
-- les objets placés ;
-- les entrées/sorties d’intérieurs.
+- placed NPCs;
+- placed vehicles;
+- placed objects;
+- interior entrances/exits.
 
 ---
 
-## Compatibilité
+## Compatibility
 
-Ce mod est prévu pour :
+This mod is designed for:
 
 ```text
 GTA V Enhanced
 Windows x64
-Mode histoire / solo
+Story mode / solo
 NIBScriptHookVDotNet API v2
 .NET Framework 4.8
 ```
 
-Compatibilité testée avec d’autres mods :
+Compatibility tested with other mods:
 
-- **JulioNIB Iron Man** ;
+- **JulioNIB Iron Man**;
 - **JulioNIB Superman**.
 
-Ces tests indiquent que **DonJ Custom NPC Placer** peut cohabiter avec ces mods en mode histoire quand les dépendances sont correctement installées. La compatibilité peut quand même dépendre des versions de GTA V Enhanced, ScriptHookV, NIBScriptHookVDotNet et des mods JulioNIB installés.
+These tests indicate that **DonJ Custom NPC Placer** can coexist with these mods in story mode when the dependencies are correctly installed. Compatibility can still depend on the versions of GTA V Enhanced, ScriptHookV, NIBScriptHookVDotNet, and the installed JulioNIB mods.
 
-Non garanti pour :
+Not guaranteed for:
 
-- GTA Online ;
-- FiveM ;
-- RageMP ;
-- anciennes versions non Enhanced ;
-- installations sans NIBScriptHookVDotNet2 ;
-- versions piratées ou modifiées du jeu.
+- GTA Online;
+- FiveM;
+- RageMP;
+- older non-Enhanced versions;
+- installations without NIBScriptHookVDotNet2;
+- pirated or modified versions of the game.
 
 ---
 
-## Build depuis le code source
+## Build from Source
 
-Le projet cible :
+The project targets:
 
 ```text
 .NET Framework 4.8
 ```
 
-Commande de build :
+Build command:
 
 ```powershell
 dotnet build GTA5modDEV.sln -c Release
 ```
 
-Commande de test :
+Test command:
 
 ```powershell
 dotnet test GTA5modDEV.sln -c Release
 ```
 
-### Validation sécurité et non-régression
+### Safety and Non-Regression Validation
 
-Avant chaque ajout ou livraison, lancez la suite complète hors jeu :
+Before each addition or delivery, run the full headless suite:
 
 ```powershell
 .\tools\run-safety-checks.ps1
 ```
 
-Si Windows bloque l'exécution des scripts PowerShell sur votre poste, lancez la même suite avec une politique limitée au processus courant :
+If Windows blocks PowerShell script execution on your machine, run the same suite with a policy limited to the current process:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run-safety-checks.ps1
 ```
 
-Cette commande restaure, compile et teste en `Release`, déploie le `.ENdll` dans un dossier temporaire et vérifie que les anciens fichiers `DonJEnemySpawner.*` ne réapparaissent pas dans le pipeline.
+This command restores, builds, and tests in `Release`, deploys the `.ENdll` to a temporary folder, and verifies that old `DonJEnemySpawner.*` files do not reappear in the pipeline.
 
-Le fichier généré se trouve ici :
+The generated file is here:
 
 ```text
 src\DonJEnemySpawner\bin\Release\DonJCustomNpcPlacer.ENdll
 ```
 
-En configuration `Release`, le projet peut aussi déployer automatiquement le fichier vers le dossier `Scripts` si le chemin GTA est correctement détecté.
+In `Release` configuration, the project can also automatically deploy the file to the `Scripts` folder if the GTA path is correctly detected.
 
-Pour forcer un dossier GTA personnalisé :
+To force a custom GTA folder:
 
 ```powershell
 dotnet build GTA5modDEV.sln -c Release /p:GtaRoot="D:\Jeux\Grand Theft Auto V Enhanced"
@@ -979,32 +979,32 @@ dotnet build GTA5modDEV.sln -c Release /p:GtaRoot="D:\Jeux\Grand Theft Auto V En
 
 ---
 
-## Dépannage
+## Troubleshooting
 
-### Le menu ne s’ouvre pas avec F10
+### The Menu Does Not Open with F10
 
-Vérifiez que :
+Check that:
 
-- vous êtes en mode histoire ;
-- `DonJCustomNpcPlacer.ENdll` est bien dans le dossier `Scripts` ;
-- `NIBScriptHookVDotNet.asi` est installé ;
-- `NIBScriptHookVDotNet2.dll` est installé ;
-- `ScriptHookV.dll` est compatible avec votre version du jeu ;
-- aucun ancien fichier `DonJEnemySpawner.dll` ou `DonJEnemySpawner.ENdll` n’est encore présent.
+- you are in story mode;
+- `DonJCustomNpcPlacer.ENdll` is in the `Scripts` folder;
+- `NIBScriptHookVDotNet.asi` is installed;
+- `NIBScriptHookVDotNet2.dll` is installed;
+- `ScriptHookV.dll` is compatible with your game version;
+- no old `DonJEnemySpawner.dll` or `DonJEnemySpawner.ENdll` file is still present.
 
 ---
 
-### Le mod ne se charge pas
+### The Mod Does Not Load
 
-Pour regrouper automatiquement les logs utiles dans le projet sans lancer GTA, utilisez :
+To automatically gather useful logs into the project without launching GTA, use:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\collect-bug-logs.ps1 -Title "bug-court" -SinceHours 24
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\collect-bug-logs.ps1 -Title "short-bug" -SinceHours 24
 ```
 
-Les rapports sont créés dans `bug-reports\YYYYMMDD-HHMMSS-titre`. Ce dossier reste local et ignoré par Git pour éviter d'envoyer des logs personnels sur GitHub.
+Reports are created in `bug-reports\YYYYMMDD-HHMMSS-title`. This folder stays local and is ignored by Git to avoid sending personal logs to GitHub.
 
-Consultez les logs suivants :
+Check the following logs:
 
 ```text
 Grand Theft Auto V Enhanced\NIBScriptHookVDotNet.log
@@ -1012,27 +1012,27 @@ Grand Theft Auto V Enhanced\ScriptHookV.log
 Grand Theft Auto V Enhanced\Scripts\*.log
 ```
 
-Si vous utilisez d’autres mods, vérifiez aussi leurs logs éventuels.
+If you use other mods, also check their possible logs.
 
 ---
 
-### Un modèle custom n’apparaît pas
+### A Custom Model Does Not Appear
 
-Vérifiez que :
+Check that:
 
-- le modèle add-on est bien installé ;
-- son nom est exact ;
-- le modèle est chargeable par le jeu ;
-- vous avez bien sélectionné `Custom` dans le menu NPC ;
-- vous avez appuyé sur `T` pour entrer le nom du modèle.
+- the add-on model is correctly installed;
+- its name is exact;
+- the model can be loaded by the game;
+- you selected `Custom` in the NPC menu;
+- you pressed `T` to enter the model name.
 
 ---
 
-### Une sauvegarde ne se crée pas
+### A Save Is Not Created
 
-Vérifiez que le dossier `Scripts` est accessible en écriture.
+Check that the `Scripts` folder is writable.
 
-Si Windows bloque l’écriture dans le dossier du jeu, utilisez un dossier de sauvegarde personnalisé avec :
+If Windows blocks writing to the game folder, use a custom save folder with:
 
 ```text
 DONJ_ENEMY_SPAWNER_SAVE_DIR
@@ -1040,19 +1040,19 @@ DONJ_ENEMY_SPAWNER_SAVE_DIR
 
 ---
 
-## Signaler un bug
+## Report a Bug
 
-Pour signaler un problème, ouvrez une issue GitHub avec :
+To report a problem, open a GitHub issue with:
 
-- votre version de GTA V Enhanced ;
-- votre version de ScriptHookV ;
-- votre version de NIBScriptHookVDotNet ;
-- une description précise du bug ;
-- les étapes pour reproduire ;
-- les fichiers de logs utiles ;
-- une capture d’écran si possible.
+- your GTA V Enhanced version;
+- your ScriptHookV version;
+- your NIBScriptHookVDotNet version;
+- a precise description of the bug;
+- reproduction steps;
+- useful log files;
+- a screenshot if possible.
 
-Logs utiles :
+Useful logs:
 
 ```text
 NIBScriptHookVDotNet.log
@@ -1063,20 +1063,20 @@ menyooLog.txt
 
 ---
 
-## Crédits
+## Credits
 
-Mod développé DonJ
+Mod developed by DonJ
 
-Projet C# / .NET Framework 4.8 pour GTA V Enhanced, basé sur ScriptHookV et NIBScriptHookVDotNet API v2.
+C# / .NET Framework 4.8 project for GTA V Enhanced, based on ScriptHookV and NIBScriptHookVDotNet API v2.
 
 ---
 
-## Licence
+## License
 
-Ce projet est distribué sous une licence personnalisée **source ouverte, non commerciale, avec attribution obligatoire**.
+This project is distributed under a custom **open source, non-commercial license with mandatory attribution**.
 
-Vous pouvez utiliser le mod gratuitement en mode solo, consulter le code source, partager le mod gratuitement, le modifier et publier une version modifiée gratuite, à condition de garder le nom de **DonJ** associé au projet original.
+You may use the mod for free in single-player mode, read the source code, share the mod for free, modify it, and publish a free modified version, as long as the **DonJ** name remains associated with the original project.
 
-Vous n’êtes pas autorisé à vendre le mod, vendre une version modifiée, retirer les crédits, vous présenter comme le créateur original ou mettre le mod derrière un accès payant sans autorisation écrite préalable de DonJ.
+You are not allowed to sell the mod, sell a modified version, remove credits, present yourself as the original creator, or put the mod behind paid access without prior written authorization from DonJ.
 
-Voir le fichier [`LICENSE`](LICENSE) pour les conditions complètes.
+See the [`LICENSE`](LICENSE) file for the full terms.
