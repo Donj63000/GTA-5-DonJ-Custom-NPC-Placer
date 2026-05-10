@@ -27,7 +27,7 @@ public sealed partial class DonJEnemySpawner : Script
 
     private const int HighSecurityEscortBallerCount = 4;
     private const int HighSecurityEscortBallerOccupantCount = 4;
-    private const int HighSecurityEscortLimousineGuardCount = 3;
+    private const int HighSecurityEscortLimousineGuardCount = 4;
 
     private const int HighSecurityEscortGuardHealth = CartelGuardHealth;
     private const int HighSecurityEscortGuardArmor = CartelGuardArmor;
@@ -86,6 +86,18 @@ public sealed partial class DonJEnemySpawner : Script
     private const float HighSecurityEscortOnFootReturnToVehicleDistance = 24.0f;
     private const float HighSecurityEscortLimousineEntryAssistDistance = 10.0f;
 
+    /*
+     * Convoi limousine V3 : une seule file propre sur route.
+     * Ces distances évitent les spawns dispersés, les SUV qui se mettent en
+     * parallèle sur le trottoir, et les freinages trop tardifs autour du joueur.
+     */
+    private const float HighSecurityEscortConvoyLineSpawnSpacing = 13.5f;
+    private const float HighSecurityEscortArrivalLimoRoadStopDistance = 7.5f;
+    private const float HighSecurityEscortArrivalConvoySpacing = 13.0f;
+    private const float HighSecurityEscortRushRouteSpeed = 25.5f;
+    private const float HighSecurityEscortRushFormationCatchupSpeed = 31.0f;
+    private const float HighSecurityEscortRushCloseSpeed = 11.0f;
+
     private const float HighSecurityEscortDestinationArriveDistance = 10.5f;
     private const float HighSecurityEscortFootExitDistance = CartelVehicleFootExitDistance;
     private const float HighSecurityEscortVehicleApproachDistance = 72.0f;
@@ -102,13 +114,12 @@ public sealed partial class DonJEnemySpawner : Script
     private const int HighSecurityEscortDrivingStyle = ProfessionalDrivingStyle;
 
     /*
-     * Conduite convoi V2.
-     * 786469 garde une conduite propre et route-based, mais enlève le côté trop
-     * scolaire du style 786603 : le chauffeur ne reste plus planté aux feux
-     * quand le VIP est en route. 2883621 est réservé aux embuscades : plus
-     * pressé, plus agressif, mais toujours moins suicidaire que le style
-     * "reckless" 1074528293.
+     * Conduite convoi V3.
+     * - Normal : style professionnel, respect du trafic et des feux, comportement taxi.
+     * - Urgence (Espace) : style taxi rapide, dépassements propres, feux ignorés.
+     * - Combat : style escorte agressive, réservé aux embuscades.
      */
+    private const int HighSecurityEscortCalmTaxiDrivingStyle = ProfessionalDrivingStyle;
     private const int HighSecurityEscortFastTaxiDrivingStyle = 786469;
     private const int HighSecurityEscortCombatDrivingStyle = 2883621;
 
@@ -151,11 +162,16 @@ public sealed partial class DonJEnemySpawner : Script
     private const ulong NativeDoesBlipExist = 0xA6DB27D19ECBB7DAUL;
     private const ulong NativeGetBlipCoords = 0x586AFE3FF72D996EUL;
     private const ulong NativeDisableControlAction = 0xFE99B66D079CF6BCUL;
+    private const ulong NativeTaskVehicleShootAtPed = 0x10AB107B887214D8UL;
+    private const ulong NativeStartVehicleHorn = 0x9C8C6504B5B63D2CUL;
 
     private bool _highSecurityEscortPhoneKeyLatch;
     private bool _highSecurityEscortRouteKeyLatch;
     private bool _highSecurityEscortEnterKeyLatch;
+    private bool _highSecurityEscortRushKeyLatch;
     private bool _highSecurityEscortPlayerDeathDismissed;
+    private bool _highSecurityEscortRushMode;
+    private bool _highSecurityEscortArrivalAnnounced;
 
     private bool _highSecurityEscortActive;
     private bool _highSecurityEscortDismissing;
@@ -167,6 +183,7 @@ public sealed partial class DonJEnemySpawner : Script
     private int _highSecurityEscortDismissStartedAt;
     private int _highSecurityEscortDismissCleanupAt;
     private int _highSecurityEscortLimousineHandle;
+    private int _highSecurityEscortLimousineTurretGuardHandle;
     private int _highSecurityEscortPlayerSeat = 1;
 
     private bool _highSecurityEscortDestinationActive;
@@ -213,6 +230,12 @@ public sealed partial class DonJEnemySpawner : Script
         "baller6",
         "baller5"
     };
+
+    private sealed class HighSecurityEscortConvoySpawnSlot
+    {
+        public Vector3 Position;
+        public float Heading;
+    }
 
     private bool IsHighSecurityEscortPedHandle(int handle)
     {
@@ -298,15 +321,15 @@ public sealed partial class DonJEnemySpawner : Script
 
         int createdVehicles = 0;
         int createdGuards = 0;
+        HighSecurityEscortConvoySpawnSlot[] spawnSlots = BuildHighSecurityEscortConvoySpawnLayout(player);
 
-        Vector3 limoSpawnPosition = FindHighSecurityEscortVehicleSpawnPosition(player, 0);
-        float limoHeading = HeadingFromTo(limoSpawnPosition, player.Position);
+        HighSecurityEscortConvoySpawnSlot limoSlot = spawnSlots[0];
         VehicleIdentity limoIdentity;
         Vehicle limousine = CreateHighSecurityEscortVehicle(
             HighSecurityEscortLimousineModelNames,
             "Limousine blindée haute sécurité",
-            limoSpawnPosition,
-            limoHeading,
+            limoSlot.Position,
+            limoSlot.Heading,
             out limoIdentity);
 
         if (!Entity.Exists(limousine))
@@ -315,7 +338,7 @@ public sealed partial class DonJEnemySpawner : Script
             return;
         }
 
-        RegisterPlacedVehicle(limousine, limoIdentity, limoSpawnPosition, limoHeading, false, false);
+        RegisterPlacedVehicle(limousine, limoIdentity, limoSlot.Position, limoSlot.Heading, false, false);
         RegisterHighSecurityEscortVehicle(limousine, HighSecurityEscortVehicleRoleLimousine);
         ConfigureHighSecurityEscortVehicle(limousine, true);
         _highSecurityEscortLimousineHandle = limousine.Handle;
@@ -323,11 +346,25 @@ public sealed partial class DonJEnemySpawner : Script
         createdVehicles++;
 
         List<int> limoGuardSeats = BuildHighSecurityEscortLimousineGuardSeats(limousine, _highSecurityEscortPlayerSeat);
+        bool turretPassengerSelected = false;
 
         for (int i = 0; i < limoGuardSeats.Count && createdGuards < HighSecurityEscortLimousineGuardCount; i++)
         {
-            if (SpawnHighSecurityEscortGuardIntoVehicle(limousine, limoGuardSeats[i], createdGuards))
+            int seat = limoGuardSeats[i];
+
+            if (SpawnHighSecurityEscortGuardIntoVehicle(limousine, seat, createdGuards))
             {
+                if (!turretPassengerSelected && seat != -1)
+                {
+                    int occupantHandle;
+
+                    if (TryGetHighSecurityEscortSeatOccupantHandle(limousine, seat, out occupantHandle) && occupantHandle != 0)
+                    {
+                        _highSecurityEscortLimousineTurretGuardHandle = occupantHandle;
+                        turretPassengerSelected = true;
+                    }
+                }
+
                 createdGuards++;
             }
         }
@@ -335,14 +372,13 @@ public sealed partial class DonJEnemySpawner : Script
         for (int ballerIndex = 0; ballerIndex < HighSecurityEscortBallerCount; ballerIndex++)
         {
             int role = HighSecurityEscortVehicleRoleFrontLeft + ballerIndex;
-            Vector3 spawnPosition = FindHighSecurityEscortVehicleSpawnPosition(player, ballerIndex + 1);
-            float heading = HeadingFromTo(spawnPosition, player.Position);
+            HighSecurityEscortConvoySpawnSlot slot = spawnSlots[Math.Min(ballerIndex + 1, spawnSlots.Length - 1)];
             VehicleIdentity ballerIdentity;
             Vehicle baller = CreateHighSecurityEscortVehicle(
                 HighSecurityEscortBallerModelNames,
                 "Baller8 noir haute sécurité",
-                spawnPosition,
-                heading,
+                slot.Position,
+                slot.Heading,
                 out ballerIdentity);
 
             if (!Entity.Exists(baller))
@@ -350,7 +386,7 @@ public sealed partial class DonJEnemySpawner : Script
                 continue;
             }
 
-            RegisterPlacedVehicle(baller, ballerIdentity, spawnPosition, heading, false, false);
+            RegisterPlacedVehicle(baller, ballerIdentity, slot.Position, slot.Heading, false, false);
             RegisterHighSecurityEscortVehicle(baller, role);
             ConfigureHighSecurityEscortVehicle(baller, false);
             createdVehicles++;
@@ -395,6 +431,9 @@ public sealed partial class DonJEnemySpawner : Script
         _highSecurityEscortMode = HighSecurityEscortModeArriving;
         _highSecurityEscortDestinationActive = false;
         _highSecurityEscortDestination = Vector3.Zero;
+        _highSecurityEscortRushMode = false;
+        _highSecurityEscortRushKeyLatch = false;
+        _highSecurityEscortArrivalAnnounced = false;
         _highSecurityEscortPlayerDeathDismissed = false;
         _nextHighSecurityEscortThinkAt = 0;
         _highSecurityEscortCachedThreatPed = null;
@@ -406,11 +445,11 @@ public sealed partial class DonJEnemySpawner : Script
         OrderHighSecurityEscortArrivalToPlayer(player, true);
 
         ShowStatus(
-            "Escorte haute sécurité appelée : limousine blindée + " +
+            "Escorte haute sécurité appelée : convoi aligné sur route, limousine blindée + " +
             HighSecurityEscortBallerCount.ToString(CultureInfo.InvariantCulture) +
             " Baller8 noirs, " +
             createdGuards.ToString(CultureInfo.InvariantCulture) +
-            " hommes Cartel, Service Carbine + Machine Pistol, 500 vie / 200 armure. Monte à l'arrière avec F.",
+            " hommes Cartel. Monte à l'arrière avec F.",
             8000);
     }
 
@@ -808,6 +847,142 @@ public sealed partial class DonJEnemySpawner : Script
         return fallback;
     }
 
+    private HighSecurityEscortConvoySpawnSlot[] BuildHighSecurityEscortConvoySpawnLayout(Ped player)
+    {
+        int slotCount = HighSecurityEscortBallerCount + 1;
+        HighSecurityEscortConvoySpawnSlot[] slots = new HighSecurityEscortConvoySpawnSlot[slotCount];
+
+        for (int i = 0; i < slotCount; i++)
+        {
+            slots[i] = new HighSecurityEscortConvoySpawnSlot();
+        }
+
+        if (!Entity.Exists(player))
+        {
+            return slots;
+        }
+
+        Vector3 baseRoadPoint;
+        Vector3 travelDirection;
+        float heading;
+
+        if (TryFindHighSecurityEscortConvoyRoadLine(player, out baseRoadPoint, out travelDirection, out heading))
+        {
+            for (int i = 0; i < slotCount; i++)
+            {
+                Vector3 desired = baseRoadPoint - travelDirection * (HighSecurityEscortConvoyLineSpawnSpacing * i);
+                Vector3 snapped;
+
+                if (TryGetClosestVehicleNode(desired, 0, out snapped) && snapped.DistanceTo(desired) <= 24.0f)
+                {
+                    desired = snapped;
+                }
+
+                slots[i].Position = desired + new Vector3(0.0f, 0.0f, 0.45f);
+                slots[i].Heading = heading;
+            }
+
+            return slots;
+        }
+
+        for (int i = 0; i < slotCount; i++)
+        {
+            Vector3 spawnPosition = FindHighSecurityEscortVehicleSpawnPosition(player, i);
+            slots[i].Position = spawnPosition;
+            slots[i].Heading = HeadingFromTo(spawnPosition, player.Position);
+        }
+
+        return slots;
+    }
+
+    private bool TryFindHighSecurityEscortConvoyRoadLine(Ped player, out Vector3 baseRoadPoint, out Vector3 travelDirection, out float heading)
+    {
+        baseRoadPoint = Vector3.Zero;
+        travelDirection = Vector3.Zero;
+        heading = 0.0f;
+
+        if (!Entity.Exists(player))
+        {
+            return false;
+        }
+
+        for (int attempt = 0; attempt < 8; attempt++)
+        {
+            Vector3 candidate;
+
+            if (!TryFindHiddenRoadPointNearPlayer(
+                player,
+                91 + attempt * 17,
+                HighSecurityEscortSpawnMinDistance,
+                HighSecurityEscortSpawnMaxDistance,
+                out candidate))
+            {
+                continue;
+            }
+
+            Vector3 direction = Normalize(player.Position - candidate);
+
+            if (direction.Length() < 0.001f)
+            {
+                direction = Normalize(-GetGameplayCameraForwardVector());
+            }
+
+            if (direction.Length() < 0.001f)
+            {
+                direction = DirectionFromHeading(player.Heading);
+            }
+
+            if (direction.Length() < 0.001f)
+            {
+                direction = new Vector3(0.0f, 1.0f, 0.0f);
+            }
+
+            bool valid = true;
+            int slotCount = HighSecurityEscortBallerCount + 1;
+
+            for (int i = 0; i < slotCount; i++)
+            {
+                Vector3 desired = candidate - direction * (HighSecurityEscortConvoyLineSpawnSpacing * i);
+                Vector3 snapped;
+
+                if (TryGetClosestVehicleNode(desired, 0, out snapped) && snapped.DistanceTo(desired) <= 24.0f)
+                {
+                    desired = snapped;
+                }
+
+                if (IsPointInPlayerView(player, desired) || desired.DistanceTo(player.Position) < HighSecurityEscortSpawnMinDistance * 0.68f)
+                {
+                    valid = false;
+                    break;
+                }
+            }
+
+            if (!valid)
+            {
+                continue;
+            }
+
+            baseRoadPoint = candidate;
+            travelDirection = direction;
+            heading = HeadingFromDirection(direction);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static float HeadingFromDirection(Vector3 direction)
+    {
+        Vector3 normalized = Normalize(new Vector3(direction.X, direction.Y, 0.0f));
+
+        if (normalized.Length() < 0.001f)
+        {
+            return 0.0f;
+        }
+
+        return NormalizeHeading((float)(Math.Atan2(normalized.X, normalized.Y) * 180.0 / Math.PI));
+    }
+
     private int FindHighSecurityEscortPlayerSeat(Vehicle limousine)
     {
         if (!Entity.Exists(limousine))
@@ -834,10 +1009,16 @@ public sealed partial class DonJEnemySpawner : Script
     private List<int> BuildHighSecurityEscortLimousineGuardSeats(Vehicle limousine, int playerSeat)
     {
         List<int> seats = new List<int>();
+
+        /*
+         * Le chauffeur est toujours créé en premier. Ensuite on privilégie une
+         * place haute/arrière libre pour le garde "tourelle", puis les autres
+         * places passager sans jamais prendre le siège réservé au joueur.
+         */
         seats.Add(-1);
 
         int passengerCount = Entity.Exists(limousine) ? Math.Max(0, GetVehicleSeatCapacityIncludingDriver(limousine) - 1) : 3;
-        int[] preferred = { 0, 2, 3, 4, 5, 6, 7 };
+        int[] preferred = { 2, 0, 3, 4, 5, 6, 7, 1 };
 
         for (int i = 0; i < preferred.Length && seats.Count < HighSecurityEscortLimousineGuardCount; i++)
         {
@@ -906,6 +1087,7 @@ public sealed partial class DonJEnemySpawner : Script
 
             AssistPlayerEnterHighSecurityLimousine(player);
             HandleHighSecurityEscortRouteValidationInput(player);
+            HandleHighSecurityEscortRushInput(player);
             DrawHighSecurityEscortRuntimeOverlay(player);
 
             if (Game.GameTime < _nextHighSecurityEscortThinkAt)
@@ -1250,6 +1432,59 @@ public sealed partial class DonJEnemySpawner : Script
         StartHighSecurityEscortRoute(destination);
     }
 
+    private void HandleHighSecurityEscortRushInput(Ped player)
+    {
+        if (!Entity.Exists(player) ||
+            !IsPlayerInHighSecurityEscortLimousine(player) ||
+            !_highSecurityEscortDestinationActive)
+        {
+            if (!Game.IsKeyPressed(Keys.Space))
+            {
+                _highSecurityEscortRushKeyLatch = false;
+            }
+
+            return;
+        }
+
+        bool pressed = Game.IsKeyPressed(Keys.Space);
+
+        if (!pressed)
+        {
+            _highSecurityEscortRushKeyLatch = false;
+            return;
+        }
+
+        if (_highSecurityEscortRushKeyLatch || IsPlayerPhoneOpen(player))
+        {
+            return;
+        }
+
+        _highSecurityEscortRushKeyLatch = true;
+        _highSecurityEscortRushMode = !_highSecurityEscortRushMode;
+        ResetHighSecurityEscortVehicleOrderCache();
+        _nextHighSecurityEscortThinkAt = 0;
+
+        OrderHighSecurityConvoyToDestination(true);
+
+        ShowStatus(
+            _highSecurityEscortRushMode
+                ? "Escorte haute sécurité : mode urgence activé, le chauffeur se dépêche."
+                : "Escorte haute sécurité : conduite normale réactivée, le chauffeur respecte le trafic.",
+            4200);
+    }
+
+    private void ResetHighSecurityEscortVehicleOrderCache()
+    {
+        List<int> vehicleHandles = new List<int>(_highSecurityEscortVehicleHandles);
+
+        for (int i = 0; i < vehicleHandles.Count; i++)
+        {
+            int handle = vehicleHandles[i];
+            _highSecurityEscortNextVehicleOrderAt[handle] = 0;
+            _highSecurityEscortLastVehicleOrderTarget[handle] = Vector3.Zero;
+        }
+    }
+
     private bool TryGetHighSecurityEscortWaypoint(out Vector3 destination)
     {
         destination = Vector3.Zero;
@@ -1289,6 +1524,8 @@ public sealed partial class DonJEnemySpawner : Script
     {
         _highSecurityEscortDestination = destination;
         _highSecurityEscortDestinationActive = true;
+        _highSecurityEscortRushMode = false;
+        _highSecurityEscortRushKeyLatch = false;
         _highSecurityEscortMode = HighSecurityEscortModeConvoyRoute;
         _nextHighSecurityEscortThinkAt = 0;
 
@@ -1493,8 +1730,17 @@ public sealed partial class DonJEnemySpawner : Script
 
             candidate.BodyguardAssignedSeat = -1;
             candidate.BodyguardIsDriver = true;
-            PutPedIntoVehicleSafe(candidate.Ped, vehicle, -1);
-            ConfigureHighSecurityEscortDriver(candidate.Ped);
+
+            if (CanTeleportHighSecurityEscortGuardIntoVehicleWithoutBeingSeen(candidate.Ped, vehicle))
+            {
+                PutPedIntoVehicleSafe(candidate.Ped, vehicle, -1);
+                ConfigureHighSecurityEscortDriver(candidate.Ped);
+            }
+            else
+            {
+                CommandHighSecurityEscortGuardEnterAssignedVehicle(candidate, vehicle, true, false);
+            }
+
             return;
         }
     }
@@ -1513,7 +1759,8 @@ public sealed partial class DonJEnemySpawner : Script
             if (_highSecurityEscortDestinationActive)
             {
                 float distance = player.Position.DistanceTo(_highSecurityEscortDestination);
-                line = "Escorte haute sécurité : convoi en route | distance " + distance.ToString("0", CultureInfo.InvariantCulture) + " m";
+                string rushText = _highSecurityEscortRushMode ? "urgence active | Espace : calmer" : "conduite normale | Espace : urgence";
+                line = "Escorte haute sécurité : convoi en route | " + rushText + " | distance " + distance.ToString("0", CultureInfo.InvariantCulture) + " m";
             }
             else
             {
@@ -2334,6 +2581,11 @@ public sealed partial class DonJEnemySpawner : Script
             return false;
         }
 
+        if (IsHighSecurityEscortLimousineTurretGuard(passenger))
+        {
+            return false;
+        }
+
         bool isLimousine = IsHighSecurityEscortLimousineVehicle(vehicle);
         bool vehicleBlocked = IsHighSecurityEscortVehicleBlockedOrStuckForCombat(vehicle);
         float threatToVehicle = threat.Position.DistanceTo(vehicle.Position);
@@ -2450,6 +2702,11 @@ public sealed partial class DonJEnemySpawner : Script
             }
         }
 
+        if (IsHighSecurityEscortLimousineTurretGuard(passenger) && StartHighSecurityEscortLimousineTurretFire(passenger, threat))
+        {
+            return;
+        }
+
         try
         {
             Function.Call(
@@ -2474,6 +2731,49 @@ public sealed partial class DonJEnemySpawner : Script
             catch
             {
             }
+        }
+    }
+
+    private bool IsHighSecurityEscortLimousineTurretGuard(Ped ped)
+    {
+        return Entity.Exists(ped) && _highSecurityEscortLimousineTurretGuardHandle != 0 && ped.Handle == _highSecurityEscortLimousineTurretGuardHandle;
+    }
+
+    private bool StartHighSecurityEscortLimousineTurretFire(Ped passenger, Ped threat)
+    {
+        if (!Entity.Exists(passenger) || !Entity.Exists(threat) || threat.IsDead)
+        {
+            return false;
+        }
+
+        try
+        {
+            Function.Call((Hash)NativeTaskVehicleShootAtPed, passenger.Handle, threat.Handle, 25.0f);
+            return true;
+        }
+        catch
+        {
+        }
+
+        try
+        {
+            Function.Call(
+                Hash.TASK_DRIVE_BY,
+                passenger.Handle,
+                threat.Handle,
+                0,
+                0.0f,
+                0.0f,
+                0.0f,
+                HighSecurityEscortDriveByDistance + 22.0f,
+                100,
+                true,
+                HighSecurityEscortFullAutoFiringPattern);
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -2604,6 +2904,8 @@ public sealed partial class DonJEnemySpawner : Script
         if (distance <= HighSecurityEscortDestinationArriveDistance)
         {
             _highSecurityEscortDestinationActive = false;
+            _highSecurityEscortRushMode = false;
+            _highSecurityEscortRushKeyLatch = false;
             _highSecurityEscortMode = HighSecurityEscortModeStandby;
             StopHighSecurityEscortConvoyAtDestination();
             ShowStatus("Escorte haute sécurité : destination atteinte.", 4500);
@@ -2767,18 +3069,26 @@ public sealed partial class DonJEnemySpawner : Script
         ConfigureHighSecurityEscortDriver(driver, combatMode);
         RecordHighSecurityEscortVehicleOrderTarget(vehicle, desired);
 
+        bool rushMode = IsHighSecurityEscortRushModeActive(combatMode);
         float targetSpeed = Math.Max(0.0f, targetVehicle.Speed);
-        float maxCatchup = combatMode ? HighSecurityEscortCombatFormationCatchupSpeed : HighSecurityEscortSmoothFormationCatchupSpeed;
-        float baseSpeed = combatMode ? HighSecurityEscortSmoothConvoyDriveSpeed + 6.2f : HighSecurityEscortSmoothConvoyDriveSpeed;
-        float convoySpeed = ClampFloat(targetSpeed * (combatMode ? 1.10f : 1.04f) + (combatMode ? 7.0f : 5.2f), baseSpeed, maxCatchup);
+        float maxCatchup = combatMode
+            ? HighSecurityEscortCombatFormationCatchupSpeed
+            : (rushMode ? HighSecurityEscortRushFormationCatchupSpeed : HighSecurityEscortSmoothFormationCatchupSpeed);
+        float baseSpeed = combatMode
+            ? HighSecurityEscortSmoothConvoyDriveSpeed + 6.2f
+            : (rushMode ? HighSecurityEscortRushRouteSpeed : HighSecurityEscortSmoothConvoyDriveSpeed);
+        float convoySpeed = ClampFloat(
+            targetSpeed * (combatMode ? 1.10f : (rushMode ? 1.08f : 1.04f)) + (combatMode ? 7.0f : (rushMode ? 6.6f : 5.2f)),
+            baseSpeed,
+            maxCatchup);
 
         if (distanceToFormation <= 16.0f)
         {
-            convoySpeed = Math.Min(convoySpeed, combatMode ? HighSecurityEscortCombatCloseSpeed : 8.5f);
+            convoySpeed = Math.Min(convoySpeed, combatMode ? HighSecurityEscortCombatCloseSpeed : (rushMode ? HighSecurityEscortRushCloseSpeed : 8.5f));
         }
         else if (distanceToFormation <= 34.0f)
         {
-            convoySpeed = Math.Min(convoySpeed, combatMode ? 15.0f : 12.5f);
+            convoySpeed = Math.Min(convoySpeed, combatMode ? 15.0f : (rushMode ? 17.0f : 12.5f));
         }
 
         float escortSpacing = GetHighSecurityEscortFormationSpacing(role, combatMode);
@@ -2841,27 +3151,13 @@ public sealed partial class DonJEnemySpawner : Script
             forward = DirectionFromHeading(targetVehicle.Heading);
         }
 
-        Vector3 right = Normalize(new Vector3(forward.Y, -forward.X, 0.0f));
-        float compact = combatMode ? 0.72f : 1.0f;
-        float side = combatMode ? 3.2f : 4.2f;
-
-        switch (role)
-        {
-            case HighSecurityEscortVehicleRoleFrontLeft:
-                return targetVehicle.Position - forward * (10.0f * compact) - right * side;
-
-            case HighSecurityEscortVehicleRoleFrontRight:
-                return targetVehicle.Position - forward * (16.0f * compact) + right * side;
-
-            case HighSecurityEscortVehicleRoleRearLeft:
-                return targetVehicle.Position - forward * (24.0f * compact) - right * side;
-
-            case HighSecurityEscortVehicleRoleRearRight:
-                return targetVehicle.Position - forward * (32.0f * compact) + right * side;
-
-            default:
-                return targetVehicle.Position - forward * (20.0f * compact);
-        }
+        /*
+         * File propre derrière la limousine : pas de placement latéral forcé.
+         * Les anciennes positions gauche/droite poussaient les SUV à sortir de
+         * voie ou à couper par le trottoir dans les rues étroites.
+         */
+        float backDistance = GetHighSecurityEscortFormationBackDistance(role, combatMode);
+        return targetVehicle.Position - forward * backDistance;
     }
 
     private float GetHighSecurityEscortFormationSpacing(int role)
@@ -2871,24 +3167,29 @@ public sealed partial class DonJEnemySpawner : Script
 
     private float GetHighSecurityEscortFormationSpacing(int role, bool combatMode)
     {
-        float multiplier = combatMode ? 0.72f : 1.0f;
+        return GetHighSecurityEscortFormationBackDistance(role, combatMode);
+    }
+
+    private float GetHighSecurityEscortFormationBackDistance(int role, bool combatMode)
+    {
+        float multiplier = combatMode ? 0.78f : 1.0f;
 
         switch (role)
         {
             case HighSecurityEscortVehicleRoleFrontLeft:
-                return 10.0f * multiplier;
+                return 12.0f * multiplier;
 
             case HighSecurityEscortVehicleRoleFrontRight:
-                return 16.0f * multiplier;
-
-            case HighSecurityEscortVehicleRoleRearLeft:
                 return 24.0f * multiplier;
 
+            case HighSecurityEscortVehicleRoleRearLeft:
+                return 36.0f * multiplier;
+
             case HighSecurityEscortVehicleRoleRearRight:
-                return 32.0f * multiplier;
+                return 48.0f * multiplier;
 
             default:
-                return 20.0f * multiplier;
+                return 30.0f * multiplier;
         }
     }
 
@@ -2963,6 +3264,8 @@ public sealed partial class DonJEnemySpawner : Script
             int role = GetHighSecurityEscortVehicleRole(vehicle.Handle);
             IssueHighSecurityFormationDriveOrder(vehicle, limousine, role, false);
         }
+
+        MaybeAnnounceHighSecurityEscortArrival(player);
     }
 
     private void UpdateHighSecurityEscortPlayerVehicleFollow(Ped player)
@@ -3220,6 +3523,13 @@ public sealed partial class DonJEnemySpawner : Script
             return Vector3.Zero;
         }
 
+        Vector3 roadTarget;
+
+        if (TryCalculateHighSecurityArrivalRoadTarget(vehicle, player, out roadTarget))
+        {
+            return roadTarget;
+        }
+
         Vector3 forward = Normalize(player.ForwardVector);
 
         if (forward.Length() < 0.001f)
@@ -3227,32 +3537,99 @@ public sealed partial class DonJEnemySpawner : Script
             forward = DirectionFromHeading(player.Heading);
         }
 
-        Vector3 right = Normalize(new Vector3(forward.Y, -forward.X, 0.0f));
         int role = Entity.Exists(vehicle) ? GetHighSecurityEscortVehicleRole(vehicle.Handle) : HighSecurityEscortVehicleRoleLimousine;
+        return player.Position - forward * GetHighSecurityEscortArrivalBackDistance(role);
+    }
 
-        /*
-         * Arrivée autour du joueur : on évite de placer des véhicules devant lui.
-         * Sur route, les points avant déclenchent souvent des dépassements agressifs.
-         */
+    private bool TryCalculateHighSecurityArrivalRoadTarget(Vehicle vehicle, Ped player, out Vector3 target)
+    {
+        target = Vector3.Zero;
+
+        if (!Entity.Exists(player))
+        {
+            return false;
+        }
+
+        Vector3 playerRoad;
+
+        if (!TryGetClosestVehicleNode(player.Position, 0, out playerRoad))
+        {
+            return false;
+        }
+
+        if (playerRoad.DistanceTo(player.Position) > 38.0f)
+        {
+            return false;
+        }
+
+        Vehicle limousine = FindVehicleByHandle(_highSecurityEscortLimousineHandle);
+        Vehicle referenceVehicle = Entity.Exists(limousine) ? limousine : vehicle;
+        Vector3 approach = Vector3.Zero;
+
+        if (Entity.Exists(referenceVehicle))
+        {
+            approach = Normalize(playerRoad - referenceVehicle.Position);
+        }
+
+        if (approach.Length() < 0.001f)
+        {
+            approach = Normalize(player.ForwardVector);
+        }
+
+        if (approach.Length() < 0.001f)
+        {
+            approach = DirectionFromHeading(player.Heading);
+        }
+
+        if (approach.Length() < 0.001f)
+        {
+            approach = new Vector3(0.0f, 1.0f, 0.0f);
+        }
+
+        Vector3 limoStopCandidate = playerRoad - approach * HighSecurityEscortArrivalLimoRoadStopDistance;
+        Vector3 limoStop;
+
+        if (!TryGetClosestVehicleNode(limoStopCandidate, 0, out limoStop) ||
+            limoStop.DistanceTo(limoStopCandidate) > 18.0f ||
+            limoStop.DistanceTo(player.Position) < 5.5f)
+        {
+            limoStop = limoStopCandidate;
+        }
+
+        int role = Entity.Exists(vehicle) ? GetHighSecurityEscortVehicleRole(vehicle.Handle) : HighSecurityEscortVehicleRoleLimousine;
+        Vector3 slotCandidate = limoStop - approach * GetHighSecurityEscortArrivalBackDistance(role);
+        Vector3 slotRoad;
+
+        if (TryGetClosestVehicleNode(slotCandidate, 0, out slotRoad) && slotRoad.DistanceTo(slotCandidate) <= 20.0f)
+        {
+            slotCandidate = slotRoad;
+        }
+
+        target = slotCandidate + new Vector3(0.0f, 0.0f, 0.35f);
+        return true;
+    }
+
+    private float GetHighSecurityEscortArrivalBackDistance(int role)
+    {
         switch (role)
         {
             case HighSecurityEscortVehicleRoleLimousine:
-                return player.Position - forward * 8.0f + right * 2.5f;
+                return 0.0f;
 
             case HighSecurityEscortVehicleRoleFrontLeft:
-                return player.Position - forward * 16.0f - right * 6.0f;
+                return HighSecurityEscortArrivalConvoySpacing;
 
             case HighSecurityEscortVehicleRoleFrontRight:
-                return player.Position - forward * 22.0f + right * 6.0f;
+                return HighSecurityEscortArrivalConvoySpacing * 2.0f;
 
             case HighSecurityEscortVehicleRoleRearLeft:
-                return player.Position - forward * 30.0f - right * 6.0f;
+                return HighSecurityEscortArrivalConvoySpacing * 3.0f;
 
             case HighSecurityEscortVehicleRoleRearRight:
-                return player.Position - forward * 38.0f + right * 6.0f;
+                return HighSecurityEscortArrivalConvoySpacing * 4.0f;
 
             default:
-                return player.Position - forward * 20.0f;
+                return HighSecurityEscortArrivalConvoySpacing * 2.0f;
         }
     }
 
@@ -3276,6 +3653,44 @@ public sealed partial class DonJEnemySpawner : Script
 
             ContinueHighSecurityVehicleNearPlayer(vehicle, player, HighSecurityEscortArrivalDriveSpeed, 8.0f, force);
         }
+
+        MaybeAnnounceHighSecurityEscortArrival(player);
+    }
+
+    private void MaybeAnnounceHighSecurityEscortArrival(Ped player)
+    {
+        if (_highSecurityEscortArrivalAnnounced || !Entity.Exists(player) || player.IsInVehicle())
+        {
+            return;
+        }
+
+        Vehicle limousine = FindVehicleByHandle(_highSecurityEscortLimousineHandle);
+
+        if (!Entity.Exists(limousine) || !IsVehicleDriveable(limousine))
+        {
+            return;
+        }
+
+        Vector3 target = CalculateHighSecurityArrivalTarget(limousine, player);
+        float distanceToTarget = limousine.Position.DistanceTo(target);
+        float distanceToPlayer = limousine.Position.DistanceTo(player.Position);
+
+        if (distanceToTarget > 10.5f || distanceToPlayer > 18.0f || limousine.Speed > 2.6f)
+        {
+            return;
+        }
+
+        _highSecurityEscortArrivalAnnounced = true;
+
+        try
+        {
+            Function.Call((Hash)NativeStartVehicleHorn, limousine.Handle, 450, Game.GenerateHash("HELDDOWN"), false);
+        }
+        catch
+        {
+        }
+
+        ShowStatus("Escorte haute sécurité : limousine arrivée sur la route. Monte à l'arrière avec F.", 5200);
     }
 
     private void ReturnHighSecurityEscortGuardsToVehicles(bool force)
@@ -3360,7 +3775,9 @@ public sealed partial class DonJEnemySpawner : Script
             return;
         }
 
-        if (teleportIfFar && npc.Ped.Position.DistanceTo(assignedVehicle.Position) > 18.0f)
+        if (teleportIfFar &&
+            npc.Ped.Position.DistanceTo(assignedVehicle.Position) > 18.0f &&
+            CanTeleportHighSecurityEscortGuardIntoVehicleWithoutBeingSeen(npc.Ped, assignedVehicle))
         {
             PutPedIntoVehicleSafe(npc.Ped, assignedVehicle, seat);
         }
@@ -3372,7 +3789,7 @@ public sealed partial class DonJEnemySpawner : Script
                     Hash.TASK_ENTER_VEHICLE,
                     npc.Ped.Handle,
                     assignedVehicle.Handle,
-                    9000,
+                    12000,
                     seat,
                     1.8f,
                     1,
@@ -3385,6 +3802,31 @@ public sealed partial class DonJEnemySpawner : Script
 
         npc.BodyguardAssignedSeat = seat;
         npc.BodyguardIsDriver = seat == -1;
+    }
+
+    private bool CanTeleportHighSecurityEscortGuardIntoVehicleWithoutBeingSeen(Ped ped, Vehicle vehicle)
+    {
+        if (!Entity.Exists(ped) || !Entity.Exists(vehicle))
+        {
+            return false;
+        }
+
+        Ped player = Game.Player.Character;
+
+        if (Entity.Exists(player))
+        {
+            if (ped.Position.DistanceTo(player.Position) < 58.0f || vehicle.Position.DistanceTo(player.Position) < 58.0f)
+            {
+                return false;
+            }
+        }
+
+        if (IsEntityLikelyVisibleToPlayer(ped) || IsEntityLikelyVisibleToPlayer(vehicle))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private int FindFreeHighSecurityEscortSeatForGuard(Vehicle vehicle)
@@ -3616,9 +4058,11 @@ public sealed partial class DonJEnemySpawner : Script
 
     private float CalculateHighSecurityEscortTaxiSpeed(Vehicle vehicle, Vector3 target, bool combatMode)
     {
+        bool rushMode = IsHighSecurityEscortRushModeActive(combatMode);
+
         if (!Entity.Exists(vehicle))
         {
-            return combatMode ? HighSecurityEscortCombatRouteSpeed : HighSecurityEscortSmoothConvoyDriveSpeed;
+            return combatMode ? HighSecurityEscortCombatRouteSpeed : (rushMode ? HighSecurityEscortRushRouteSpeed : HighSecurityEscortSmoothConvoyDriveSpeed);
         }
 
         float distance = vehicle.Position.DistanceTo(target);
@@ -3635,10 +4079,10 @@ public sealed partial class DonJEnemySpawner : Script
 
         if (distance >= 160.0f)
         {
-            return combatMode ? HighSecurityEscortCombatFormationCatchupSpeed : HighSecurityEscortSmoothFormationCatchupSpeed;
+            return combatMode ? HighSecurityEscortCombatFormationCatchupSpeed : (rushMode ? HighSecurityEscortRushFormationCatchupSpeed : HighSecurityEscortSmoothFormationCatchupSpeed);
         }
 
-        return combatMode ? HighSecurityEscortCombatRouteSpeed : HighSecurityEscortSmoothConvoyDriveSpeed;
+        return combatMode ? HighSecurityEscortCombatRouteSpeed : (rushMode ? HighSecurityEscortRushRouteSpeed : HighSecurityEscortSmoothConvoyDriveSpeed);
     }
 
     private bool CanIssueHighSecurityEscortPedOrder(Ped ped, bool force)
@@ -3677,8 +4121,9 @@ public sealed partial class DonJEnemySpawner : Script
 
         try
         {
+            bool rushMode = IsHighSecurityEscortRushModeActive(combatMode);
             Function.Call(Hash.SET_DRIVER_ABILITY, driver.Handle, 1.0f);
-            Function.Call(Hash.SET_DRIVER_AGGRESSIVENESS, driver.Handle, combatMode ? 0.34f : 0.13f);
+            Function.Call(Hash.SET_DRIVER_AGGRESSIVENESS, driver.Handle, combatMode ? 0.34f : (rushMode ? 0.28f : 0.08f));
             Function.Call(Hash.SET_DRIVE_TASK_DRIVING_STYLE, driver.Handle, GetHighSecurityEscortDrivingStyle(combatMode));
             Function.Call(Hash.SET_PED_CAN_BE_DRAGGED_OUT, driver.Handle, false);
             Function.Call(Hash.SET_PED_STAY_IN_VEHICLE_WHEN_JACKED, driver.Handle, true);
@@ -3688,9 +4133,21 @@ public sealed partial class DonJEnemySpawner : Script
         }
     }
 
+    private bool IsHighSecurityEscortRushModeActive(bool combatMode)
+    {
+        return !combatMode && _highSecurityEscortRushMode && _highSecurityEscortDestinationActive;
+    }
+
     private int GetHighSecurityEscortDrivingStyle(bool combatMode)
     {
-        return combatMode ? HighSecurityEscortCombatDrivingStyle : HighSecurityEscortFastTaxiDrivingStyle;
+        if (combatMode)
+        {
+            return HighSecurityEscortCombatDrivingStyle;
+        }
+
+        return IsHighSecurityEscortRushModeActive(false)
+            ? HighSecurityEscortFastTaxiDrivingStyle
+            : HighSecurityEscortCalmTaxiDrivingStyle;
     }
 
     private void RescueHighSecurityEscortVehicleIfNeeded(Vehicle vehicle, Ped player, int seedIndex)
@@ -4051,6 +4508,8 @@ public sealed partial class DonJEnemySpawner : Script
         _highSecurityEscortDismissing = true;
         _highSecurityEscortMode = HighSecurityEscortModeDismissing;
         _highSecurityEscortDestinationActive = false;
+        _highSecurityEscortRushMode = false;
+        _highSecurityEscortRushKeyLatch = false;
         _highSecurityEscortDestination = Vector3.Zero;
         _highSecurityEscortDismissStartedAt = Game.GameTime;
         _highSecurityEscortDismissCleanupAt = Game.GameTime + HighSecurityEscortDismissForceCleanupMs;
@@ -4346,7 +4805,10 @@ public sealed partial class DonJEnemySpawner : Script
         _highSecurityEscortMode = HighSecurityEscortModeNone;
         _highSecurityEscortDestinationActive = false;
         _highSecurityEscortDestination = Vector3.Zero;
+        _highSecurityEscortRushMode = false;
+        _highSecurityEscortArrivalAnnounced = false;
         _highSecurityEscortLimousineHandle = 0;
+        _highSecurityEscortLimousineTurretGuardHandle = 0;
         _highSecurityEscortPlayerSeat = 1;
         _highSecurityEscortCachedThreatPed = null;
         _highSecurityEscortCachedThreatUntil = 0;
@@ -4358,6 +4820,7 @@ public sealed partial class DonJEnemySpawner : Script
         _highSecurityEscortPhoneKeyLatch = false;
         _highSecurityEscortRouteKeyLatch = false;
         _highSecurityEscortEnterKeyLatch = false;
+        _highSecurityEscortRushKeyLatch = false;
     }
 
     private void RemoveHighSecurityEscortNpcRecord(int handle, bool deleteEntity)
@@ -4369,6 +4832,11 @@ public sealed partial class DonJEnemySpawner : Script
         _highSecurityEscortNextGuardPassiveMaintenanceAt.Remove(handle);
         _highSecurityEscortNextGuardMobilityOrderAt.Remove(handle);
         _highSecurityEscortGuardCombatFootLockUntil.Remove(handle);
+
+        if (handle == _highSecurityEscortLimousineTurretGuardHandle)
+        {
+            _highSecurityEscortLimousineTurretGuardHandle = 0;
+        }
 
         if (Entity.Exists(_highSecurityEscortCachedThreatPed) && _highSecurityEscortCachedThreatPed.Handle == handle)
         {

@@ -188,7 +188,7 @@ public class DonJEnemySpawnerTests
         Assert.AreEqual("Escorte haute sécurité", GetStaticFieldValue<string>("HighSecurityEscortContactName"));
         Assert.AreEqual(4, GetStaticFieldValue<int>("HighSecurityEscortBallerCount"));
         Assert.AreEqual(4, GetStaticFieldValue<int>("HighSecurityEscortBallerOccupantCount"));
-        Assert.AreEqual(3, GetStaticFieldValue<int>("HighSecurityEscortLimousineGuardCount"));
+        Assert.AreEqual(4, GetStaticFieldValue<int>("HighSecurityEscortLimousineGuardCount"));
         Assert.AreEqual(500, GetStaticFieldValue<int>("HighSecurityEscortGuardHealth"));
         Assert.AreEqual(200, GetStaticFieldValue<int>("HighSecurityEscortGuardArmor"));
         Assert.AreEqual(1800, GetStaticFieldValue<int>("HighSecurityEscortCallCooldownMs"));
@@ -212,6 +212,12 @@ public class DonJEnemySpawnerTests
         Assert.AreEqual(21.5f, GetStaticFieldValue<float>("HighSecurityEscortConvoyDriveSpeed"), 0.001f);
         Assert.AreEqual(8.5f, GetStaticFieldValue<float>("HighSecurityEscortConvoyCloseDriveSpeed"), 0.001f);
         Assert.AreEqual(28.0f, GetStaticFieldValue<float>("HighSecurityEscortFormationCatchupSpeed"), 0.001f);
+        Assert.AreEqual(13.5f, GetStaticFieldValue<float>("HighSecurityEscortConvoyLineSpawnSpacing"), 0.001f);
+        Assert.AreEqual(7.5f, GetStaticFieldValue<float>("HighSecurityEscortArrivalLimoRoadStopDistance"), 0.001f);
+        Assert.AreEqual(13.0f, GetStaticFieldValue<float>("HighSecurityEscortArrivalConvoySpacing"), 0.001f);
+        Assert.AreEqual(25.5f, GetStaticFieldValue<float>("HighSecurityEscortRushRouteSpeed"), 0.001f);
+        Assert.AreEqual(31.0f, GetStaticFieldValue<float>("HighSecurityEscortRushFormationCatchupSpeed"), 0.001f);
+        Assert.AreEqual(11.0f, GetStaticFieldValue<float>("HighSecurityEscortRushCloseSpeed"), 0.001f);
         Assert.AreEqual(10.5f, GetStaticFieldValue<float>("HighSecurityEscortDestinationArriveDistance"), 0.001f);
         Assert.AreEqual(GetStaticFieldValue<float>("CartelVehicleFootExitDistance"), GetStaticFieldValue<float>("HighSecurityEscortFootExitDistance"), 0.001f);
         Assert.AreEqual(72.0f, GetStaticFieldValue<float>("HighSecurityEscortVehicleApproachDistance"), 0.001f);
@@ -225,6 +231,7 @@ public class DonJEnemySpawnerTests
         Assert.AreEqual(235.0f, GetStaticFieldValue<float>("HighSecurityEscortVehicleTooFarDistance"), 0.001f);
         Assert.AreEqual(46.0f, GetStaticFieldValue<float>("HighSecurityEscortDismissDeleteDistance"), 0.001f);
         Assert.AreEqual(GetStaticFieldValue<int>("ProfessionalDrivingStyle"), GetStaticFieldValue<int>("HighSecurityEscortDrivingStyle"));
+        Assert.AreEqual(GetStaticFieldValue<int>("ProfessionalDrivingStyle"), GetStaticFieldValue<int>("HighSecurityEscortCalmTaxiDrivingStyle"));
         Assert.AreEqual(786469, GetStaticFieldValue<int>("HighSecurityEscortFastTaxiDrivingStyle"));
         Assert.AreEqual(2883621, GetStaticFieldValue<int>("HighSecurityEscortCombatDrivingStyle"));
         Assert.AreEqual(6500, GetStaticFieldValue<int>("HighSecurityEscortCombatMemoryMs"));
@@ -244,6 +251,9 @@ public class DonJEnemySpawnerTests
         Assert.AreEqual(0x1BEDE233E6CD2A1FUL, GetStaticFieldValue<ulong>("NativeGetFirstBlipInfoId"));
         Assert.AreEqual(0xA6DB27D19ECBB7DAUL, GetStaticFieldValue<ulong>("NativeDoesBlipExist"));
         Assert.AreEqual(0x586AFE3FF72D996EUL, GetStaticFieldValue<ulong>("NativeGetBlipCoords"));
+        Assert.AreEqual(0xFE99B66D079CF6BCUL, GetStaticFieldValue<ulong>("NativeDisableControlAction"));
+        Assert.AreEqual(0x10AB107B887214D8UL, GetStaticFieldValue<ulong>("NativeTaskVehicleShootAtPed"));
+        Assert.AreEqual(0x9C8C6504B5B63D2CUL, GetStaticFieldValue<ulong>("NativeStartVehicleHorn"));
 
         CollectionAssert.AreEqual(
             new[] { "limo2", "stretch" },
@@ -1103,13 +1113,16 @@ public class DonJEnemySpawnerTests
         StringAssert.Contains(convoyBlock, "ShouldSkipHighSecurityEscortRepeatedVehicleOrder(");
         StringAssert.Contains(convoyBlock, "RecordHighSecurityEscortVehicleOrderTarget(limousine, target);");
         StringAssert.Contains(convoyBlock, "CalculateHighSecurityEscortTaxiSpeed(limousine, target, combatMode)");
-        StringAssert.Contains(convoyBlock, "targetVehicle.Position - forward * (10.0f * compact) - right * side");
-        StringAssert.Contains(convoyBlock, "targetVehicle.Position - forward * (32.0f * compact) + right * side");
+        StringAssert.Contains(convoyBlock, "float backDistance = GetHighSecurityEscortFormationBackDistance(role, combatMode);");
+        StringAssert.Contains(convoyBlock, "return targetVehicle.Position - forward * backDistance;");
+        StringAssert.Contains(convoyBlock, "IsHighSecurityEscortRushModeActive(combatMode)");
         StringAssert.Contains(convoyBlock, "GetHighSecurityEscortFormationSpacing(role, combatMode)");
         StringAssert.Contains(convoyBlock, "GetHighSecurityEscortDrivingStyle(combatMode)");
         StringAssert.Contains(convoyBlock, "IsHighSecurityEscortVehicleInSoftRecovery(vehicle)");
+        Assert.IsFalse(convoyBlock.Contains("right * side"), "Les Baller doivent rester en file taxi et ne plus forcer une formation gauche/droite.");
         Assert.IsFalse(convoyBlock.Contains("targetVehicle.Position + forward * 18.0f"), "Les Baller ne doivent plus viser une position devant la limousine.");
         StringAssert.Contains(standbyBlock, "ContinueHighSecurityVehicleNearPlayer(vehicle, player, HighSecurityEscortArrivalDriveSpeed, 5.0f, false);");
+        StringAssert.Contains(standbyBlock, "MaybeAnnounceHighSecurityEscortArrival(player);");
         StringAssert.Contains(rescueBlock, "TrySoftUnstuckHighSecurityEscortVehicle(vehicle, seedIndex)");
         StringAssert.Contains(rescueBlock, "Hash.TASK_VEHICLE_TEMP_ACTION");
         StringAssert.Contains(rescueBlock, "HasHighSecurityEscortObstacleAhead(vehicle, HighSecurityEscortObstacleProbeDistance)");
